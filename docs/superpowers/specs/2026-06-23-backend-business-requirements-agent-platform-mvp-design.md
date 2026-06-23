@@ -569,14 +569,28 @@ Adapter 分层：
 - 队长/编排 Agent。
 - 多产物对齐与跨角色质量门。
 
-## 12. 默认决策
+## 12. 与 MewCode 的关系
+
+MewCode 已经是一个 Go 实现的 AI Coding Agent 基座，包含 LLM provider、MCP server、tool registry、权限检查、skill 机制、memory、subagent/worktree、TUI 等能力。Devflow Agent 不应该重新发明这些底层 Agent 执行能力。
+
+Devflow Agent 与 MewCode 的推荐关系是：
+
+- `devflow-agent` 是产品仓库，负责后端业务需求交付闭环、workflow 状态机、阶段产物、adapter、quality gate 和 project memory。
+- `mewcode` 是可复用/可借鉴的 Agent 执行内核，优先复用它的 LLM、tool、skill、memory、subagent、worktree 等能力。
+- v0.1 不直接在 MewCode 仓库里做产品逻辑，避免把业务需求交付平台和通用 Coding Agent 混在一起。
+- 如果复用成本低，可以把 MewCode 中稳定的内部包提取为 devflow-agent 的内部模块或 library dependency。
+- 如果提取成本高，v0.1 可以先参考 MewCode 的实现方式，在 devflow-agent 中实现最小必要的 workflow、artifact 和 adapter 能力。
+
+因此，MewCode 在本项目中的定位不是被忽略，也不是被整个替换为 Eino，而是作为 Devflow Agent 的底层 Agent 工程参考和潜在执行内核。
+
+## 13. 默认决策
 
 第一版采用如下默认决策，除非后续用户明确覆盖：
 
 - Review adapter 选择 GitLab，不同时适配 GitHub、云效 Codeup 或其他代码平台。
 - IM adapter 先抽象为通知接口，默认不绑定钉钉或飞书的复杂审批能力。
 - MR 能力优先支持“已有 MR 评论处理”，随后支持由 Agent 创建 MR。
-- 第一版落在 MewCode 当前 Go 项目中，以插件化/模块化方式实现，避免另起完整平台工程。
+- 第一版落在 `devflow-agent` 仓库中，以独立产品仓库方式推进；MewCode 作为可复用/可借鉴的 Agent 执行内核。
 - 项目记忆第一版使用本地文件，不单独建立 memory repo。
 - 人工确认第一版使用 CLI，IM 确认放到 v0.2。
 - closeout 只生成知识候选，不自动写长期 wiki。

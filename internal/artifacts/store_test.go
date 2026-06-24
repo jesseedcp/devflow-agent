@@ -185,6 +185,85 @@ func TestAppendToArtifactAppendsContent(t *testing.T) {
 	}
 }
 
+func TestWriteArtifactOverwritesContent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("risk-flag")
+
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	updated := "# Verification: Add risk flag\n\nOverwritten content\n"
+	if err := store.WriteArtifact(demand.ID, VerificationFile, updated); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+
+	path := filepath.Join(root, ".devflow", "demands", demand.ID, VerificationFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", path, err)
+	}
+	if string(data) != updated {
+		t.Fatalf("verification.md = %q, want %q", string(data), updated)
+	}
+}
+
+func TestWriteArtifactRejectsInvalidDemandID(t *testing.T) {
+	t.Parallel()
+
+	store := NewStore(t.TempDir())
+
+	err := store.WriteArtifact("../escape", VerificationFile, "marker")
+	if err == nil {
+		t.Fatal("WriteArtifact returned nil error")
+	}
+	if !strings.Contains(err.Error(), "invalid demand id") {
+		t.Fatalf("WriteArtifact error = %v, want invalid demand id", err)
+	}
+}
+
+func TestWriteArtifactRejectsUnsupportedArtifactNames(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("risk-flag")
+
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	invalidNames := []string{EventsFile, "../x"}
+	for _, name := range invalidNames {
+		t.Run(name, func(t *testing.T) {
+			err := store.WriteArtifact(demand.ID, name, "marker")
+			if err == nil {
+				t.Fatalf("WriteArtifact(%q) returned nil error", name)
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf(`unsupported artifact %q`, name)) {
+				t.Fatalf("WriteArtifact(%q) error = %v, want unsupported artifact", name, err)
+			}
+		})
+	}
+}
+
+func TestWriteArtifactRequiresExistingWorkspace(t *testing.T) {
+	t.Parallel()
+
+	store := NewStore(t.TempDir())
+
+	err := store.WriteArtifact("risk-flag", VerificationFile, "marker")
+	if err == nil {
+		t.Fatal("WriteArtifact returned nil error")
+	}
+	if !strings.Contains(err.Error(), "demand risk-flag does not exist") {
+		t.Fatalf("WriteArtifact error = %v, want missing workspace detail", err)
+	}
+}
+
 func TestEnsureConfirmationEvidenceIsIdempotent(t *testing.T) {
 	t.Parallel()
 

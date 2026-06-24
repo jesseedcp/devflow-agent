@@ -199,6 +199,28 @@ func (s Store) AppendToArtifact(id, name, content string) error {
 	return nil
 }
 
+func (s Store) WriteArtifact(id, name, content string) error {
+	paths, err := s.prepareDemandPaths(id, false)
+	if err != nil {
+		return err
+	}
+	if err := validateAppendableArtifactName(name); err != nil {
+		return err
+	}
+	if exists, err := demandWorkspaceExists(paths.demandDir); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("demand %s does not exist", id)
+	}
+
+	path := filepath.Join(paths.demandDir, name)
+	if err := writeTextAtomic(path, content); err != nil {
+		return fmt.Errorf("write artifact %s: %w", name, err)
+	}
+
+	return nil
+}
+
 func (s Store) WithDemandLock(id string, fn func() error) error {
 	paths, err := s.prepareDemandPaths(id, false)
 	if err != nil {

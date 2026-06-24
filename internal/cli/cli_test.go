@@ -14,8 +14,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
@@ -745,6 +747,723 @@ func TestConfirmMalformedMiddleEventsFailsWithoutMutatingStateOrEvidence(t *test
 	}
 }
 
+func TestParseCommandLine(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{
+			name:  "double quoted argument",
+			input: `helper --value "hello world"`,
+			want:  []string{"helper", "--value", "hello world"},
+		},
+		{
+			name:  "single quoted argument",
+			input: `helper --value 'hello world'`,
+			want:  []string{"helper", "--value", "hello world"},
+		},
+		{
+			name:  "empty quoted argument",
+			input: `helper ""`,
+			want:  []string{"helper", ""},
+		},
+		{
+			name:  "adjacent quoted and unquoted fragments",
+			input: `helper pre"middle"'post'`,
+			want:  []string{"helper", "premiddlepost"},
+		},
+		{
+			name:  "unquoted backslash is literal",
+			input: `helper hello\ world \"quoted\"`,
+			want:  []string{"helper", `hello\`, "world", `\quoted\`},
+		},
+		{
+			name:  "backslash before non-quote is literal inside quotes",
+			input: `helper "hello\ world" 'single\ quote'`,
+			want:  []string{"helper", `hello\ world`, `single\ quote`},
+		},
+		{
+			name:  "double quoted Windows executable path",
+			input: `"C:\Program Files\helper.exe" --flag value`,
+			want:  []string{`C:\Program Files\helper.exe`, "--flag", "value"},
+		},
+		{
+			name:  "unquoted Windows paths",
+			input: `C:\tools\helper.exe C:\temp\file.txt`,
+			want:  []string{`C:\tools\helper.exe`, `C:\temp\file.txt`},
+		},
+		{
+			name:  "unquoted UNC path",
+			input: `\\server\share\tool.exe --flag`,
+			want:  []string{`\\server\share\tool.exe`, "--flag"},
+		},
+		{
+			name:  "quoted UNC path",
+			input: `"\\server\share\tool.exe" --flag`,
+			want:  []string{`\\server\share\tool.exe`, "--flag"},
+		},
+		{
+			name:  "quoted trailing backslash closes argument",
+			input: `"C:\temp\"`,
+			want:  []string{`C:\temp\`},
+		},
+		{
+			name:  "double quoted Windows path with escaped quotes",
+			input: `"C:\temp\"quoted\"\file"`,
+			want:  []string{`C:\temp"quoted"\file`},
+		},
+		{
+			name:  "single quoted Windows path",
+			input: `'C:\Program Files\helper.exe'`,
+			want:  []string{`C:\Program Files\helper.exe`},
+		},
+		{
+			name:  "trailing backslash is literal",
+			input: `C:\temp\`,
+			want:  []string{`C:\temp\`},
+		},
+		{
+			name:  "repeated backslashes are preserved",
+			input: `C:\\temp\\file`,
+			want:  []string{`C:\\temp\\file`},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseCommandLine(tc.input)
+			if err != nil {
+				t.Fatalf("parseCommandLine(%q) returned error: %v", tc.input, err)
+			}
+			if strings.Join(got, "\x00") != strings.Join(tc.want, "\x00") {
+				t.Fatalf("parseCommandLine(%q) = %#v, want %#v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseCommandLineRejectsIncompleteInput(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{`helper "unclosed`, `helper 'unclosed`} {
+		t.Run(input, func(t *testing.T) {
+			_, err := parseCommandLine(input)
+			if err == nil {
+				t.Fatalf("parseCommandLine(%q) returned nil error", input)
+			}
+			if !strings.Contains(err.Error(), "command line") {
+				t.Fatalf("parseCommandLine(%q) error = %v, want clear command line error", input, err)
+			}
+		})
+	}
+}
+
+func TestVerifyWaitsForDemandLock(t *testing.T) {
+	root := t.TempDir()
+	store := setupDemandAtState(t, root, workflow.Verification)
+	t.Setenv("DEVFLOW_CLI_HELPER", "args")
+	executable := filepath.ToSlash(testCLIExecutable(t))
+	commandText := fmt.Sprintf(`"%s" -test.run=^TestCLICommandHelper$ -- lock-check`, executable)
+
+	lockEntered := make(chan struct{})
+	releaseLock := make(chan struct{})
+	lockDone := make(chan error, 1)
+	go func() {
+		lockDone <- store.WithDemandLock("add-coupon-check", func() error {
+			close(lockEntered)
+			<-releaseLock
+			return nil
+		})
+	}()
+	select {
+	case <-lockEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("lock holder did not enter")
+	}
+
+	verifyDone := make(chan error, 1)
+	go func() {
+		verifyDone <- Run([]string{
+			"verify",
+			"--root", root,
+			"--demand", "add-coupon-check",
+			"--command", commandText,
+		}, &bytes.Buffer{}, &bytes.Buffer{})
+	}()
+
+	select {
+	case err := <-verifyDone:
+		t.Fatalf("verify completed before lock release: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseLock)
+	if err := <-lockDone; err != nil {
+		t.Fatalf("lock holder returned error: %v", err)
+	}
+	select {
+	case err := <-verifyDone:
+		if err != nil {
+			t.Fatalf("verify after lock release returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("verify did not finish after lock release")
+	}
+
+	verificationPath := filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.VerificationFile)
+	body, err := os.ReadFile(verificationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, err)
+	}
+	if !strings.Contains(string(body), "Status: PASS") || !strings.Contains(string(body), `["lock-check"]`) {
+		t.Fatalf("verification.md = %q, want successful helper evidence", body)
+	}
+}
+
+func TestCLICommandHelper(t *testing.T) {
+	mode := os.Getenv("DEVFLOW_CLI_HELPER")
+	if mode == "" {
+		return
+	}
+
+	if mode == "sleep" {
+		time.Sleep(5 * time.Second)
+		return
+	}
+
+	separator := -1
+	for index, arg := range os.Args {
+		if arg == "--" {
+			separator = index
+			break
+		}
+	}
+	if separator < 0 {
+		t.Fatal("helper argument separator missing")
+	}
+	encoded, err := json.Marshal(os.Args[separator+1:])
+	if err != nil {
+		t.Fatalf("Marshal helper args returned error: %v", err)
+	}
+	fmt.Println(string(encoded))
+}
+
+func TestVerifyRecordsPassingEvidence(t *testing.T) {
+	root := t.TempDir()
+	store := setupDemandAtState(t, root, workflow.Verification)
+	t.Setenv("DEVFLOW_CLI_HELPER", "args")
+	executable := filepath.ToSlash(testCLIExecutable(t))
+	commandText := fmt.Sprintf(`"%s" -test.run=^TestCLICommandHelper$ -- --value "hello world" ""`, executable)
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", commandText,
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "verification recorded for add-coupon-check: PASS") {
+		t.Fatalf("stdout = %q, want PASS recording", stdout.String())
+	}
+
+	verificationPath := filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.VerificationFile)
+	body, err := os.ReadFile(verificationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, err)
+	}
+	text := string(body)
+	if !strings.Contains(text, commandText) {
+		t.Fatalf("verification.md = %q, want command text", text)
+	}
+	if !strings.Contains(text, "Status: PASS") {
+		t.Fatalf("verification.md = %q, want PASS status", text)
+	}
+	if !strings.Contains(text, "ExitCode: 0") {
+		t.Fatalf("verification.md = %q, want exit code 0", text)
+	}
+	if !strings.Contains(text, `["--value","hello world",""]`) {
+		t.Fatalf("verification.md = %q, want quoted argv preserved", text)
+	}
+
+	events, err := readCLIEventsFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.EventsFile))
+	if err != nil {
+		t.Fatalf("readCLIEventsFile returned error: %v", err)
+	}
+	event, ok := findCLIEventType(events, "verification.recorded")
+	if !ok {
+		t.Fatal("events log does not contain verification.recorded")
+	}
+	if event.Data["command"] != commandText {
+		t.Fatalf("verification command = %q, want %q", event.Data["command"], commandText)
+	}
+	if event.Data["status"] != "PASS" {
+		t.Fatalf("verification status = %q, want PASS", event.Data["status"])
+	}
+	if event.Data["exit_code"] != "0" {
+		t.Fatalf("verification exit_code = %q, want 0", event.Data["exit_code"])
+	}
+	if event.Data["failure_kind"] != "none" {
+		t.Fatalf("verification failure_kind = %q, want none", event.Data["failure_kind"])
+	}
+	if event.Data["evidence_file"] != artifacts.VerificationFile {
+		t.Fatalf("verification evidence_file = %q, want %q", event.Data["evidence_file"], artifacts.VerificationFile)
+	}
+	if !strings.Contains(event.Data["excerpt"], `["--value","hello world",""]`) {
+		t.Fatalf("verification excerpt = %q, want helper argv", event.Data["excerpt"])
+	}
+
+	demand, err := store.LoadDemand("add-coupon-check")
+	if err != nil {
+		t.Fatalf("LoadDemand after verify returned error: %v", err)
+	}
+	if demand.State != string(workflow.Verification) {
+		t.Fatalf("demand state = %q, want %q", demand.State, workflow.Verification)
+	}
+}
+
+func TestVerifyRecordsFailingEvidenceBeforeReturningError(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Verification)
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", "definitely-not-a-real-command",
+	}, &stdout, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("verify returned nil error")
+	}
+	if !strings.Contains(err.Error(), "verification command failed:") {
+		t.Fatalf("verify error = %v, want verification command failed", err)
+	}
+
+	verificationPath := filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.VerificationFile)
+	body, readErr := os.ReadFile(verificationPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, readErr)
+	}
+	text := string(body)
+	if !strings.Contains(text, "definitely-not-a-real-command") {
+		t.Fatalf("verification.md = %q, want command text", text)
+	}
+	if !strings.Contains(text, "Status: FAIL") {
+		t.Fatalf("verification.md = %q, want FAIL status", text)
+	}
+	if strings.Contains(text, "ExitCode: 0") {
+		t.Fatalf("verification.md = %q, want non-zero exit code", text)
+	}
+	if !strings.Contains(text, "Stderr:\n    ") {
+		t.Fatalf("verification.md = %q, want stderr evidence block", text)
+	}
+
+	events, readErr := readCLIEventsFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.EventsFile))
+	if readErr != nil {
+		t.Fatalf("readCLIEventsFile returned error: %v", readErr)
+	}
+	event, ok := findCLIEventType(events, "verification.recorded")
+	if !ok {
+		t.Fatal("events log does not contain verification.recorded")
+	}
+	if event.Data["status"] != "FAIL" {
+		t.Fatalf("verification status = %q, want FAIL", event.Data["status"])
+	}
+	if event.Data["exit_code"] == "0" || event.Data["exit_code"] == "" {
+		t.Fatalf("verification exit_code = %q, want non-zero", event.Data["exit_code"])
+	}
+	if event.Data["failure_kind"] != "exec_error" {
+		t.Fatalf("verification failure_kind = %q, want exec_error", event.Data["failure_kind"])
+	}
+	if event.Data["evidence_file"] != artifacts.VerificationFile {
+		t.Fatalf("verification evidence_file = %q, want %q", event.Data["evidence_file"], artifacts.VerificationFile)
+	}
+	if event.Data["excerpt"] == "" {
+		t.Fatal("verification excerpt = empty, want bounded failure evidence")
+	}
+}
+
+func TestVerifyCommandFailureTakesPrecedenceOverStdoutError(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Verification)
+
+	err := Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", "definitely-not-a-real-command",
+	}, failingCLIWriter{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("verify returned nil error")
+	}
+	if !strings.Contains(err.Error(), "verification command failed:") {
+		t.Fatalf("verify error = %v, want command failure to take precedence", err)
+	}
+}
+
+func TestVerifyRejectsBlankCommandText(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Verification)
+
+	err := Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", "   ",
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("verify returned nil error")
+	}
+	if !strings.Contains(err.Error(), "--command must contain a program") {
+		t.Fatalf("verify error = %v, want blank command validation", err)
+	}
+}
+
+func TestVerifyRejectsEmptyQuotedProgramWithoutWritingEvidence(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Verification)
+	demandDir := filepath.Join(root, ".devflow", "demands", "add-coupon-check")
+	verificationPath := filepath.Join(demandDir, artifacts.VerificationFile)
+	eventsPath := filepath.Join(demandDir, artifacts.EventsFile)
+	beforeVerification, err := os.ReadFile(verificationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, err)
+	}
+	beforeEvents, err := os.ReadFile(eventsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", eventsPath, err)
+	}
+
+	err = Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", `""`,
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || err.Error() != "--command must contain a program" {
+		t.Fatalf("verify error = %v, want empty program validation", err)
+	}
+
+	afterVerification, readErr := os.ReadFile(verificationPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) after failure returned error: %v", verificationPath, readErr)
+	}
+	afterEvents, readErr := os.ReadFile(eventsPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) after failure returned error: %v", eventsPath, readErr)
+	}
+	if !bytes.Equal(afterVerification, beforeVerification) {
+		t.Fatal("verification.md changed after empty program validation")
+	}
+	if !bytes.Equal(afterEvents, beforeEvents) {
+		t.Fatal("events.jsonl changed after empty program validation")
+	}
+}
+
+func TestVerifyRejectsUnclosedQuoteWithoutWritingEvidence(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Verification)
+	demandDir := filepath.Join(root, ".devflow", "demands", "add-coupon-check")
+	verificationPath := filepath.Join(demandDir, artifacts.VerificationFile)
+	eventsPath := filepath.Join(demandDir, artifacts.EventsFile)
+	beforeVerification, err := os.ReadFile(verificationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, err)
+	}
+	beforeEvents, err := os.ReadFile(eventsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", eventsPath, err)
+	}
+
+	err = Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", `helper "unclosed`,
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("verify returned nil error")
+	}
+	if !strings.Contains(err.Error(), "unclosed") {
+		t.Fatalf("verify error = %v, want unclosed quote detail", err)
+	}
+
+	afterVerification, readErr := os.ReadFile(verificationPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) after failure returned error: %v", verificationPath, readErr)
+	}
+	afterEvents, readErr := os.ReadFile(eventsPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) after failure returned error: %v", eventsPath, readErr)
+	}
+	if !bytes.Equal(afterVerification, beforeVerification) {
+		t.Fatalf("verification.md changed after parse failure")
+	}
+	if !bytes.Equal(afterEvents, beforeEvents) {
+		t.Fatalf("events.jsonl changed after parse failure")
+	}
+}
+
+func TestVerifyRequiresVerificationStateWithoutWritingEvidence(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Created)
+	demandDir := filepath.Join(root, ".devflow", "demands", "add-coupon-check")
+	verificationPath := filepath.Join(demandDir, artifacts.VerificationFile)
+	eventsPath := filepath.Join(demandDir, artifacts.EventsFile)
+	beforeVerification, err := os.ReadFile(verificationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, err)
+	}
+	beforeEvents, err := os.ReadFile(eventsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", eventsPath, err)
+	}
+
+	err = Run([]string{
+		"verify",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", "unused-command",
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || err.Error() != "verify requires current state verification, got created" {
+		t.Fatalf("verify error = %v, want wrong-state error", err)
+	}
+
+	afterVerification, _ := os.ReadFile(verificationPath)
+	afterEvents, _ := os.ReadFile(eventsPath)
+	if !bytes.Equal(afterVerification, beforeVerification) || !bytes.Equal(afterEvents, beforeEvents) {
+		t.Fatal("verify wrong-state failure mutated evidence")
+	}
+}
+
+func TestVerifyRecordsTimeoutFailureKind(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Verification)
+	t.Setenv("DEVFLOW_CLI_HELPER", "sleep")
+	executable := filepath.ToSlash(testCLIExecutable(t))
+	commandText := fmt.Sprintf(`"%s" -test.run=^TestCLICommandHelper$`, executable)
+
+	err := runVerifyWithTimeout([]string{
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--command", commandText,
+	}, &bytes.Buffer{}, 30*time.Millisecond)
+	if err == nil {
+		t.Fatal("runVerifyWithTimeout returned nil error")
+	}
+
+	verificationPath := filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.VerificationFile)
+	body, readErr := os.ReadFile(verificationPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", verificationPath, readErr)
+	}
+	if !strings.Contains(string(body), "Status: FAIL") {
+		t.Fatalf("verification.md = %q, want FAIL status", body)
+	}
+
+	events, readErr := readCLIEventsFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.EventsFile))
+	if readErr != nil {
+		t.Fatalf("readCLIEventsFile returned error: %v", readErr)
+	}
+	event, ok := findCLIEventType(events, "verification.recorded")
+	if !ok {
+		t.Fatal("events log does not contain verification.recorded")
+	}
+	if event.Data["failure_kind"] != "timeout" {
+		t.Fatalf("verification failure_kind = %q, want timeout", event.Data["failure_kind"])
+	}
+}
+
+func TestVerificationExcerptTruncatesAtUTF8Boundary(t *testing.T) {
+	t.Parallel()
+
+	excerpt := verificationExcerpt(quality.Result{
+		Stdout: strings.Repeat("界", 200),
+		Stderr: "tail",
+	})
+	if len(excerpt) > 512 {
+		t.Fatalf("excerpt byte length = %d, want <= 512", len(excerpt))
+	}
+	if !utf8.ValidString(excerpt) {
+		t.Fatalf("excerpt is not valid UTF-8: %q", excerpt)
+	}
+}
+
+func TestCloseoutRecordsReportsAndEvent(t *testing.T) {
+	root := t.TempDir()
+	store := setupDemandAtState(t, root, workflow.Closeout)
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"closeout",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--result", "Delivered\nwith follow-up cleanup",
+		"--knowledge", "Keep closeout notes\nshort and stable",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("closeout: %v", err)
+	}
+
+	closeoutPath := filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.CloseoutFile)
+	closeoutBody, err := os.ReadFile(closeoutPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", closeoutPath, err)
+	}
+	closeoutText := string(closeoutBody)
+	if !strings.Contains(closeoutText, "# Closeout: Add coupon check") {
+		t.Fatalf("closeout.md = %q, want title", closeoutText)
+	}
+	if !strings.Contains(closeoutText, "Delivered with follow-up cleanup") {
+		t.Fatalf("closeout.md = %q, want normalized result", closeoutText)
+	}
+	if strings.Contains(closeoutText, "Delivered\nwith follow-up cleanup") {
+		t.Fatalf("closeout.md = %q, want single-line result", closeoutText)
+	}
+	assertHeadingsInOrder(t, closeoutText, []string{
+		"# Closeout: Add coupon check",
+		"## 需求结果",
+		"## 关键产物链接",
+		"## MR 评论与处理摘要",
+		"## 验收证据摘要",
+		"## 稳定知识候选",
+		"## 流程改进候选",
+		"## 一次性材料归档",
+		"## 人工确认记录",
+	})
+	if !strings.Contains(closeoutText, "- Keep closeout notes short and stable") {
+		t.Fatalf("closeout.md = %q, want knowledge bullet", closeoutText)
+	}
+
+	memoryPath := filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.MemoryCandidatesFile)
+	memoryBody, err := os.ReadFile(memoryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) returned error: %v", memoryPath, err)
+	}
+	memoryText := string(memoryBody)
+	if !strings.Contains(memoryText, "# Memory Candidates: Add coupon check") {
+		t.Fatalf("memory-candidates.md = %q, want title", memoryText)
+	}
+	if !strings.Contains(memoryText, "Keep closeout notes short and stable") {
+		t.Fatalf("memory-candidates.md = %q, want normalized knowledge", memoryText)
+	}
+	if strings.Contains(memoryText, "Keep closeout notes\nshort and stable") {
+		t.Fatalf("memory-candidates.md = %q, want single-line knowledge", memoryText)
+	}
+	assertHeadingsInOrder(t, memoryText, []string{
+		"# Memory Candidates: Add coupon check",
+		"## 稳定知识候选",
+		"## 流程改进候选",
+		"## 不进入长期知识的材料",
+	})
+	if !strings.Contains(memoryText, "- Keep closeout notes short and stable") {
+		t.Fatalf("memory-candidates.md = %q, want knowledge bullet", memoryText)
+	}
+
+	events, err := readCLIEventsFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.EventsFile))
+	if err != nil {
+		t.Fatalf("readCLIEventsFile returned error: %v", err)
+	}
+	if _, ok := findCLIEventType(events, "closeout.created"); !ok {
+		t.Fatal("events log does not contain closeout.created")
+	}
+
+	demand, err := store.LoadDemand("add-coupon-check")
+	if err != nil {
+		t.Fatalf("LoadDemand after closeout returned error: %v", err)
+	}
+	if demand.State != string(workflow.Closeout) {
+		t.Fatalf("demand state = %q, want %q", demand.State, workflow.Closeout)
+	}
+}
+
+func TestCloseoutRequiresCloseoutStateWithoutWritingEvidence(t *testing.T) {
+	root := t.TempDir()
+	setupDemandAtState(t, root, workflow.Created)
+	demandDir := filepath.Join(root, ".devflow", "demands", "add-coupon-check")
+	closeoutPath := filepath.Join(demandDir, artifacts.CloseoutFile)
+	memoryPath := filepath.Join(demandDir, artifacts.MemoryCandidatesFile)
+	eventsPath := filepath.Join(demandDir, artifacts.EventsFile)
+	beforeCloseout, _ := os.ReadFile(closeoutPath)
+	beforeMemory, _ := os.ReadFile(memoryPath)
+	beforeEvents, _ := os.ReadFile(eventsPath)
+
+	err := Run([]string{
+		"closeout",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--result", "Delivered",
+		"--knowledge", "Stable knowledge",
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || err.Error() != "closeout requires current state closeout, got created" {
+		t.Fatalf("closeout error = %v, want wrong-state error", err)
+	}
+
+	afterCloseout, _ := os.ReadFile(closeoutPath)
+	afterMemory, _ := os.ReadFile(memoryPath)
+	afterEvents, _ := os.ReadFile(eventsPath)
+	if !bytes.Equal(afterCloseout, beforeCloseout) || !bytes.Equal(afterMemory, beforeMemory) || !bytes.Equal(afterEvents, beforeEvents) {
+		t.Fatal("closeout wrong-state failure mutated evidence")
+	}
+}
+
+func TestCloseoutWaitsForDemandLock(t *testing.T) {
+	root := t.TempDir()
+	store := setupDemandAtState(t, root, workflow.Closeout)
+	lockEntered := make(chan struct{})
+	releaseLock := make(chan struct{})
+	lockDone := make(chan error, 1)
+	go func() {
+		lockDone <- store.WithDemandLock("add-coupon-check", func() error {
+			close(lockEntered)
+			<-releaseLock
+			return nil
+		})
+	}()
+	select {
+	case <-lockEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("lock holder did not enter")
+	}
+
+	closeoutDone := make(chan error, 1)
+	go func() {
+		closeoutDone <- Run([]string{
+			"closeout",
+			"--root", root,
+			"--demand", "add-coupon-check",
+			"--result", "Delivered",
+			"--knowledge", "Stable knowledge",
+		}, &bytes.Buffer{}, &bytes.Buffer{})
+	}()
+
+	select {
+	case err := <-closeoutDone:
+		t.Fatalf("closeout completed before lock release: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseLock)
+	if err := <-lockDone; err != nil {
+		t.Fatalf("lock holder returned error: %v", err)
+	}
+	select {
+	case err := <-closeoutDone:
+		if err != nil {
+			t.Fatalf("closeout after lock release returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("closeout did not finish after lock release")
+	}
+}
+
 func setupDemandAtState(t *testing.T, root string, target workflow.State) artifacts.Store {
 	t.Helper()
 
@@ -881,4 +1600,42 @@ func hasCLIEventType(events []artifacts.Event, eventType string) bool {
 		}
 	}
 	return false
+}
+
+func findCLIEventType(events []artifacts.Event, eventType string) (artifacts.Event, bool) {
+	for _, event := range events {
+		if event.Type == eventType {
+			return event, true
+		}
+	}
+	return artifacts.Event{}, false
+}
+
+func testCLIExecutable(t *testing.T) string {
+	t.Helper()
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() returned error: %v", err)
+	}
+	return executable
+}
+
+func assertHeadingsInOrder(t *testing.T, content string, headings []string) {
+	t.Helper()
+
+	offset := 0
+	for _, heading := range headings {
+		index := strings.Index(content[offset:], heading)
+		if index < 0 {
+			t.Fatalf("content missing heading %q after offset %d:\n%s", heading, offset, content)
+		}
+		offset += index + len(heading)
+	}
+}
+
+type failingCLIWriter struct{}
+
+func (failingCLIWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("stdout unavailable")
 }

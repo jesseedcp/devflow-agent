@@ -18,3 +18,15 @@ requirement input
 See the initial product spec:
 
 - [Backend Business Requirements Agent: Platform MVP Design](docs/superpowers/specs/2026-06-23-backend-business-requirements-agent-platform-mvp-design.md)
+
+## v0.1 CLI shape
+
+The first implementation exposes a deterministic local CLI:
+
+```bash
+go test ./...
+go run ./cmd/devflow help
+go run ./cmd/devflow start --title "Add coupon eligibility check" --description "Only active members can claim coupons"
+```
+
+The CLI writes demand workspaces under `.devflow/demands/<demand-id>/`.

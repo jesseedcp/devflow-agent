@@ -1,5 +1,9 @@
 # MewCode Reuse And Eino Integration Decision
 
+> Superseded on 2026-06-25 by
+> [Devflow And MewCode Single-Repository Fusion Design](../superpowers/specs/2026-06-25-devflow-mewcode-single-repo-fusion-design.md).
+> This document remains as the record of the earlier v0.1 foundation boundary.
+
 ## Decision
 
 Devflow owns the product workflow state machine, stage artifacts, and gate semantics.

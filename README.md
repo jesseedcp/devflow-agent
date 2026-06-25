@@ -19,6 +19,7 @@ See the initial product spec:
 
 - [Backend Business Requirements Agent: Platform MVP Design](docs/superpowers/specs/2026-06-23-backend-business-requirements-agent-platform-mvp-design.md)
 - [MewCode reuse and Eino integration decision](docs/architecture/mewcode-reuse.md)
+- [Devflow and MewCode single-repository fusion design](docs/superpowers/specs/2026-06-25-devflow-mewcode-single-repo-fusion-design.md)
 
 ## v0.1 CLI shape
 

@@ -20,8 +20,9 @@ type ToolResultBlock struct {
 }
 
 type ThinkingBlock struct {
-	Thinking  string
-	Signature string
+	Thinking         string
+	Signature        string
+	EncryptedContent string
 }
 
 type Message struct {

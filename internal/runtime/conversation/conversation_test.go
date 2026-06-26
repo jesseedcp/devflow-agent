@@ -74,7 +74,7 @@ func TestGetMessagesReturnsDeepCopiesOfNestedData(t *testing.T) {
 	manager := NewManager()
 	manager.AddAssistantFull(
 		"working",
-		[]ThinkingBlock{{Thinking: "plan", Signature: "sig"}},
+		[]ThinkingBlock{{Thinking: "plan", Signature: "sig", EncryptedContent: "enc_123"}},
 		[]ToolUseBlock{{
 			ToolUseID: "tool-1",
 			ToolName:  "ReadFile",
@@ -92,6 +92,7 @@ func TestGetMessagesReturnsDeepCopiesOfNestedData(t *testing.T) {
 
 	messages := manager.GetMessages()
 	messages[0].ThinkingBlocks[0].Thinking = "rewritten"
+	messages[0].ThinkingBlocks[0].EncryptedContent = "mutated"
 	messages[0].ToolUses[0].ToolName = "WriteFile"
 	messages[0].ToolUses[0].Arguments["nested"].(map[string]any)["path"] = "mutated.md"
 	messages[0].ToolUses[0].Arguments["items"].([]any)[1].(map[string]any)["name"] = "changed"
@@ -100,6 +101,9 @@ func TestGetMessagesReturnsDeepCopiesOfNestedData(t *testing.T) {
 	fresh := manager.GetMessages()
 	if got := fresh[0].ThinkingBlocks[0].Thinking; got != "plan" {
 		t.Fatalf("manager thinking = %q, want plan", got)
+	}
+	if got := fresh[0].ThinkingBlocks[0].EncryptedContent; got != "enc_123" {
+		t.Fatalf("manager encrypted thinking = %q, want enc_123", got)
 	}
 	if got := fresh[0].ToolUses[0].ToolName; got != "ReadFile" {
 		t.Fatalf("manager tool name = %q, want ReadFile", got)

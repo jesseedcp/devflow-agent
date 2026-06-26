@@ -65,3 +65,28 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: none beyond `filepath`-based discovery and temp-directory coverage for the discovered-load tests.
 - Verification: `gofmt -w internal/runtime/config/config.go internal/runtime/config/config_test.go`; `go test ./internal/runtime/config -count=1`; `go test ./... -count=1`; `go vet ./...`; `git diff --check`
 - Lore intent: `Make Devflow configuration authoritative without breaking MewCode users`
+
+### llm
+
+- Source: `internal/llm`
+- Target: `internal/runtime/llm`
+- Source files:
+  - `anthropic.go`: `680AD6F8A93FFFD6C80458986DA43701DBC5677998EA397A5E813B20C84FA85F`
+  - `client.go`: `2053006E3852C78881F776A059F39B8E96569513FF2F4A1382AE6E411F918813`
+  - `errors.go`: `C5207CBF5DA03E4ADD20BE89B85311943D0E351970BE56D0C786040D26D9E58D`
+  - `events.go`: `361C8431A9327EF9B72EEAC6DBC2A9B14320B30577D705E7EFB522B8AB3A6C5E`
+  - `model_resolver.go`: `E485E5F476C3F1016C8C101F4BAAA0F3BC7E04C51141C7A173FF60BA8063B5FC`
+  - `openai_compat.go`: `FCE2001AB8C7A78B31417D78CA629B82A47E2386CB2940853E37C061A22CA330`
+  - `openai.go`: `2B0611EC8A76B4C50A113AC89AD819DB450769FDF112664F1D401BB0C0DA2620`
+  - `thinking_test.go`: `2FBF296F2ACE17216F5254369D67C67559B771D80EF60E48CD69D4585CF5D0E3`
+- Fusion changes:
+  - Move the provider clients under the Devflow runtime boundary and retarget configuration and conversation imports to `internal/runtime/*`.
+  - Update authentication guidance to prefer `.devflow` while preserving legacy `.mewcode` fallback and environment-variable discovery.
+  - Add strict regression coverage for nil provider configs, unknown protocols, malformed Anthropic/OpenAI/OpenAI-compatible tool schemas, and fast context cancellation.
+  - Prove that Anthropic, OpenAI Responses, and OpenAI-compatible successful streams each emit exactly one `StreamEnd` and preserve usage in that terminal event.
+  - Prove that OpenAI-compatible `finish_reason:"tool_calls"` streams still emit exactly one `ToolCallComplete` and exactly one trailing `StreamEnd`, while preserving any later usage chunk.
+  - Add an opt-in real Ark OpenAI-compatible smoke test that first chdirs to the repo root, discovers an Ark `openai-compat` provider through `config.LoadConfig("")` from `.devflow` or legacy `.mewcode`, and relies on provider/env API key resolution without printing the key.
+  - Validate tool schemas before opening a provider stream so malformed Anthropic/OpenAI/OpenAI-compatible tool definitions return buffered stream errors instead of panicking on unchecked assertions.
+- Windows changes: verify the streaming clients and the Ark endpoint from the supported Windows host.
+- Verification: `gofmt -w internal/runtime/llm`; `go test ./internal/runtime/llm -count=1 -timeout 2m`; live `go test ./internal/runtime/llm -run TestLiveOpenAICompat -count=1 -v -timeout 90s`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Give Devflow a verified streaming model runtime`

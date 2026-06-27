@@ -145,3 +145,18 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Slash-normalize emitted relative paths in `Glob` and `Grep` so Windows hosts return the same `foo/bar.go` shape as other supported platforms.
 - Verification: `gofmt -w internal/runtime/tools`; `go test ./internal/runtime/tools -count=1 -timeout 2m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring the tool registry and file tools into the Devflow runtime`
+
+### permissions
+
+- Source: `internal/permissions`
+- Target: `internal/runtime/permissions`
+- Source files:
+  - `permissions.go`: `FC9D84E43B5B002EE1BABACAD5B57553E496233DB1693C1CFA192CCF7478BB1F`
+  - `permissions_test.go`: `8A61B6DF702025F86226AC346234131219859907AE8DC631799C33665E89E5E6`
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - Retarget the tools import in `permissions.go` and `permissions_test.go` to `internal/runtime/tools`.
+- Windows changes:
+  - Replace separator-unaware sandbox prefix checks with `filepath.Rel` containment checks, preventing sibling directories such as `project-evil` from matching an allowed `project` root on Windows or Unix-like hosts.
+- Verification: `gofmt -w internal/runtime/permissions`; `go test ./internal/runtime/permissions -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring permission checks into the Devflow runtime`

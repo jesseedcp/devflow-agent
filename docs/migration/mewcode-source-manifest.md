@@ -233,3 +233,22 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: none required.
 - Verification: `gofmt -w internal/runtime/toolresult`; `go test ./internal/runtime/toolresult -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring tool result tracking into the Devflow runtime`
+
+### compact
+
+- Source: `internal/compact`
+- Target: `internal/runtime/compact`
+- Source files:
+  - `compact.go`: `9867CE00E1DAF0D36BDC8D146427E4C3A2B0237116C37FC7EB4A2CA64DC93EE9`
+  - `compact_test.go`: `A5C95E382A511D35199D2EFC59A1B714318899484AD396EDDFD1546153C1116F`
+  - `recovery.go`: `DD686F65C29DEE5595AB9F2F1491A1A7FDDFCF9ABE137D789F3441C5C38C1A45`
+  - `recovery_test.go`: `63460ED0B4F51E2585932E9C77C075F12D935A6A9477E6552C186AE93196E142`
+- Fusion changes:
+  - Move context compaction under the Devflow runtime boundary.
+  - Retarget conversation and llm imports to the migrated runtime packages.
+  - Retarget the package comment from MewCode to Devflow identity.
+  - Count encrypted reasoning payloads when deciding whether to compact.
+  - Include tool arguments, tool-result error state, and thinking metadata in the summary input while avoiding raw encrypted payload replay.
+- Windows changes: none required unless package tests expose path or shell behavior.
+- Verification: `gofmt -w internal/runtime/compact`; `go test ./internal/runtime/compact -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring context compaction into the Devflow runtime`

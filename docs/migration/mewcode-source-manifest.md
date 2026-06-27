@@ -214,3 +214,22 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Default shell detection now reports `powershell` on Windows when `SHELL` is unset instead of incorrectly falling back to `bash`.
 - Verification: `gofmt -w internal/runtime/prompt`; `go test ./internal/runtime/prompt -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring prompt building into the Devflow runtime`
+
+### toolresult
+
+- Source: `internal/toolresult`
+- Target: `internal/runtime/toolresult`
+- Source files:
+  - `budget.go`: `3617162B959CA309F60416B2D36C150C3BE3ACAC61E0916EF1D20DFBF7E8EC31`
+  - `reconstruct.go`: `8EC245A3FE0B60693F799FE836DC40FDF29DE786E8B86CC67AD26B525FB84CB6`
+  - `record.go`: `5305093961E3F8D8135C86A6E530F00A673D1A5F341869323F93ECF4BC0C0607`
+  - `state.go`: `09A2513DA1A9C4C42CD1A7867DDCEC74C698896D460C265121DECA8598658D92`
+  - `budget_test.go`: `8EF54AEE1B8E57095B4E138D8127495B3F366B536A30196B676762467525C2F8`
+  - `record_test.go`: `76EA67BE9D818CB4E340D1B6BB8DF9F5131948A0F43E484A34EE5D0075459C0B`
+  - `state_test.go`: `85492F1D226EF29ADF6FCB2BEB4E4DE8D5DB186C225366888145C259C407AE14`
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - Retarget the conversation import in `budget.go`, `budget_test.go`, and `reconstruct.go` to `internal/runtime/conversation`.
+- Windows changes: none required.
+- Verification: `gofmt -w internal/runtime/toolresult`; `go test ./internal/runtime/toolresult -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring tool result tracking into the Devflow runtime`

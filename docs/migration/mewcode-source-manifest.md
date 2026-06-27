@@ -90,3 +90,30 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: verify the streaming clients and the Ark endpoint from the supported Windows host.
 - Verification: `gofmt -w internal/runtime/llm`; `go test ./internal/runtime/llm -count=1 -timeout 2m`; live `go test ./internal/runtime/llm -run TestLiveOpenAICompat -count=1 -v -timeout 90s`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Give Devflow a verified streaming model runtime`
+
+### worktree
+
+- Source: `internal/worktree`
+- Target: `internal/runtime/worktree`
+- Source files:
+  - `agent.go`: `BB80B93FD88D89916558BF44761E311C8A92C9906C8830764FC6A3CF2C9E5D18`
+  - `changes.go`: `9155E50CD89D6292D269665AADB9E3E9AAF845F1FB58564BF2AC37E25C50C59E`
+  - `cleanup.go`: `F1989D4E0832AF0A2A9DC517878B8B5E1020D37D2F8C598F86D45C3734E59D01`
+  - `create.go`: `5D2AF4C3619D7C894E8A0F38913160EF95551D097A59F292765F02343D8BA93F`
+  - `env.go`: `DB24FEB836DDD5EAE985D794701F544F2886516361FBE54C3B0788E8D9F3DF8C`
+  - `filesystem.go`: `A1AEE3D08515B44D1EC5BAAFE6A808E9917D57CFF4617A6C05B43BA9D1BE7918`
+  - `notice.go`: `D09D943C50192E3F80D83165BF969F0A310FA9B3AFF0490BD30A56092F5F6FBF`
+  - `session.go`: `5850BCE0B5E0AF3F23DC38F72B2F338A8AF2EA1243B9DE04ADAAA62347A73328`
+  - `setup.go`: `4CBE0219E2E7CCA9BFC3B8053F86923042AD88F66F66B73037040B14FD7140E8`
+  - `validate.go`: `1D61B6C61D67CD5F021672DE9E7737ACE10D565057CD917E1663C873CB66F54F`
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - No import retargeting required; the package only uses the Go standard library.
+  - Preserve the filesystem-first git reader and the `env.go` no-prompt subprocess environment.
+  - Extend canonical repo-root discovery to walk upward from nested directories before following worktree `commondir`, so Devflow can launch worktree operations from any project subdirectory.
+  - Keep directory symlink creation best-effort; the migrated Windows test now skips when the host denies symlink privilege instead of treating that OS policy as a runtime regression.
+- Windows changes:
+  - No production changes required; `symlinkDirectories` still treats directory symlink creation as best-effort.
+  - `TestSymlinkDirectories` now verifies a real symlink when the host allows one and skips on Windows when `os.Symlink` is denied by host privilege or developer-mode policy.
+- Verification: `gofmt -w internal/runtime/worktree`; `go test ./internal/runtime/worktree -count=1 -timeout 2m`; `go test ./internal/runtime/worktree -run 'TestGitNoPromptEnv|TestRunGit' -v -count=1`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`; `go test ./... -count=1 -timeout 5m` if feasible
+- Lore intent: `Bring git worktree management into the Devflow runtime`

@@ -195,3 +195,22 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: none required.
 - Verification: `gofmt -w internal/runtime/planfile`; `go test ./internal/runtime/planfile -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring plan file management into the Devflow runtime`
+
+### prompt
+
+- Source: `internal/prompt`
+- Target: `internal/runtime/prompt`
+- Source files:
+  - `builder.go`: `07A619603C62F3878FDBF662FF62B229341FD3C8E5AB58FD9A04175DD596A42E`
+  - `plan_mode.go`: `9B821EA76BFE1F5AB6EFCB123D78C4DF54EB86194AF289BA9030AB3BD5899099`
+  - `sections.go`: `B34683A865E8786CF31BC274C9792D8574EAF19AFDE943B3BA320A445FE88EAF`
+- Added tests:
+  - `prompt_test.go`: covers Devflow identity, section ordering, skill/environment inclusion, plan-mode reminder cadence, and OS-aware default shell fallback.
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - No import retargeting required; the package uses only the Go standard library.
+  - Retarget the runtime identity section from legacy MewCode branding to Devflow.
+- Windows changes:
+  - Default shell detection now reports `powershell` on Windows when `SHELL` is unset instead of incorrectly falling back to `bash`.
+- Verification: `gofmt -w internal/runtime/prompt`; `go test ./internal/runtime/prompt -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring prompt building into the Devflow runtime`

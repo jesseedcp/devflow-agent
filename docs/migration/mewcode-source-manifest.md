@@ -179,3 +179,19 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: none required.
 - Verification: `gofmt -w internal/runtime/todo`; `go test ./internal/runtime/todo -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring todo tracking into the Devflow runtime`
+
+### planfile
+
+- Source: `internal/planfile`
+- Target: `internal/runtime/planfile`
+- Source files:
+  - `planfile.go`: `3388E47A96F2334196127511A1134DD8BC16955FDBB30211B6EE561A40AB9878`
+- Added tests:
+  - `planfile_test.go`: covers save/load round-trip, reset rediscovery, newest existing plan discovery, and separate workdir isolation.
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - No import retargeting required; the package uses only the Go standard library.
+  - Replace the source package's single process-global plan path with workdir-keyed path caching plus on-disk discovery of existing plan files.
+- Windows changes: none required.
+- Verification: `gofmt -w internal/runtime/planfile`; `go test ./internal/runtime/planfile -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring plan file management into the Devflow runtime`

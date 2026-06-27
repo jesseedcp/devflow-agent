@@ -259,7 +259,7 @@ func joinDemandLockCleanupErrors(errs ...error) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	return fmt.Errorf(strings.Join(messages, "; "))
+	return fmt.Errorf("%s", strings.Join(messages, "; "))
 }
 
 func wrapDemandLockUnlockError(err error) error {

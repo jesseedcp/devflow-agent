@@ -160,3 +160,22 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Replace separator-unaware sandbox prefix checks with `filepath.Rel` containment checks, preventing sibling directories such as `project-evil` from matching an allowed `project` root on Windows or Unix-like hosts.
 - Verification: `gofmt -w internal/runtime/permissions`; `go test ./internal/runtime/permissions -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring permission checks into the Devflow runtime`
+
+### todo
+
+- Source: `internal/todo`
+- Target: `internal/runtime/todo`
+- Source files:
+  - `store.go`: `D9F5556C32A7A0608A703D9FE6AFC303D03C16E7D7B1C1BD1A5DFA17D06AF490`
+  - `todo.go`: `4B618FC97F32F608BBE7E0A54343F0E0EB8B65A46CF658DF4765A8E11B93BB1A`
+  - `tools.go`: `13E57FD565402D55DC366508C67E3BCB2DBE8D3E8E87C1E719FBA3E9372CB9C5`
+- Added tests:
+  - `todo_test.go`: covers corrupt-store fail-closed behavior, update/delete flows, `_internal` filtering, nil dependency guards, and wrapper task creation.
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - Retarget the tools import in `tools.go` to `internal/runtime/tools`.
+  - Return load errors from `TaskList.Create` instead of overwriting a corrupt task store with a new list.
+  - Make task tool wrappers return normal tool errors when the task list dependency is missing instead of panicking.
+- Windows changes: none required.
+- Verification: `gofmt -w internal/runtime/todo`; `go test ./internal/runtime/todo -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring todo tracking into the Devflow runtime`

@@ -252,3 +252,20 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: none required unless package tests expose path or shell behavior.
 - Verification: `gofmt -w internal/runtime/compact`; `go test ./internal/runtime/compact -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring context compaction into the Devflow runtime`
+
+### mcp
+
+- Source: `internal/mcp`
+- Target: `internal/runtime/mcp`
+- Source files:
+  - `mcp.go`: `87B6063D5F347ECFAAC79AB544BD93FD100E621BEE6A91635CCB1D4197FD1E08`
+  - `mcp_test.go`: `B82B35AC1BAE5E798AB638658E1818E7A9E31AEA19D3CBE9877C396FA0CCB21C`
+- Fusion changes:
+  - Move MCP runtime support under the Devflow runtime boundary.
+  - Retarget tool interfaces to `internal/runtime/tools`.
+  - Add `github.com/modelcontextprotocol/go-sdk v1.6.0` and align the module Go directive with the SDK's Go 1.25 requirement.
+  - Retarget the MCP client implementation name from `mewcode` to `Devflow`.
+  - Replace the source live `npx @upstash/context7-mcp` integration test with deterministic unit coverage for transport selection, HTTP header environment expansion, sanitized tool names, nil/default and preserved schemas, and wrapper execution results.
+- Windows changes: verify command/process handling through package tests; no package-local Windows production changes required.
+- Verification: `gofmt -w internal/runtime/mcp`; `go test ./internal/runtime/mcp -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring MCP tool bridging into the Devflow runtime`

@@ -117,3 +117,31 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - `TestSymlinkDirectories` now verifies a real symlink when the host allows one and skips on Windows when `os.Symlink` is denied by host privilege or developer-mode policy.
 - Verification: `gofmt -w internal/runtime/worktree`; `go test ./internal/runtime/worktree -count=1 -timeout 2m`; `go test ./internal/runtime/worktree -run 'TestGitNoPromptEnv|TestRunGit' -v -count=1`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`; `go test ./... -count=1 -timeout 5m` if feasible
 - Lore intent: `Bring git worktree management into the Devflow runtime`
+
+### tools
+
+- Source: `internal/tools`
+- Target: `internal/runtime/tools`
+- Source files:
+  - `ask_user.go`: `9E97806CAE0576E08A15F122AFB738016E7DA9B3C4C63F650EA654B79692B1FA`
+  - `bash.go`: `D46A20B2C458A688235202CA590BF57FB4489E1946969AEDBBD0C8E072621A2D`
+  - `descriptions.go`: `F9EF0FFC05047F0D70B3F4276A5B180CDFF9FFA064F8DAD4E8FE66F5B93DAD89`
+  - `edit_file.go`: `B4E4F5FEC22A87515D9B9A23CC4639D3855F8863EC18FCCFD2598EF389975E65`
+  - `enter_worktree.go`: `E002A80B2EB85718C7479B2F11A1B7ADCBF2E3D32926DE498CC10251A510C244`
+  - `exit_worktree.go`: `C9A5EF7B035015D815D9977489C5FF3E0289B44C9B44ED88C51F4ED433322D10`
+  - `glob.go`: `3AFEB16688344135F5F66BF5009E1041B840026D32F7872113714FB520E6621A`
+  - `grep.go`: `F35F7A5A812B594FFBF46AA125226D8F69C3E3C296B6A228C1693B67B0170999`
+  - `read_file.go`: `4A61658B1D56987DF17996ECCCA563698DB2ED1B19E1D4F47D6B243CD225C6A8`
+  - `tool_search.go`: `DEA7E7756F744B8CFDDDCA065E9DFA3410D41BABE987787C60538D196D8108A0`
+  - `tool.go`: `B5AC0C9BAAF4C9BE9571E30F3D751E89DFD57A3CCC14DE503B4BCB4C3B39FEBA`
+  - `write_file.go`: `F5C1DB756B2899351A75ED520EE7DB07404B5BAB6DA63D773BDAA1EDE881A8FB`
+  - `glob_test.go`: `24DB4468DC28B81B357A27FC15537767728157AD44E040B90077DF646889AC5F`
+  - `tool_search_test.go`: `4FEC3449320CB6B27069E05A98CDB37671B6514770E2E3360BE537EA01360B16`
+- Fusion changes:
+  - Move the package under the Devflow runtime boundary.
+  - Retarget the worktree import in `enter_worktree.go` and `exit_worktree.go` to `internal/runtime/worktree`.
+  - Normalize `Glob` and `Grep` relative-path output to slash-separated paths so the migrated package preserves cross-platform tool output on native Windows.
+- Windows changes:
+  - Slash-normalize emitted relative paths in `Glob` and `Grep` so Windows hosts return the same `foo/bar.go` shape as other supported platforms.
+- Verification: `gofmt -w internal/runtime/tools`; `go test ./internal/runtime/tools -count=1 -timeout 2m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring the tool registry and file tools into the Devflow runtime`

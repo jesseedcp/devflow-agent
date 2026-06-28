@@ -335,3 +335,26 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Set both `HOME` and `USERPROFILE` in tests that depend on `os.UserHomeDir`.
 - Verification: `gofmt -w internal/runtime/memory`; `go test ./internal/runtime/memory -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring project memory into the Devflow runtime`
+
+### agent
+
+- Source: `internal/agent`
+- Target: `internal/runtime/agent`
+- Source files:
+  - `agent.go`: `213F8A091B5BBE4F17725522D912732659B26B36E4AF93BB1A280AAC1956D69F`
+  - `agent_live_test.go`: `E3A456E25A7028E78CBE80D71864C47070E01D9719CF815EF7BCAF4EF96C0676`
+  - `agent_test.go`: `8C00E83DEA66E0AD2DC624A8D84078CA7C0EF75115DC5ED1E099F1A308CAFF57`
+  - `events.go`: `1140F44FBAA608BB6FA4F34AE8FA9AD3BF3D94845F06D81B6A3FBA4BDABFDAAE`
+  - `skills_test.go`: `D5223562CA3A86FA19D4B8EA061F3AEDC7E9C60F9965D81AC4F2BE4A51A70E22`
+  - `streaming_executor.go`: `1E707421E819E52E9530D4632B14A6B62017169EE4F05CB71C8E92A2E64CB320`
+- Fusion changes:
+  - Move the agent loop under the Devflow runtime boundary.
+  - Retarget compact, conversation, hooks, llm, permissions, planfile, prompt, skills, toolresult, and tools imports to runtime packages.
+  - Retarget skill-creation tests from `.mewcode/skills` to `.devflow/skills`.
+  - Gate live agent tests behind `DEVFLOW_LIVE_AGENT=1`, load provider config through Devflow discovery, and keep API keys out of test output.
+  - Preserve hook, permission, active-skill, compaction, tool-result replacement, and recovery-state behavior from the source package.
+- Windows changes:
+  - Use `filepath` paths in skill tests and slash-normalize path checks where test output paths are compared as strings.
+  - Live agent smoke was verified on the supported Windows host through the Ark/OpenAI-compatible provider configured in Devflow.
+- Verification: `gofmt -w internal/runtime/agent`; `go test ./internal/runtime/agent -count=1 -timeout 3m`; `DEVFLOW_LIVE_AGENT=1 go test ./internal/runtime/agent -run TestLiveSimpleChat -count=1 -v -timeout 120s`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring the agent loop into the Devflow runtime`

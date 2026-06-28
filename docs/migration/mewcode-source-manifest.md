@@ -492,3 +492,25 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based command discovery.
 - Verification: `gofmt -w internal/runtime/commands/commands.go internal/runtime/commands/loader.go internal/runtime/commands/commands_test.go internal/runtime/commands/loader_test.go`; `go test ./internal/runtime/commands -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `git diff --check`
 - Lore intent: `Expose slash commands through the Devflow runtime`
+
+### tui
+
+- Source: `internal/tui`
+- Target: `internal/runtime/tui`
+- Source files:
+  - `styles.go`: `30CC172C53151D8AB87C6D3BE0DF7E8156D8D083CC452C82A5A87EEAC906B8E4`
+  - `tui.go`: `B26290364B12EC774F4BF694D54D577D241C2895303C7A18BA72958A187862F0`
+  - `verbs.go`: `975CDB165C1813415A7E3ABA2D3E0EA1BCA8E53EC87F8A61D1C1DE87A506853A`
+- Fusion changes:
+  - Move the Bubble Tea terminal surface under the Devflow runtime boundary and retarget all `mewcode/internal/*` imports to the migrated `internal/runtime/*` packages.
+  - Rename user-facing product identity from MewCode to Devflow in the startup banner (`Devflow v0.1.0`), the plan-confirmation prompt, the "Tell Devflow what to change" input placeholder, and the ordering comment.
+  - Retarget hard-coded state paths from `.mewcode` to `.devflow`: the permissions local file (`$workDir/.devflow/permissions.local.yaml`) and the skills installation hint (`$workDir/.devflow/skills`); keep `.mewcode` in the file-walker skip list and add `.devflow` so both state directories are skipped during file operations.
+  - Preserve `commands.TypeLocalUI` behavior for `/clear`, `/compact`, `/plan`, `/do`, `/resume`, the ask-user dialog and subagent progress UI, MCP startup and hook wiring, and worktree tool registration/cleanup.
+  - Add focused tests for pure helpers: `New` one-provider chat init, `permissionModeInfo` labels, `nextPermissionMode` cycling, `coordinatorToolFilter(nil)` nil result, `isCollapsibleTool`, and `renderToolGroupSummary`.
+- Dependency handling:
+  - Add only the MewCode-pinned direct terminal UI dependencies: `github.com/charmbracelet/bubbles v1.0.0`, `github.com/charmbracelet/bubbletea v1.3.10`, `github.com/charmbracelet/glamour v1.0.0`, `github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834`, `github.com/muesli/termenv v0.16.0`, `github.com/rivo/uniseg v0.4.7`.
+  - `go mod tidy` added the expected charm-stack indirect dependencies and bumped only `golang.org/x/sync` from v0.16.0 to v0.17.0 (matching MewCode's pinned version), explained by the new TUI imports.
+- Windows changes:
+  - Package tests pass on Windows; no production Windows-specific changes required.
+- Verification: `gofmt -w internal/runtime/tui/*.go`; `go test ./internal/runtime/tui -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring the interactive TUI onto the Devflow runtime`

@@ -32,6 +32,7 @@ Usage:
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
   devflow verify --demand <id> --command <program and args>
   devflow closeout --demand <id> --result <text> --knowledge <text>
+  devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow chat
   devflow tui
 
@@ -41,6 +42,7 @@ Commands:
   confirm   Record a human confirmation and advance the workflow gate
   verify    Record local verification evidence without advancing workflow
   closeout  Record closeout and memory-candidate reports without advancing workflow
+  run       Run one backend-demand agent stage
   chat      Launch the interactive runtime (alias: tui)
   tui       Alias for chat
 `
@@ -67,6 +69,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runVerify(args[1:], stdout)
 	case "closeout":
 		return runCloseout(args[1:], stdout)
+	case "run":
+		return runDemandStage(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], helpText)
 	}

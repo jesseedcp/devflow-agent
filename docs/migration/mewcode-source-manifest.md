@@ -358,3 +358,36 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Live agent smoke was verified on the supported Windows host through the Ark/OpenAI-compatible provider configured in Devflow.
 - Verification: `gofmt -w internal/runtime/agent`; `go test ./internal/runtime/agent -count=1 -timeout 3m`; `DEVFLOW_LIVE_AGENT=1 go test ./internal/runtime/agent -run TestLiveSimpleChat -count=1 -v -timeout 120s`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring the agent loop into the Devflow runtime`
+
+### teams
+
+- Source: `internal/teams`
+- Target: `internal/runtime/teams`
+- Source files:
+  - `backend.go`: `FA2347779E2BC51C6EA53CE1A723804CC725D5378E3DE64E2FCE2C34655B49DE`
+  - `coordinator.go`: `8678AB495D60B5CC6B1600CDE76FB93CEA938005FE08A5E9128A7952FEC7C8C0`
+  - `filemailbox.go`: `19BED3AD553147D8EDA6A35D787DA03458D8D9C7C24B776036A90F7CB8EFBB68`
+  - `filemailbox_test.go`: `FAFD93FFDEAF6EFDAC28AEB2A890D523BDB79A7E0CDE1D41CF3CC09B0DFC851A`
+  - `inprocess.go`: `0DD930B7AB2F6659D132A3F9105080BC803A11046DA0982D316994642A8C60E9`
+  - `iterm.go`: `D0BEEE3E87F7DDE924FE479BE9F1937E16749AAEC9979D3B51F5FD992F483755`
+  - `runner.go`: `E694E9B06D1743F9A5EF05171F4CAE0F59D2902E4D6BEA8A9F056112C86A4F2A`
+  - `runner_test.go`: `07ED1135291BB926CF0FE6BF12CC54A1D7CBC4B6CDB0F8E6D9EAF10DA45B80ED`
+  - `spawn.go`: `D5237870E28FD066BB7E2D17530D01664D9D7671538000E6007BD70A6951EF6E`
+  - `teams.go`: `1BF0DC04F42697975357C99215B4C1CD3946575F0A55DF56A5169C42F26A3350`
+  - `teams_test.go`: `C6A4B7E593340CBCD9BBD83374D3557B8F32BA40FC88B8B54DE4DFD5CA9FDA13`
+  - `tmux.go`: `DF6183B3114E96D506DEA1BF8B444DDF6391DA6A8F46759047A7410FC1AF339A`
+  - `tools.go`: `E8F670EBDAB6D6325558CE900F1ABC428940B7F7656FE6C45BBB1CEB1696C145`
+- Fusion changes:
+  - Move team orchestration under the Devflow runtime boundary.
+  - Retarget agent, conversation, llm, and tools imports to runtime packages.
+  - Make `DEVFLOW_TEAMS_DIR` and `.devflow/teams` the new team mailbox locations.
+  - Keep `MEWCODE_TEAMS_DIR` as a legacy mailbox override fallback for migration.
+  - Retarget teammate CLI comments and executable lookup errors from MewCode to Devflow.
+  - Add deterministic tests for Devflow team-directory defaults, override precedence, and legacy fallback.
+  - Make file-mailbox lock acquisition retry until a short deadline, so concurrent teammate messages do not drop under lock contention.
+- Windows changes:
+  - Package tests pass on Windows through in-process/file-mailbox behavior.
+  - Treat transient Windows `Access is denied` lock-file opens as lock contention while preserving the acquisition deadline.
+  - Real tmux and iTerm terminal backends are retained as migrated capabilities but not invoked by default on this Windows host.
+- Verification: `gofmt -w internal/runtime/teams`; `go test ./internal/runtime/teams -run TestFileMailBoxConcurrentSends -count=30 -v`; `go test ./internal/runtime/teams -count=1 -timeout 3m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring team orchestration into the Devflow runtime`

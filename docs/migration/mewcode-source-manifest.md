@@ -391,3 +391,30 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Real tmux and iTerm terminal backends are retained as migrated capabilities but not invoked by default on this Windows host.
 - Verification: `gofmt -w internal/runtime/teams`; `go test ./internal/runtime/teams -run TestFileMailBoxConcurrentSends -count=30 -v`; `go test ./internal/runtime/teams -count=1 -timeout 3m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring team orchestration into the Devflow runtime`
+
+### agents
+
+- Source: `internal/agents`
+- Target: `internal/runtime/agents`
+- Source files:
+  - `agent_tool.go`: `1F18247A0B1AB4F187BBE64CEBE7672E7C63E34076541B4F5F34587C3A575CE3`
+  - `agent_tool_test.go`: `68BC194991C5F110BDDA84BF22A3AC26EA0283F8D99D8284EE46AC47FD5C29DF`
+  - `definition.go`: `3AF7F9A5998B1ECB45ED1520ECAF3567A1D187CDE73836A0E9E77F740F6B1FBC`
+  - `loader.go`: `1E2B2E454307223206F5BF11760BA5BDAEA8C56BA2AFA4FD0A757B4D41F153A5`
+  - `loader_test.go`: `0413680440C89ABF0286D185904F85A8922A62D15BABAEBE7CFB77E47D235EB7`
+  - `subagent.go`: `7BA50304381B99095C29A5DF6B068B5907CA07F412ECC6E80F475178011F728C`
+  - `tool_filter.go`: `03BD0A5C1ACF50707D6E300D70FFD2EFB28D69AF46958016BBC568AD4833B144`
+  - `tool_filter_test.go`: `229B615C7AFD05A0841AF51D9A54220C15BDA994BD53152E2C0D98B5C155711D`
+  - `verification_prompt.go`: `FD1655CBC922F7BFD6310D866A290067B21DEEFF93E173E02C7DB91044B5D5C5`
+- Fusion changes:
+  - Move subagent definitions, loaders, tool filtering, fork handling, and Agent tool execution under the Devflow runtime boundary.
+  - Retarget agent, conversation, llm, permissions, teams, toolresult, tools, and worktree imports to runtime packages.
+  - Make `.devflow/agents` the preferred user and project agent-definition location while preserving `.mewcode/agents` as a lower-priority legacy fallback.
+  - Prefer `DEVFLOW_VERIFICATION_AGENT=true` for the built-in verification agent gate while keeping `MEWCODE_VERIFICATION_AGENT=true` as a legacy alias.
+  - Retarget verification-agent prompts from MewCode-specific browser/tool and guidance-file names to Devflow/Codex-friendly wording.
+  - Keep the legacy `omitMewcodeMd` YAML key parsed for existing custom agent definitions.
+  - Add deterministic tests for Devflow-over-legacy project agent precedence and legacy fallback loading.
+- Windows changes:
+  - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based `.devflow/agents` discovery.
+- Verification: `gofmt -w internal/runtime/agents`; `go test ./internal/runtime/agents -count=1 -timeout 3m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring subagent tooling into the Devflow runtime`

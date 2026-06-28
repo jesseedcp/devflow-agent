@@ -54,5 +54,6 @@ type Options struct {
 	DemandID        string
 	Stage           Stage
 	QualityCommands []quality.Command
+	Runner          Runner
 	Now             func() time.Time
 }

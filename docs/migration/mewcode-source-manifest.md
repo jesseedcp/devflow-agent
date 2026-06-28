@@ -473,3 +473,22 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based `.devflow`/`.mewcode` session path resolution.
 - Verification: `gofmt -w internal/runtime/session/session.go internal/runtime/session/session_test.go`; `go test ./internal/runtime/session -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `git diff --check`
 - Lore intent: `Keep chat sessions resumable under Devflow state`
+
+### commands
+
+- Source: `internal/commands`
+- Target: `internal/runtime/commands`
+- Source files:
+  - `commands.go`: `8D8BA047765FE9865F7794347F3FDDDC88F171DBD82E145BD6D01F5EFE32D1B0`
+  - `loader.go`: `24BD8F80976176AA8981F068311B19FC839AACA190B7ECE354C420E2C80AE221`
+  - `loader_test.go`: `C2C18842444EF5945F5DFD83E182E8CC1AD425F6407A92D73A7132DE91F11A0B`
+- Fusion changes:
+  - Move the slash command registry and file command loader under the Devflow runtime boundary.
+  - Rename user-facing product identity from MewCode to Devflow in the `/status` banner and `/skills` help text, pointing users to `.devflow/skills/<skill-name>/SKILL.md`.
+  - Expand the file command search paths to four precedence layers: `$home/.mewcode/commands`, `$home/.devflow/commands`, `$workDir/.mewcode/commands`, `$workDir/.devflow/commands` (later sources override earlier on name collision), so Devflow paths override legacy paths at the same scope and project commands override user commands.
+  - Extract a testable `loadUserCommandsFrom(workDir, homeDir)` helper so precedence can be asserted deterministically without depending on the real user home directory.
+  - Preserve `Registry.Register`/`HasConflict` collision handling, file-command `:` namespacing, frontmatter parsing, `$ARGUMENTS` substitution, and `TypeSkillFork` concept retained from Wave 3.
+- Windows changes:
+  - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based command discovery.
+- Verification: `gofmt -w internal/runtime/commands/commands.go internal/runtime/commands/loader.go internal/runtime/commands/commands_test.go internal/runtime/commands/loader_test.go`; `go test ./internal/runtime/commands -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `git diff --check`
+- Lore intent: `Expose slash commands through the Devflow runtime`

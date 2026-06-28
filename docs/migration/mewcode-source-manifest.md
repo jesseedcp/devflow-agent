@@ -529,3 +529,18 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; no production Windows-specific changes required.
 - Verification: `gofmt -w internal/cli/cli.go internal/cli/chat_test.go cmd/devflow/main.go`; `go test ./internal/cli -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Make devflow launch the fused interactive runtime`
+
+## Wave 5 — Backend Demand Delivery Loop
+
+Wave 5 is new Devflow product orchestration, not copied MewCode source. It adds a thin product package that coordinates the migrated `artifacts`, `workflow`, `quality`, `adapters`, `memory`, and runtime agent packages into the first backend-demand delivery loop.
+
+### demandflow
+
+- Source: new Devflow product code (no MewCode source).
+- Target: `internal/demandflow`
+- Scope:
+  - `types.go`: stage enum (`Stage`/`ParseStage`), `ArtifactSnapshot`, `ContextSnapshot`, `MemoryHit`, and `Options`.
+  - `context.go`: `contextLoader` that reads demand metadata, existing stage artifacts, and reusable memory candidates while excluding the current demand from memory hits.
+  - Later Wave 5 tasks add the `Runner` interface, stage prompt builders, the stage `Engine`, a runtime-agent runner, a GitLab review adapter integration, the MR-review gate, and the `devflow run` CLI command.
+- Verification: `gofmt -w internal/demandflow/*.go`; `go test ./internal/demandflow -count=1`; `go test ./... -count=1 -timeout 5m`; `git diff --check`
+- Lore intent: `Ground demand stages in artifact context`

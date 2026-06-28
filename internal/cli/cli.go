@@ -15,8 +15,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
+	"github.com/jesseedcp/devflow-agent/internal/runtime/config"
+	"github.com/jesseedcp/devflow-agent/internal/runtime/tui"
 	"github.com/jesseedcp/devflow-agent/internal/templates"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
@@ -29,6 +32,8 @@ Usage:
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
   devflow verify --demand <id> --command <program and args>
   devflow closeout --demand <id> --result <text> --knowledge <text>
+  devflow chat
+  devflow tui
 
 Commands:
   help      Show this help text
@@ -36,15 +41,24 @@ Commands:
   confirm   Record a human confirmation and advance the workflow gate
   verify    Record local verification evidence without advancing workflow
   closeout  Record closeout and memory-candidate reports without advancing workflow
+  chat      Launch the interactive runtime (alias: tui)
+  tui       Alias for chat
 `
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) error {
-	if len(args) == 0 || args[0] == "help" {
+	if len(args) == 0 {
+		return runChat(stdout, stderr)
+	}
+	if args[0] == "help" {
 		_, err := fmt.Fprint(stdout, helpText)
 		return err
 	}
 
 	switch args[0] {
+	case "":
+		return runChat(stdout, stderr)
+	case "chat", "tui":
+		return runChat(stdout, stderr)
 	case "start":
 		return runStart(args[1:], stdout)
 	case "confirm":
@@ -56,6 +70,25 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], helpText)
 	}
+}
+
+// runChat loads .devflow configuration and starts the interactive runtime
+// surface. With no args, devflow runs this path; devflow chat and devflow tui
+// do the same.
+func runChat(stdout io.Writer, stderr io.Writer) error {
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w\n\nCreate .devflow/config.yaml with at least one provider, then run `devflow help`.", err)
+	}
+	model := tui.New(cfg.Providers, cfg.MCPServers, cfg.Hooks)
+	return runTeaProgram(model)
+}
+
+// runTeaProgram runs the Bubble Tea program. It is a package-level variable so
+// tests can stub it and avoid taking over the terminal.
+var runTeaProgram = func(model tea.Model) error {
+	_, err := tea.NewProgram(model).Run()
+	return err
 }
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)

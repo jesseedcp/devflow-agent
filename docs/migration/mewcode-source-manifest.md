@@ -514,3 +514,18 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; no production Windows-specific changes required.
 - Verification: `gofmt -w internal/runtime/tui/*.go`; `go test ./internal/runtime/tui -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring the interactive TUI onto the Devflow runtime`
+
+### cli (interactive entry fusion)
+
+- Source: `internal/cli` (existing Devflow demand-workflow CLI), fused with `cmd/devflow` entry
+- Target: `internal/cli/cli.go`, `internal/cli/chat_test.go`, `cmd/devflow/main.go`
+- Fusion changes:
+  - Wire the interactive runtime launch path into the single `devflow` entry: bare `devflow` (no args), `devflow chat`, and `devflow tui` all start the Bubble Tea TUI via `internal/runtime/tui.New(cfg.Providers, cfg.MCPServers, cfg.Hooks)`.
+  - Preserve existing `devflow help`, `start`, `confirm`, `verify`, and `closeout` commands unchanged; `devflow help` remains the non-interactive help surface.
+  - Load config via `internal/runtime/config.LoadConfig("")`; on missing config return an actionable error mentioning `.devflow/config.yaml` and `devflow help`.
+  - Keep `tea.NewProgram(...)` construction inside a package-level `runTeaProgram` variable so tests can stub it and avoid taking over the terminal.
+  - Update `helpText` to document the new `chat` and `tui` commands.
+- Windows changes:
+  - Package tests pass on Windows; no production Windows-specific changes required.
+- Verification: `gofmt -w internal/cli/cli.go internal/cli/chat_test.go cmd/devflow/main.go`; `go test ./internal/cli -count=1`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Make devflow launch the fused interactive runtime`

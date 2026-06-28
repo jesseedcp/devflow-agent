@@ -269,3 +269,38 @@ unique Lore intent line of its migration commit; resolve the SHA with
 - Windows changes: verify command/process handling through package tests; no package-local Windows production changes required.
 - Verification: `gofmt -w internal/runtime/mcp`; `go test ./internal/runtime/mcp -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring MCP tool bridging into the Devflow runtime`
+
+### skills
+
+- Source: `internal/skills`
+- Target: `internal/runtime/skills`
+- Source files:
+  - `builtins.go`: `5D2795491E892BFF226B0D32B62C283B8873AAEE0866C81DFFC545FC18DAFF8D`
+  - `catalog.go`: `D885C94BC0C6269DC055C3841D2CA238554D672409114A2FBFE82AC416BAE0D3`
+  - `catalog_test.go`: `A637432FBF45BEBEAA8D612D24E8403C6D3D7809D2AE5334BD4A297D1944A1B0`
+  - `directory.go`: `264E9CF8F086F198A031987CC834D521E5C65A7B2BBE5E2AB6ECDE07B7BE8965`
+  - `executor.go`: `9F60C2EC418E11389CB9A2408295E9F5A5CF7465A1A26A53AB29C39D2D02E583`
+  - `executor_test.go`: `B615B52E0CBD16A75CC0F6FCEB8BBA01F286C2D18AAA1C265BE3F9EB7BCF5E86`
+  - `install.go`: `8A25837BE08B94A56364594E953420159A19F4315410D4C2AFCE02684ACA38B1`
+  - `install_test.go`: `78272D5C0AAC1C897DD487C3E81FC814B217AFAB0167716E744F6DDC469BEF59`
+  - `install_tool.go`: `AE6C7B8B60AF30236DA0EC5ADF93D43672BC8155A4B9546CFAAB66CB335FBAAB`
+  - `load_skill_tool.go`: `DBC44ADCFA374FAEE864DC11E6813810EE45C919A184CA67CE7FC2F008B471CB`
+  - `parse_resume.go`: `43E47C661832E4CE98EE262B4A1FFEBD024507FB342E1FE87AB7FAE5F2A02EEF`
+  - `parser.go`: `55D8D15A63FE92E74B7813EBCA308D1134755374AAF46F11CC0C3FC9A4918D33`
+  - `skills.go`: `965FE1BAAEE5D00F1F931AA9EA490335D71BEA9A90057B5A09C3708B10053ADB`
+  - `skills_test.go`: `E67661627E671375B5ADEA2435BACF3A00D27E53BEC757B3084AB02F39A6C8F4`
+- Bundled skills:
+  - `builtins/commit/SKILL.md`
+  - `builtins/test/SKILL.md`
+  - `builtins/backend-interview/SKILL.md`
+  - `builtins/backend-interview/tool.json`
+- Fusion changes:
+  - Move skill catalog, parser, executor, installation tools, and bundled skills under the Devflow runtime boundary.
+  - Retarget conversation and tools imports to runtime packages.
+  - Use `.devflow/skills` as the new user and project skill location while preserving `.mewcode/skills` as a lower-priority legacy fallback.
+  - Retarget skill install user-agent and tool descriptions from MewCode to Devflow.
+  - Replace the source real-project `.mewcode/skills` discovery test with deterministic temp-directory coverage.
+- Windows changes:
+  - Use slash-based embedded filesystem paths for bundled skills so `embed.FS` works on Windows.
+- Verification: `gofmt -w internal/runtime/skills`; `go test ./internal/runtime/skills -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring skill loading and execution into the Devflow runtime`

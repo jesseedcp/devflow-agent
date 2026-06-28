@@ -109,18 +109,26 @@ func (r *Registry) GetAllSchemas(protocol string) []map[string]any {
 			continue
 		}
 		base := t.Schema()
-		if protocol == "openai" {
-			schemas = append(schemas, map[string]any{
-				"type":        "function",
-				"name":        base["name"],
-				"description": base["description"],
-				"parameters":  base["input_schema"],
-			})
+		if usesOpenAIToolSchema(protocol) {
+			schemas = append(schemas, openAIToolSchema(base))
 		} else {
 			schemas = append(schemas, base)
 		}
 	}
 	return schemas
+}
+
+func usesOpenAIToolSchema(protocol string) bool {
+	return protocol == "openai" || protocol == "openai-compat"
+}
+
+func openAIToolSchema(base map[string]any) map[string]any {
+	return map[string]any{
+		"type":        "function",
+		"name":        base["name"],
+		"description": base["description"],
+		"parameters":  base["input_schema"],
+	}
 }
 
 func (r *Registry) GetDeferredToolNames() []string {
@@ -154,13 +162,8 @@ func (r *Registry) SearchDeferred(query string, maxResults int, protocol string)
 		desc := strings.ToLower(t.Description())
 		if strings.Contains(name, query) || strings.Contains(desc, query) {
 			base := t.Schema()
-			if protocol == "openai" {
-				matches = append(matches, map[string]any{
-					"type":        "function",
-					"name":        base["name"],
-					"description": base["description"],
-					"parameters":  base["input_schema"],
-				})
+			if usesOpenAIToolSchema(protocol) {
+				matches = append(matches, openAIToolSchema(base))
 			} else {
 				matches = append(matches, base)
 			}
@@ -181,13 +184,8 @@ func (r *Registry) FindDeferredByNames(names []string, protocol string) []map[st
 	for _, t := range r.tools {
 		if nameSet[strings.ToLower(t.Name())] {
 			base := t.Schema()
-			if protocol == "openai" {
-				matches = append(matches, map[string]any{
-					"type":        "function",
-					"name":        base["name"],
-					"description": base["description"],
-					"parameters":  base["input_schema"],
-				})
+			if usesOpenAIToolSchema(protocol) {
+				matches = append(matches, openAIToolSchema(base))
 			} else {
 				matches = append(matches, base)
 			}

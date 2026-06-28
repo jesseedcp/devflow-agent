@@ -304,3 +304,34 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Use slash-based embedded filesystem paths for bundled skills so `embed.FS` works on Windows.
 - Verification: `gofmt -w internal/runtime/skills`; `go test ./internal/runtime/skills -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring skill loading and execution into the Devflow runtime`
+
+### memory
+
+- Source: `internal/memory`
+- Target: `internal/runtime/memory`
+- Source files:
+  - `find_relevant_memories.go`: `5D67908640CE24FC78B55152BCD80469BF27DC50DEA780344D944F58646CF389`
+  - `find_relevant_memories_test.go`: `09EA599B83878151C48E67AF3E35AB05FCD02B43A06CA37CE57DC6EE04B252FE`
+  - `instructions.go`: `58320DEAB80889340CDEC2664CC935DBE4B03805AB24BF23AF7F636FB4F3B9A4`
+  - `instructions_test.go`: `A09A71C2B49CEB65E42B654EB54C4E94AC9FD16D2B760DC4CA5B68FC94C11687`
+  - `memdir.go`: `8D71BA3798E9A0BB88436BA71CB25496775708D07AB176176CB6C9FA9D42F23C`
+  - `memory.go`: `DCDEFFB77D8F68D6F0FE423325B5258085C7FF6AC577F65AA55A4A3CE6E25CD8`
+  - `memory_age.go`: `AE2B527D545062F0CDCDA78F903AE0316C1165A124F2C4B83DC9E5EA07269FEF`
+  - `memory_age_test.go`: `5E62CE6D833384501E30EAAE788A60CD256B4F449351F2A94129F833CDBBED5A`
+  - `memory_scan.go`: `310CCDFFDF4A18B20EADEE00B563A9A57BF05C7105926F87E87C8A8ACF98C346`
+  - `memory_scan_test.go`: `F60673292CB55B83BFCB870CC30E7AC3F142F5B6DBAA569538E69FE5EF831841`
+  - `memory_test.go`: `36EEF1591E66050564099F343DC8CFF9807E3D6562E0E531331F39ADCAD29FDD`
+  - `memory_types.go`: `DCEB7405259E43749117CB978491A240132E03E0E5AEAE896C81747EB0FE5D82`
+  - `paths.go`: `5D2E10EE5A1497465BE09CECC077929CBEED3AAE7AE5B0CF78B976EA6717520A`
+- Fusion changes:
+  - Move project memory scanning, typed memory prompts, instruction discovery, and memory manager code under the Devflow runtime boundary.
+  - Make `.devflow/memory` and `~/.devflow/memory` the new project-level and user-level write targets.
+  - Keep `MEWCODE_REMOTE_MEMORY_DIR`, `MEWCODE.md`, `.mewcode/INSTRUCTIONS.md`, and `MEWCODE.local.md` as legacy read/migration fallbacks.
+  - Prefer `DEVFLOW_REMOTE_MEMORY_DIR` over the legacy memory override when both environment variables are present.
+  - Retarget memory selector prompts, behavioral instructions, and examples from MewCode to Devflow.
+  - Add Windows-stable tests for path discovery, environment overrides, and user-home isolation.
+- Windows changes:
+  - Replace hard-coded slash-path expectations with `filepath.Join` and temp directories.
+  - Set both `HOME` and `USERPROFILE` in tests that depend on `os.UserHomeDir`.
+- Verification: `gofmt -w internal/runtime/memory`; `go test ./internal/runtime/memory -count=1 -timeout 2m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring project memory into the Devflow runtime`

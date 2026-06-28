@@ -15,6 +15,8 @@ const (
 type ReviewRef struct {
 	Project      string
 	MergeRequest string
+	BaseURL      string
+	Token        string
 }
 
 type ReviewComment struct {

@@ -437,3 +437,21 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; memory paths are produced through the migrated runtime memory package.
 - Verification: `gofmt -w internal/runtime/memory/extractor`; `go test ./internal/runtime/memory/extractor -count=1 -timeout 3m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring memory extraction into the Devflow runtime`
+
+### history
+
+- Source: `internal/history`
+- Target: `internal/runtime/history`
+- Source files:
+  - `history.go`: `6A5281B9C20A646F22BE80F470873FB5B03B4BDB269D8BCE61F57DD292D86CD3`
+  - `history_test.go`: `18464B7D2AFD090FBC0BFCD348DB99EEEB2862FA3996BD84F4EA22E42FD91A64`
+- Fusion changes:
+  - Move the prompt history package under the Devflow runtime boundary.
+  - Switch new writes from `.mewcode/prompt_history.jsonl` to `.devflow/prompt_history.jsonl`.
+  - Add a path-selection helper so `Load(workDir)` reads `.devflow` first and falls back to the legacy `.mewcode` file only when the `.devflow` file is absent.
+  - Preserve `maxEntries = 200`, duplicate-last-entry suppression, and JSONL record layout.
+  - Add focused tests for Devflow write creation, `.devflow`-over-`.mewcode` precedence, legacy fallback, dedup, and trimming.
+- Windows changes:
+  - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based `.devflow` history path resolution.
+- Verification: `gofmt -w internal/runtime/history/history.go internal/runtime/history/history_test.go`; `go test ./internal/runtime/history -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `git diff --check`
+- Lore intent: `Preserve prompt history in the Devflow runtime`

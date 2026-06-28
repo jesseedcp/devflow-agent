@@ -55,5 +55,6 @@ type Options struct {
 	Stage           Stage
 	QualityCommands []quality.Command
 	Runner          Runner
+	Review          ReviewOptions
 	Now             func() time.Time
 }

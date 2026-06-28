@@ -40,6 +40,8 @@ func (e Engine) Run(ctx context.Context, opts Options) error {
 			return e.runPlan(ctx, opts)
 		case StageImplementation:
 			return e.runImplementation(ctx, opts)
+		case StageMRReview:
+			return e.runMRReview(ctx, opts)
 		case StageVerification:
 			return e.runVerification(ctx, opts)
 		case StageCloseout:
@@ -314,6 +316,43 @@ func (e Engine) runCloseout(ctx context.Context, opts Options) error {
 		return err
 	}
 	return e.advance(&demand, workflow.Closeout)
+}
+
+func (e Engine) runMRReview(ctx context.Context, opts Options) error {
+	demand, err := e.Store.LoadDemand(opts.DemandID)
+	if err != nil {
+		return err
+	}
+	if workflow.State(demand.State) != workflow.MRReview {
+		return fmt.Errorf("mr-review stage requires state mr_review, got %s", demand.State)
+	}
+	if opts.Review.Adapter == nil {
+		return fmt.Errorf("mr-review stage requires a review adapter")
+	}
+
+	comments, err := opts.Review.Adapter.ListUnresolved(ctx, opts.Review.Ref)
+	if err != nil {
+		return fmt.Errorf("list unresolved review comments: %w", err)
+	}
+
+	if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderReviewSummary(comments)); err != nil {
+		return err
+	}
+
+	for _, comment := range comments {
+		if comment.Blocking {
+			return fmt.Errorf("blocking review comments remain")
+		}
+	}
+
+	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+		Time:    opts.Now(),
+		Type:    "mr_review.cleared",
+		Message: "mr review cleared, no blocking unresolved comments",
+	}); err != nil {
+		return err
+	}
+	return e.advance(&demand, workflow.Verification)
 }
 
 func renderQualityEvidence(result quality.GateResult) string {

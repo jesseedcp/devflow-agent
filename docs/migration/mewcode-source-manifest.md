@@ -418,3 +418,22 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based `.devflow/agents` discovery.
 - Verification: `gofmt -w internal/runtime/agents`; `go test ./internal/runtime/agents -count=1 -timeout 3m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
 - Lore intent: `Bring subagent tooling into the Devflow runtime`
+
+### memory/extractor
+
+- Source: `internal/memory/extractor`
+- Target: `internal/runtime/memory/extractor`
+- Source files:
+  - `extractor.go`: `D9C561481A19E336643D6EBC5C9024300A99BDD00E2AF7CB688F993119CDDFA6`
+  - `extractor_test.go`: `1EFE4E03AFED2E6CFADD35B35D6017DFF31DBA8BA4C7F39E87A24F37507BA893`
+  - `prompts.go`: `D3D280C2053C65A97906F63F5241450279BEA98B768E25E957B4180B0B1CBAF4`
+  - `prompts_test.go`: `E7A989D62D70B7A772FBA04F78D4C27EB2F05A0C7EB0925FBD4AE31B7D8775EF`
+- Fusion changes:
+  - Move memory extraction under the Devflow runtime memory boundary.
+  - Retarget agent, agents, conversation, llm, memory, permissions, and tools imports to runtime packages.
+  - Retarget extraction prompt comments and tests from `.mewcode/memory` to `.devflow/memory`.
+  - Preserve extractor behavior as a best-effort background fork that skips when the main agent already wrote memory files.
+- Windows changes:
+  - Package tests pass on Windows; memory paths are produced through the migrated runtime memory package.
+- Verification: `gofmt -w internal/runtime/memory/extractor`; `go test ./internal/runtime/memory/extractor -count=1 -timeout 3m`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `go test ./... -count=1 -timeout 5m`; `go vet ./...`; `go build ./cmd/devflow`; `git diff --check`
+- Lore intent: `Bring memory extraction into the Devflow runtime`

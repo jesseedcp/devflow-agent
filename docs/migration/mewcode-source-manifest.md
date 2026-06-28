@@ -455,3 +455,21 @@ unique Lore intent line of its migration commit; resolve the SHA with
   - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based `.devflow` history path resolution.
 - Verification: `gofmt -w internal/runtime/history/history.go internal/runtime/history/history_test.go`; `go test ./internal/runtime/history -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `git diff --check`
 - Lore intent: `Preserve prompt history in the Devflow runtime`
+
+### session
+
+- Source: `internal/session`
+- Target: `internal/runtime/session`
+- Source files:
+  - `session.go`: `889802CC24E4C2B64E2216D8F89C2F298560A29919686AD86C1593CF5D273CDF`
+  - `session_test.go`: `AD74B657D68DAF30EB0C1E737573D6D8978F167C10E1E0947ECD075D1D4893EA`
+- Fusion changes:
+  - Move the chat session package under the Devflow runtime boundary.
+  - Write new session JSONL files to `$workDir/.devflow/sessions` instead of `.mewcode/sessions`.
+  - Extract `legacySessionsDir` and `legacySessionFilePath` helpers and make `LoadSession` prefer `.devflow`, falling back to the legacy `.mewcode` file only when the Devflow file does not exist.
+  - Make `ListSessions` read `.devflow/sessions` first and include legacy `.mewcode/sessions` only for IDs that have no same-ID Devflow session, keeping newest-first ordering.
+  - Preserve `NewID`, `Message`, `SessionInfo`, `FormatRelativeTime`, `FormatFileSize`, `MatchesSearch`, and `currentGitBranch` behavior; tests do not require the temp directory to be a git repo.
+- Windows changes:
+  - Package tests pass on Windows; no production Windows-specific changes required beyond `filepath`-based `.devflow`/`.mewcode` session path resolution.
+- Verification: `gofmt -w internal/runtime/session/session.go internal/runtime/session/session_test.go`; `go test ./internal/runtime/session -count=1`; `go test ./internal/runtime/... -count=1 -timeout 5m`; `git diff --check`
+- Lore intent: `Keep chat sessions resumable under Devflow state`

@@ -31,12 +31,13 @@ func TestCreateAgentWorktree(t *testing.T) {
 		t.Fatalf("CreateAgentWorktree failed: %v", err)
 	}
 
-	expectedPath := filepath.Join(repo, ".mewcode", "worktrees", "agent-a1234567")
+	expectedPath := canonicalRoot(filepath.Join(repo, ".mewcode", "worktrees", "agent-a1234567"))
 	if result.WorktreePath != expectedPath {
 		t.Fatalf("expected path %q, got %q", expectedPath, result.WorktreePath)
 	}
-	if result.GitRoot != repo {
-		t.Fatalf("expected git root %q, got %q", repo, result.GitRoot)
+	expectedGitRoot := canonicalRoot(repo)
+	if result.GitRoot != expectedGitRoot {
+		t.Fatalf("expected git root %q, got %q", expectedGitRoot, result.GitRoot)
 	}
 	if result.HeadCommit == "" {
 		t.Fatal("expected non-empty head commit")

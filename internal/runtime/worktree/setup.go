@@ -238,10 +238,10 @@ func FindCanonicalGitRoot(startDir string) string {
 			commonDir, err := GetCommonDir(gitDir)
 			if err != nil || commonDir == "" {
 				// gitDir is the main .git dir; repo root is its parent.
-				return filepath.Dir(gitDir)
+				return canonicalRoot(filepath.Dir(gitDir))
 			}
 			// commonDir points to the main repo's .git; repo root is its parent.
-			return filepath.Dir(commonDir)
+			return canonicalRoot(filepath.Dir(commonDir))
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -249,4 +249,12 @@ func FindCanonicalGitRoot(startDir string) string {
 		}
 		dir = parent
 	}
+}
+
+func canonicalRoot(path string) string {
+	path = filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return path
 }

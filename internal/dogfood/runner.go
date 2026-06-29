@@ -137,6 +137,14 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return result, err
 	}
 	if err := runStage("implementation", demandflow.StageImplementation, func(o *demandflow.Options) {
+		o.MergeRequest = demandflow.MergeRequestOptions{
+			Adapter: offlineMergeRequestAdapter{},
+			Spec: adapters.MergeRequestSpec{
+				SourceBranch: "dogfood/test",
+				TargetBranch: "main",
+				Title:        "Dogfood MR sync",
+			},
+		}
 		o.QualityCommands = opts.QualityCommands
 	}); err != nil {
 		return result, err
@@ -185,6 +193,12 @@ func (offlineReviewAdapter) ListUnresolved(context.Context, adapters.ReviewRef) 
 
 func (offlineReviewAdapter) Reply(context.Context, adapters.ReviewRef, string, string) error {
 	return nil
+}
+
+type offlineMergeRequestAdapter struct{}
+
+func (offlineMergeRequestAdapter) EnsureMergeRequest(_ context.Context, _ adapters.MergeRequestSpec) (adapters.MergeRequestResult, error) {
+	return adapters.MergeRequestResult{IID: 1, WebURL: "https://offline/-/1", Title: "Dogfood MR sync", State: "opened", WasCreated: true}, nil
 }
 
 func renderReport(result Result, demandDir string) string {

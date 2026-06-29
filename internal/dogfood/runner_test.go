@@ -62,6 +62,14 @@ func TestRunCompletesFullDeterministicLoop(t *testing.T) {
 			t.Fatalf("artifact %s missing: %v", name, err)
 		}
 	}
+
+	progressData, err := os.ReadFile(filepath.Join(demandDir, artifacts.ProgressFile))
+	if err != nil {
+		t.Fatalf("read progress.md: %v", err)
+	}
+	if !strings.Contains(string(progressData), "!1") {
+		t.Fatalf("progress.md missing MR evidence:\n%s", string(progressData))
+	}
 }
 
 func TestRunRejectsUnknownScenario(t *testing.T) {

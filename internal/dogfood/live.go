@@ -138,6 +138,14 @@ func RunLiveSandbox(ctx context.Context, opts LiveOptions) (LiveResult, error) {
 		return result, err
 	}
 	if err := runStage("implementation", demandflow.StageImplementation, func(o *demandflow.Options) {
+		o.MergeRequest = demandflow.MergeRequestOptions{
+			Adapter: offlineMergeRequestAdapter{},
+			Spec: adapters.MergeRequestSpec{
+				SourceBranch: "live-dogfood/test",
+				TargetBranch: "main",
+				Title:        "Live dogfood MR sync",
+			},
+		}
 		o.QualityCommands = sandbox.QualityCommands
 	}); err != nil {
 		return result, err

@@ -1,7 +1,9 @@
 package demandflow
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -250,6 +252,44 @@ func TestEngineImplementationFailsQualityGate(t *testing.T) {
 	}
 }
 
+func TestEngineImplementationRetriesFailedQualityGate(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.FailedQualityGate)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 实现摘要\n\nretry fixed tests\n"},
+	}}
+	if err := engine.Run(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+	}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.MRReview) {
+		t.Fatalf("state = %q want mr_review", demand.State)
+	}
+	if body := readArtifact(t, engine, artifacts.ProgressFile); !strings.Contains(body, "retry fixed tests") {
+		t.Fatalf("progress.md = %q", body)
+	}
+	events, err := readDemandflowEventsFile(filepath.Join(engine.Store.DemandDir("add-coupon-check"), artifacts.EventsFile))
+	if err != nil {
+		t.Fatalf("load events: %v", err)
+	}
+	foundRetry := false
+	for _, event := range events {
+		if event.Type == "implementation.retry" {
+			foundRetry = true
+		}
+	}
+	if !foundRetry {
+		t.Fatalf("events missing implementation.retry: %#v", events)
+	}
+}
 func TestEngineVerificationStaysAndWritesArtifact(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Verification)
@@ -319,4 +359,30 @@ func TestEngineCloseoutWithoutMarkerKeepsMemoryNote(t *testing.T) {
 	if body := readArtifact(t, engine, artifacts.MemoryCandidatesFile); !strings.Contains(body, "no stable candidates were generated") {
 		t.Fatalf("memory-candidates.md = %q", body)
 	}
+}
+
+func readDemandflowEventsFile(path string) ([]artifacts.Event, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var events []artifacts.Event
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event artifacts.Event
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
 }

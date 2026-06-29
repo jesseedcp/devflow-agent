@@ -198,8 +198,20 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 	if err != nil {
 		return err
 	}
-	if workflow.State(demand.State) != workflow.Implementation {
-		return fmt.Errorf("implementation stage requires state implementation, got %s", demand.State)
+	current := workflow.State(demand.State)
+	if current == workflow.FailedQualityGate {
+		if err := e.advance(&demand, workflow.Implementation); err != nil {
+			return err
+		}
+		if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+			Time:    opts.Now(),
+			Type:    "implementation.retry",
+			Message: "implementation retried after failed quality gate",
+		}); err != nil {
+			return err
+		}
+	} else if current != workflow.Implementation {
+		return fmt.Errorf("implementation stage requires state implementation or failed_quality_gate, got %s", current)
 	}
 
 	snapshot, err := newContextLoader(e.root).Load(opts.DemandID)

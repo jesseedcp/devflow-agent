@@ -49,3 +49,21 @@ User-facing references:
 - [Backend demand loop user guide](docs/user-guide/backend-demand-loop.md)
 - [OpenAI-compatible example config](docs/examples/config.openai-compat.yaml)
 - [Anthropic example config](docs/examples/config.anthropic.yaml)
+
+## Release readiness
+
+Wave 7 adds CI, version metadata, Windows build and local dogfood support:
+
+```powershell
+go test ./... -count=1 -timeout 5m
+go vet ./...
+go build ./cmd/devflow
+powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1 -Version 0.1.0-dev
+powershell -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
+```
+
+Release and dogfood references:
+
+- [Dogfood and smoke guide](docs/user-guide/dogfood-smoke.md)
+- [v0.1 release notes](docs/release/v0.1.md)
+- [Coupon eligibility sample demand](docs/examples/demands/coupon-eligibility.md)

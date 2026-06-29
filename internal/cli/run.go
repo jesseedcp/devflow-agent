@@ -37,10 +37,11 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	var root, demandID, stage, configPath, permissionMode, gitlabProject, gitlabMR, gitlabBaseURL string
+	var root, qualityRoot, demandID, stage, configPath, permissionMode, gitlabProject, gitlabMR, gitlabBaseURL string
 	var qualityCommands stringSliceFlag
 
 	fs.StringVar(&root, "root", ".", "root directory")
+	fs.StringVar(&qualityRoot, "quality-root", "", "working directory for quality commands; defaults to --root")
 	fs.StringVar(&demandID, "demand", "", "demand id")
 	fs.StringVar(&stage, "stage", "", "demand stage")
 	fs.StringVar(&configPath, "config", "", "devflow config path")
@@ -86,6 +87,7 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	opts := demandflow.Options{
 		Root:            root,
+		QualityRoot:     strings.TrimSpace(qualityRoot),
 		DemandID:        demandID,
 		Stage:           parsedStage,
 		QualityCommands: commands,

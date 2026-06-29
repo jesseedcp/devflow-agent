@@ -933,6 +933,14 @@ func TestCLICommandHelper(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		return
 	}
+	if mode == "pwd" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		fmt.Println(filepath.Clean(cwd))
+		return
+	}
 
 	separator := -1
 	for index, arg := range os.Args {

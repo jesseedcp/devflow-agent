@@ -25,6 +25,13 @@ func NewEngine(root string) Engine {
 	}
 }
 
+func qualityRoot(opts Options) string {
+	if strings.TrimSpace(opts.QualityRoot) != "" {
+		return opts.QualityRoot
+	}
+	return opts.Root
+}
+
 func (e Engine) Run(ctx context.Context, opts Options) error {
 	_, err := e.RunDetailed(ctx, opts)
 	return err
@@ -244,7 +251,7 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 	result.Artifacts = append(result.Artifacts, artifacts.ProgressFile)
 
 	if len(opts.QualityCommands) > 0 {
-		gateResult := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
+		gateResult := e.Gate.Run(ctx, qualityRoot(opts), opts.QualityCommands...)
 		passed := gateResult.Passed
 		result.QualityPassed = &passed
 		if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderQualityEvidence(gateResult)); err != nil {
@@ -301,7 +308,7 @@ func (e Engine) runVerification(ctx context.Context, opts Options, result *RunRe
 
 	body := strings.TrimSpace(resp.Text)
 	if len(opts.QualityCommands) > 0 {
-		gateResult := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
+		gateResult := e.Gate.Run(ctx, qualityRoot(opts), opts.QualityCommands...)
 		passed := gateResult.Passed
 		result.QualityPassed = &passed
 		body += "\n\n" + renderQualityEvidence(gateResult)

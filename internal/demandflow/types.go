@@ -51,6 +51,7 @@ type MemoryHit struct {
 
 type Options struct {
 	Root            string
+	QualityRoot     string
 	DemandID        string
 	Stage           Stage
 	QualityCommands []quality.Command

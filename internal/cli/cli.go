@@ -38,6 +38,7 @@ Usage:
   devflow status --demand <id>
   devflow next --demand <id>
   devflow doctor [--require-gitlab]
+  devflow dogfood [--scenario coupon-eligibility] [--quality-command <command>]
   devflow smoke --title <title> --description <text>
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow chat
@@ -54,6 +55,7 @@ Commands:
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
   doctor   Diagnose config, environment, git, and GitLab readiness
+  dogfood  Run a deterministic full backend-demand loop
   smoke    Run an explicit local requirements-stage smoke test
   run       Run one backend-demand agent stage
   chat      Launch the interactive runtime (alias: tui)
@@ -92,6 +94,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runNext(args[1:], stdout)
 	case "doctor":
 		return runDoctor(args[1:], stdout)
+	case "dogfood":
+		return runDogfood(args[1:], stdout, stderr)
 	case "smoke":
 		return runSmoke(args[1:], stdout, stderr)
 	case "run":

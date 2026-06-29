@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -192,5 +193,42 @@ func TestRunQualityCommandUsesQualityRoot(t *testing.T) {
 	}
 	if !strings.Contains(string(progress), filepath.Clean(repoRoot)) {
 		t.Fatalf("progress.md missing quality root %q: %q", repoRoot, string(progress))
+	}
+}
+
+type cliRecordingRunner struct {
+	root string
+}
+
+func (r *cliRecordingRunner) Run(_ context.Context, req demandflow.RunnerRequest) (demandflow.RunnerResponse, error) {
+	r.root = req.Root
+	return demandflow.RunnerResponse{Text: "# Requirements\n\ncli runner root recorded\n"}, nil
+}
+
+func TestRunUsesRunnerRootForDemandRunner(t *testing.T) {
+	artifactRoot := t.TempDir()
+	codeRoot := t.TempDir()
+	createDemandAtState(t, artifactRoot, workflow.Created)
+
+	recorder := &cliRecordingRunner{}
+	original := newDemandRunner
+	defer func() { newDemandRunner = original }()
+	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
+		return recorder
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"run",
+		"--root", artifactRoot,
+		"--runner-root", codeRoot,
+		"--demand", "add-coupon-check",
+		"--stage", "requirements",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if recorder.root != codeRoot {
+		t.Fatalf("runner root = %q, want %q", recorder.root, codeRoot)
 	}
 }

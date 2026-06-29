@@ -462,3 +462,44 @@ func readDemandflowEventsFile(path string) ([]artifacts.Event, error) {
 	}
 	return events, nil
 }
+
+type recordingDemandRunner struct {
+	root string
+}
+
+func (r *recordingDemandRunner) Run(_ context.Context, req RunnerRequest) (RunnerResponse, error) {
+	r.root = req.Root
+	return RunnerResponse{Text: "# Requirements\n\nrunner root recorded\n"}, nil
+}
+
+func TestRequirementsRunnerUsesRunnerRoot(t *testing.T) {
+	artifactRoot := t.TempDir()
+	codeRoot := t.TempDir()
+	store := artifacts.NewStore(artifactRoot)
+	if err := store.CreateDemand(artifacts.Demand{
+		ID:          "runner-root-check",
+		Title:       "Runner root check",
+		Description: "Agent should run in code root",
+		Source:      "test",
+		State:       string(workflow.Created),
+	}); err != nil {
+		t.Fatalf("create demand: %v", err)
+	}
+
+	runner := &recordingDemandRunner{}
+	engine := NewEngine(artifactRoot)
+	err := engine.Run(context.Background(), Options{
+		Root:       artifactRoot,
+		RunnerRoot: codeRoot,
+		DemandID:   "runner-root-check",
+		Stage:      StageRequirements,
+		Runner:     runner,
+		Now:        fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("requirements: %v", err)
+	}
+	if runner.root != codeRoot {
+		t.Fatalf("runner root = %q, want %q", runner.root, codeRoot)
+	}
+}

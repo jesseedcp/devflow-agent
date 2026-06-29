@@ -1,0 +1,8 @@
+providers:
+  - name: ark
+    protocol: openai-compat
+    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
+    model: ark-code-latest
+    context_window: 128000
+    max_output_tokens: 8192
+permission_mode: default

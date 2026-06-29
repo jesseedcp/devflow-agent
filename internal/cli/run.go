@@ -18,6 +18,10 @@ var newDemandRunner = func(configPath string, mode permissions.PermissionMode) d
 	return demandflow.RuntimeRunner{ConfigPath: configPath, PermissionMode: mode, MaxIterations: 20}
 }
 
+var newMergeRequestAdapter = func() adapters.MergeRequestAdapter {
+	return adapters.GitLabReviewAdapter{}
+}
+
 var newReviewAdapter = func() adapters.ReviewAdapter {
 	return adapters.GitLabReviewAdapter{}
 }
@@ -145,3 +149,4 @@ func printRunResult(stdout io.Writer, result demandflow.RunResult) {
 		}
 	}
 }
+

@@ -1,1 +1,6 @@
 .worktrees/
+.devflow/
+dist/
+.gocache/
+devflow
+devflow.exe

@@ -1,0 +1,116 @@
+package demandflow
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/jesseedcp/devflow-agent/internal/adapters"
+	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/workflow"
+)
+
+type fakeReviewAdapter struct {
+	comments []adapters.ReviewComment
+	listErr  error
+}
+
+func (f fakeReviewAdapter) ListUnresolved(_ context.Context, _ adapters.ReviewRef) ([]adapters.ReviewComment, error) {
+	return f.comments, f.listErr
+}
+
+func (f fakeReviewAdapter) Reply(_ context.Context, _ adapters.ReviewRef, _ string, _ string) error {
+	return nil
+}
+
+func mrReviewOptions(adapter adapters.ReviewAdapter) ReviewOptions {
+	return ReviewOptions{Adapter: adapter, Ref: adapters.ReviewRef{Project: "group/project", MergeRequest: "1"}}
+}
+
+func TestEngineMRReviewNoCommentsAdvancesToVerification(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(fakeReviewAdapter{}),
+		Now:      fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.Verification) {
+		t.Fatalf("state = %q want verification", demand.State)
+	}
+	if body := readArtifact(t, engine, artifacts.ProgressFile); !strings.Contains(body, "No unresolved review comments") {
+		t.Fatalf("progress.md = %q want review summary", body)
+	}
+}
+
+func TestEngineMRReviewNonblockingCommentAdvances(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	adapter := fakeReviewAdapter{comments: []adapters.ReviewComment{
+		{ID: "1", Author: "reviewer", Body: "nit: rename helper", Blocking: false},
+	}}
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(adapter),
+		Now:      fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.Verification) {
+		t.Fatalf("state = %q want verification", demand.State)
+	}
+}
+
+func TestEngineMRReviewBlockingCommentHoldsAndErrors(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	adapter := fakeReviewAdapter{comments: []adapters.ReviewComment{
+		{ID: "1", Author: "reviewer", Body: "missing test coverage", Blocking: true, FilePath: "main.go", Line: 10},
+	}}
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(adapter),
+		Now:      fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "blocking review comments remain") {
+		t.Fatalf("err = %v want blocking review comments remain", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.MRReview) {
+		t.Fatalf("state = %q want mr_review", demand.State)
+	}
+}
+
+func TestEngineMRReviewRequiresAdapter(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Now:      fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "review adapter") {
+		t.Fatalf("err = %v want review adapter error", err)
+	}
+}

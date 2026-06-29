@@ -87,6 +87,7 @@ func (a GitLabReviewAdapter) ListUnresolved(ctx context.Context, ref ReviewRef) 
 				Author:   note.Author.Username,
 				Body:     note.Body,
 				Blocking: true,
+				Category: ClassifyReviewComment(note.Body, commentFilePath(note.Position)),
 			}
 			if note.Position != nil {
 				if note.Position.NewPath != "" {
@@ -314,4 +315,11 @@ func (a GitLabReviewAdapter) createMergeRequest(ctx context.Context, token, base
 		return nil, fmt.Errorf("decode created gitlab merge request: %w", err)
 	}
 	return &mr, nil
+}
+
+func commentFilePath(position *gitlabNotePosition) string {
+	if position == nil {
+		return ""
+	}
+	return position.NewPath
 }

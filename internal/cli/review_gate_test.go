@@ -50,6 +50,7 @@ func TestReviewGateBlocksOnUnresolvedComments(t *testing.T) {
 		FilePath: "internal/service.go",
 		Line:     42,
 		Blocking: true,
+		Category: adapters.CommentTest,
 	}}}
 	original := newReviewAdapter
 	defer func() { newReviewAdapter = original }()
@@ -61,7 +62,7 @@ func TestReviewGateBlocksOnUnresolvedComments(t *testing.T) {
 		t.Fatalf("err = %v, want blocked", err)
 	}
 	output := stdout.String()
-	for _, want := range []string{"review gate blocked", "internal/service.go:42", "fix nil handling"} {
+	for _, want := range []string{"review gate blocked", "[test]", "internal/service.go:42", "fix nil handling"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("stdout missing %q:\n%s", want, output)
 		}

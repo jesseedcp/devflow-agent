@@ -63,14 +63,27 @@ devflow run --demand add-coupon-eligibility-check --stage implementation --permi
 
 If the quality gate fails, fix the reported problem and rerun the same implementation command.
 
-## 7. Run MR Review Gate
+## 7. Run MR Review Collaboration
 
 ```powershell
 $env:GITLAB_TOKEN = '<your-token>'
 devflow run --demand add-coupon-eligibility-check --stage mr-review --gitlab-project "group/project" --gitlab-mr "123"
 ```
 
-Before running the workflow MR stage, you can check a real MR directly:
+The MR-review stage records two sections in `progress.md`:
+
+- `MR 评审摘要` lists unresolved comments.
+- `MR Review Action Plan` classifies comments and selects the next workflow state.
+
+Blocking comments route the demand as follows:
+
+- requirements feedback -> `returned_to_requirements`
+- plan or architecture feedback -> `returned_to_plan`
+- implementation, test, or style feedback -> `implementation`
+
+When no blocking comments remain, the demand advances to `verification`.
+
+Before running the workflow MR stage, you can inspect a real MR directly:
 
 ```powershell
 $env:GITLAB_TOKEN = '<your-token>'

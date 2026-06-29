@@ -6,7 +6,7 @@ Run this before a release branch is merged:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1 -Version 0.1.0-dev
 ```
 
-This command rebuilds the CLI, creates an isolated dogfood workspace under the system temp directory, runs `devflow dogfood`, and prints the generated `dogfood-report.md` path.
+This command rebuilds the CLI, creates a unique isolated dogfood workspace under the system temp directory, runs `devflow dogfood`, and prints the generated `dogfood-report.md` path.
 
 ## What It Proves
 

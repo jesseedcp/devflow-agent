@@ -1,6 +1,6 @@
 # Dogfood Report: dogfood-coupon-eligibility
 
-Root: `<temp>\devflow-dogfood-local\artifacts`
+Root: `<temp>\devflow-dogfood-local-<id>\artifacts`
 
 QualityRoot: `<repo>\devflow-agent`
 
@@ -21,10 +21,10 @@ FinalState: `completed`
 
 ## Artifacts
 
-- `requirements.md`
-- `plan.md`
-- `progress.md`
-- `verification.md`
-- `closeout.md`
-- `memory-candidates.md`
-- `events.jsonl`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\requirements.md`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\plan.md`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\progress.md`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\verification.md`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\closeout.md`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\memory-candidates.md`
+- `<temp>\devflow-dogfood-local-<id>\artifacts\.devflow\demands\dogfood-coupon-eligibility\events.jsonl`

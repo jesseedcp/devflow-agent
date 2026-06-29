@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($Root)) {
-    $Root = Join-Path ([System.IO.Path]::GetTempPath()) 'devflow-dogfood-local'
+    $Root = Join-Path ([System.IO.Path]::GetTempPath()) ('devflow-dogfood-local-' + [guid]::NewGuid().ToString('N'))
 }
 $rootPath = [System.IO.Path]::GetFullPath($Root)
 $tempPath = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())

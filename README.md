@@ -58,8 +58,8 @@ Wave 7 adds CI, version metadata, Windows build and local dogfood support:
 go test ./... -count=1 -timeout 5m
 go vet ./...
 go build ./cmd/devflow
-powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1 -Version 0.1.0-dev
-powershell -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-windows.ps1 -Version 0.1.0-dev
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
 ```
 
 Release and dogfood references:

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$Root = "",
-    [string]$Version = "0.1.0-dogfood"
+    [string]$Version = "0.1.0-dogfood",
+    [switch]$UseExistingBinary
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,8 +22,8 @@ if (Test-Path -LiteralPath $rootPath) {
 New-Item -ItemType Directory -Force -Path $rootPath | Out-Null
 
 $binary = Join-Path $repoRoot 'dist\devflow-windows-amd64.exe'
-if (-not (Test-Path -LiteralPath $binary)) {
-    powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\build-windows.ps1') -Version $Version -Output $binary
+if ((-not $UseExistingBinary) -or (-not (Test-Path -LiteralPath $binary))) {
+    powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\build-windows.ps1') -Version $Version -Output $binary
 }
 
 & $binary version

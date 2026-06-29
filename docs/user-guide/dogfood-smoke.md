@@ -5,8 +5,10 @@
 Run this path before opening a release PR. It does not call a live model provider and does not require API keys.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
 ```
+
+The dogfood script rebuilds the CLI by default so it validates the current checkout. Use `-UseExistingBinary` only when intentionally testing a prebuilt artifact.
 
 Expected checks:
 
@@ -21,10 +23,10 @@ Expected checks:
 Run this only when you want to validate the configured model provider. Keep secrets in environment variables and do not paste them into config files or docs.
 
 ```powershell
-$env:OPENAI_API_KEY = Read-Host -AsSecureString "OPENAI_API_KEY" | ConvertFrom-SecureString
+$env:OPENAI_API_KEY = "<your-private-provider-token>"
 ```
 
-The command above stores an encrypted string and is not accepted directly by provider SDKs. For an actual one-off shell session, set `OPENAI_API_KEY` to the private provider token in your terminal using your local secret-handling practice.
+Set this only in your private shell session. Do not paste the real token into committed config files, docs, screenshots, or terminal logs.
 
 Initialize Ark/OpenAI-compatible config:
 

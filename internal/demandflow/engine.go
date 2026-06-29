@@ -307,16 +307,29 @@ func (e Engine) runVerification(ctx context.Context, opts Options, result *RunRe
 	}
 
 	body := strings.TrimSpace(resp.Text)
+	qualityFailed := false
+	qualitySummary := ""
 	if len(opts.QualityCommands) > 0 {
 		gateResult := e.Gate.Run(ctx, qualityRoot(opts), opts.QualityCommands...)
 		passed := gateResult.Passed
 		result.QualityPassed = &passed
 		body += "\n\n" + renderQualityEvidence(gateResult)
+		if !gateResult.Passed {
+			qualityFailed = true
+			qualitySummary = summarizeQuality(gateResult)
+		}
 	}
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.VerificationFile, body+"\n"); err != nil {
 		return err
 	}
 	result.Artifacts = append(result.Artifacts, artifacts.VerificationFile)
+	if qualityFailed {
+		if err := e.advance(&demand, workflow.FailedQualityGate); err != nil {
+			return err
+		}
+		result.Message = "quality gate failed: " + qualitySummary
+		return fmt.Errorf("quality gate failed: %s", qualitySummary)
+	}
 	result.Message = "verification drafted by demand runner"
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),

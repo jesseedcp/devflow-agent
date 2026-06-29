@@ -360,6 +360,36 @@ func TestEngineVerificationStaysAndWritesArtifact(t *testing.T) {
 	}
 }
 
+func TestEngineVerificationFailsQualityGate(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Verification)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 1, stderr: "verification failed"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageVerification: {Text: "# Verification: coupon flow\n\n## 结论\n\nneeds work\n"},
+	}}
+	result, err := engine.RunDetailed(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageVerification,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "quality gate failed") {
+		t.Fatalf("err = %v want quality gate failed", err)
+	}
+	if result.CurrentState != workflow.FailedQualityGate {
+		t.Fatalf("current state = %s want %s", result.CurrentState, workflow.FailedQualityGate)
+	}
+	if result.QualityPassed == nil || *result.QualityPassed {
+		t.Fatalf("quality passed = %#v", result.QualityPassed)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.FailedQualityGate) {
+		t.Fatalf("state = %q want failed_quality_gate", demand.State)
+	}
+}
+
 func TestEngineCloseoutWritesCloseoutAndMemory(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Closeout)

@@ -35,6 +35,7 @@ Usage:
   devflow closeout --demand <id> --result <text> --knowledge <text>
   devflow status --demand <id>
   devflow next --demand <id>
+  devflow doctor
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow chat
   devflow tui
@@ -48,6 +49,7 @@ Commands:
   closeout  Record closeout and memory-candidate reports without advancing workflow
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
+  doctor   Diagnose config, environment, git, and GitLab readiness
   run       Run one backend-demand agent stage
   chat      Launch the interactive runtime (alias: tui)
   tui       Alias for chat
@@ -81,6 +83,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runStatus(args[1:], stdout)
 	case "next":
 		return runNext(args[1:], stdout)
+	case "doctor":
+		return runDoctor(args[1:], stdout)
 	case "run":
 		return runDemandStage(args[1:], stdout, stderr)
 	default:

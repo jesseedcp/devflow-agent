@@ -91,3 +91,32 @@ func TestNextActionsQuoteDemandID(t *testing.T) {
 		t.Fatalf("command = %q", actions[0].Command)
 	}
 }
+
+func TestNextActionsForMRReviewReturns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		state workflow.State
+		label string
+		want  string
+	}{
+		{workflow.ReturnedToRequirements, "Revise requirements", "devflow run --demand add-coupon-check --stage requirements"},
+		{workflow.ReturnedToPlan, "Revise plan", "devflow run --demand add-coupon-check --stage plan"},
+		{workflow.Implementation, "Run implementation", "devflow run --demand add-coupon-check --stage implementation"},
+	}
+
+	for _, tc := range tests {
+		t.Run(string(tc.state), func(t *testing.T) {
+			actions := NextActions(tc.state, "add-coupon-check")
+			if len(actions) == 0 {
+				t.Fatal("expected action")
+			}
+			if actions[0].Label != tc.label {
+				t.Fatalf("label = %q, want %q", actions[0].Label, tc.label)
+			}
+			if !strings.Contains(actions[0].Command, tc.want) {
+				t.Fatalf("command = %q, want contains %q", actions[0].Command, tc.want)
+			}
+		})
+	}
+}

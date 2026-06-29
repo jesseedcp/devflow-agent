@@ -42,7 +42,8 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	var root, runnerRoot, qualityRoot, demandID, stage, configPath, permissionMode, gitlabProject, gitlabMR, gitlabBaseURL string
-	var createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription string
+	var createMR bool
+	var createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile string
 	var qualityCommands stringSliceFlag
 
 	fs.StringVar(&root, "root", ".", "root directory")
@@ -52,9 +53,15 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&stage, "stage", "", "demand stage")
 	fs.StringVar(&configPath, "config", "", "devflow config path")
 	fs.StringVar(&permissionMode, "permission-mode", "", "permission mode for implementation (acceptEdits or bypassPermissions)")
-	fs.StringVar(&gitlabProject, "gitlab-project", "", "gitlab project path for mr-review")
+	fs.StringVar(&gitlabProject, "gitlab-project", "", "gitlab project path for mr-review or create-mr")
 	fs.StringVar(&gitlabMR, "gitlab-mr", "", "gitlab merge request iid for mr-review")
 	fs.StringVar(&gitlabBaseURL, "gitlab-base-url", "", "gitlab base url override")
+	fs.BoolVar(&createMR, "create-mr", false, "create or reuse a GitLab merge request after implementation")
+	fs.StringVar(&createMRSourceBranch, "create-mr-source-branch", "", "source branch for create-mr")
+	fs.StringVar(&createMRTargetBranch, "create-mr-target-branch", "", "target branch for create-mr")
+	fs.StringVar(&createMRTitle, "create-mr-title", "", "title for create-mr")
+	fs.StringVar(&createMRDescription, "create-mr-description", "", "description for create-mr")
+	fs.StringVar(&createMRDescriptionFile, "create-mr-description-file", "", "description file for create-mr")
 	fs.Var(&qualityCommands, "quality-command", "quality command as a quoted program and args (repeatable)")
 
 	if err := fs.Parse(args); err != nil {
@@ -116,7 +123,9 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 		}
 	}
 
-	configureMergeRequest(parsedStage, createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, gitlabBaseURL, &opts)
+	if err := configureMergeRequest(parsedStage, createMR, gitlabProject, createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile, gitlabBaseURL, &opts); err != nil {
+		return err
+	}
 	engine := demandflow.NewEngine(root)
 	result, err := engine.RunDetailed(context.Background(), opts)
 	if err != nil {
@@ -153,21 +162,52 @@ func printRunResult(stdout io.Writer, result demandflow.RunResult) {
 	}
 }
 
-func configureMergeRequest(stage demandflow.Stage, sourceBranch, targetBranch, title, description, baseURL string, opts *demandflow.Options) {
+func configureMergeRequest(stage demandflow.Stage, enabled bool, project, sourceBranch, targetBranch, title, description, descriptionFile, baseURL string, opts *demandflow.Options) error {
 	if stage != demandflow.StageImplementation {
-		return
+		return nil
 	}
-	if strings.TrimSpace(sourceBranch) == "" || strings.TrimSpace(targetBranch) == "" || strings.TrimSpace(title) == "" {
-		return
+	requested := enabled ||
+		strings.TrimSpace(sourceBranch) != "" ||
+		strings.TrimSpace(targetBranch) != "" ||
+		strings.TrimSpace(title) != "" ||
+		strings.TrimSpace(description) != "" ||
+		strings.TrimSpace(descriptionFile) != ""
+	if !requested {
+		return nil
 	}
+
+	var missing []string
+	if strings.TrimSpace(project) == "" {
+		missing = append(missing, "--gitlab-project")
+	}
+	if strings.TrimSpace(sourceBranch) == "" {
+		missing = append(missing, "--create-mr-source-branch")
+	}
+	if strings.TrimSpace(targetBranch) == "" {
+		missing = append(missing, "--create-mr-target-branch")
+	}
+	if strings.TrimSpace(title) == "" {
+		missing = append(missing, "--create-mr-title")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%s required for --create-mr", strings.Join(missing, ", "))
+	}
+
+	desc, err := mergeRequestDescription(description, descriptionFile)
+	if err != nil {
+		return err
+	}
+
 	opts.MergeRequest = demandflow.MergeRequestOptions{
 		Adapter: newMergeRequestAdapter(),
 		Spec: adapters.MergeRequestSpec{
-			SourceBranch: sourceBranch,
-			TargetBranch: targetBranch,
-			Title:        title,
-			Description:  description,
-			BaseURL:      baseURL,
+			Project:      strings.TrimSpace(project),
+			SourceBranch: strings.TrimSpace(sourceBranch),
+			TargetBranch: strings.TrimSpace(targetBranch),
+			Title:        strings.TrimSpace(title),
+			Description:  desc,
+			BaseURL:      strings.TrimSpace(baseURL),
 		},
 	}
+	return nil
 }

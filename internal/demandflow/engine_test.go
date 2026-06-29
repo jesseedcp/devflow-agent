@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -571,5 +572,37 @@ func TestEngineImplementationSyncMergeRequestSkippedWhenNil(t *testing.T) {
 	demand, _ := engine.Store.LoadDemand("add-coupon-check")
 	if demand.State != string(workflow.MRReview) {
 		t.Fatalf("state = %q want mr_review", demand.State)
+	}
+}
+
+func TestEngineImplementationSyncMergeRequestFailureBlocksPlatform(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+	}}
+
+	result, err := engine.RunDetailed(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+		MergeRequest: MergeRequestOptions{
+			Adapter: fakeMergeRequestSyncAdapter{err: errors.New("gitlab unavailable")},
+			Spec:    adapters.MergeRequestSpec{Project: "p", SourceBranch: "s", TargetBranch: "t", Title: "MR"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "blocked_need_platform") {
+		t.Fatalf("err = %v, want blocked_need_platform", err)
+	}
+	if result.CurrentState != workflow.BlockedNeedPlatform {
+		t.Fatalf("current state = %s, want %s", result.CurrentState, workflow.BlockedNeedPlatform)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.BlockedNeedPlatform) {
+		t.Fatalf("state = %q want blocked_need_platform", demand.State)
 	}
 }

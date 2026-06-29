@@ -524,6 +524,9 @@ func (e Engine) syncMergeRequest(ctx context.Context, opts Options, demand *arti
 	}
 	result, err := adapter.EnsureMergeRequest(ctx, opts.MergeRequest.Spec)
 	if err != nil {
+		if advanceErr := e.advance(demand, workflow.BlockedNeedPlatform); advanceErr != nil {
+			return fmt.Errorf("merge request sync failed: %w (block state: %v)", err, advanceErr)
+		}
 		eventErr := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 			Time:    opts.Now(),
 			Type:    "merge_request.sync_failed",

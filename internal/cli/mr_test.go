@@ -99,8 +99,10 @@ func TestMergeRequestDescriptionReadsFile(t *testing.T) {
 type fakeMergeRequestAdapter struct {
 	result adapters.MergeRequestResult
 	err    error
+	spec   adapters.MergeRequestSpec
 }
 
-func (f *fakeMergeRequestAdapter) EnsureMergeRequest(_ context.Context, _ adapters.MergeRequestSpec) (adapters.MergeRequestResult, error) {
+func (f *fakeMergeRequestAdapter) EnsureMergeRequest(_ context.Context, spec adapters.MergeRequestSpec) (adapters.MergeRequestResult, error) {
+	f.spec = spec
 	return f.result, f.err
 }

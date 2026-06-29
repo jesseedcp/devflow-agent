@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jesseedcp/devflow-agent/internal/adapters"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/runtime/permissions"
@@ -235,9 +236,15 @@ func TestRunUsesRunnerRootForDemandRunner(t *testing.T) {
 
 func TestConfigureMergeRequestSetsFlags(t *testing.T) {
 	var opts demandflow.Options
-	configureMergeRequest(demandflow.StageImplementation, "feature/x", "main", "My MR", "desc", "", &opts)
+	err := configureMergeRequest(demandflow.StageImplementation, true, "group/project", "feature/x", "main", "My MR", "desc", "", "", &opts)
+	if err != nil {
+		t.Fatalf("configureMergeRequest: %v", err)
+	}
 	if opts.MergeRequest.Adapter == nil {
 		t.Fatal("MergeRequest adapter not set")
+	}
+	if opts.MergeRequest.Spec.Project != "group/project" {
+		t.Fatalf("project = %q, want group/project", opts.MergeRequest.Spec.Project)
 	}
 	if opts.MergeRequest.Spec.SourceBranch != "feature/x" {
 		t.Fatalf("source = %q, want feature/x", opts.MergeRequest.Spec.SourceBranch)
@@ -252,28 +259,94 @@ func TestConfigureMergeRequestSetsFlags(t *testing.T) {
 
 func TestConfigureMergeRequestSkipsNonImplementation(t *testing.T) {
 	var opts demandflow.Options
-	configureMergeRequest(demandflow.StageRequirements, "feature/x", "main", "title", "", "", &opts)
+	err := configureMergeRequest(demandflow.StageRequirements, true, "group/project", "feature/x", "main", "title", "", "", "", &opts)
+	if err != nil {
+		t.Fatalf("configureMergeRequest: %v", err)
+	}
 	if opts.MergeRequest.Adapter != nil {
 		t.Fatal("expected nil adapter for non-implementation stage")
 	}
 }
 
 func TestConfigureMergeRequestSkipsMissingFlags(t *testing.T) {
+	var opts demandflow.Options
+	err := configureMergeRequest(demandflow.StageImplementation, false, "", "", "", "", "", "", "", &opts)
+	if err != nil {
+		t.Fatalf("configureMergeRequest: %v", err)
+	}
+	if opts.MergeRequest.Adapter != nil {
+		t.Fatal("expected nil adapter when MR sync is not requested")
+	}
+}
+
+func TestConfigureMergeRequestRejectsMissingRequiredFlagsWhenEnabled(t *testing.T) {
 	tests := []struct {
-		name                  string
-		source, target, title string
+		name                           string
+		project, source, target, title string
 	}{
-		{"empty source", "", "main", "title"},
-		{"empty target", "feature/x", "", "title"},
-		{"empty title", "feature/x", "main", ""},
+		{"empty project", "", "feature/x", "main", "title"},
+		{"empty source", "group/project", "", "main", "title"},
+		{"empty target", "group/project", "feature/x", "", "title"},
+		{"empty title", "group/project", "feature/x", "main", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var opts demandflow.Options
-			configureMergeRequest(demandflow.StageImplementation, tc.source, tc.target, tc.title, "", "", &opts)
-			if opts.MergeRequest.Adapter != nil {
-				t.Fatal("expected nil adapter when required flags are missing")
+			err := configureMergeRequest(demandflow.StageImplementation, true, tc.project, tc.source, tc.target, tc.title, "", "", "", &opts)
+			if err == nil {
+				t.Fatal("expected missing flag error")
 			}
 		})
+	}
+}
+
+func TestRunImplementationCreateMergeRequestFlagsSyncMR(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Implementation)
+
+	originalRunner := newDemandRunner
+	defer func() { newDemandRunner = originalRunner }()
+	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
+		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n"},
+		}}
+	}
+
+	fakeAdapter := &fakeMergeRequestAdapter{result: adapters.MergeRequestResult{
+		IID: 77, WebURL: "https://gitlab.example.com/group/project/-/merge_requests/77", Title: "Implement coupon", State: "opened", WasCreated: true,
+	}}
+	originalMRAdapter := newMergeRequestAdapter
+	defer func() { newMergeRequestAdapter = originalMRAdapter }()
+	newMergeRequestAdapter = func() adapters.MergeRequestAdapter {
+		return fakeAdapter
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"run",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--stage", "implementation",
+		"--create-mr",
+		"--gitlab-project", "group/project",
+		"--create-mr-source-branch", "feature/coupon",
+		"--create-mr-target-branch", "main",
+		"--create-mr-title", "Implement coupon",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run implementation: %v", err)
+	}
+	if fakeAdapter.spec.Project != "group/project" {
+		t.Fatalf("project = %q, want group/project", fakeAdapter.spec.Project)
+	}
+	if fakeAdapter.spec.SourceBranch != "feature/coupon" {
+		t.Fatalf("source = %q, want feature/coupon", fakeAdapter.spec.SourceBranch)
+	}
+	progress, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.ProgressFile))
+	if err != nil {
+		t.Fatalf("read progress: %v", err)
+	}
+	if !strings.Contains(string(progress), "!77") {
+		t.Fatalf("progress.md missing MR evidence:\n%s", string(progress))
 	}
 }

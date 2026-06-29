@@ -177,10 +177,11 @@ func TestFindCanonicalGitRoot(t *testing.T) {
 
 	repo := t.TempDir()
 	initTestRepo(t, repo)
+	expectedRepo := canonicalRoot(repo)
 
 	root := FindCanonicalGitRoot(repo)
-	if root != repo {
-		t.Fatalf("expected %q, got %q", repo, root)
+	if root != expectedRepo {
+		t.Fatalf("expected %q, got %q", expectedRepo, root)
 	}
 
 	nested := filepath.Join(repo, "sub", "dir")
@@ -188,8 +189,8 @@ func TestFindCanonicalGitRoot(t *testing.T) {
 		t.Fatalf("mkdir nested dir: %v", err)
 	}
 	root = FindCanonicalGitRoot(nested)
-	if root != repo {
-		t.Fatalf("nested dir: expected %q, got %q", repo, root)
+	if root != expectedRepo {
+		t.Fatalf("nested dir: expected %q, got %q", expectedRepo, root)
 	}
 
 	// Non-git directory
@@ -207,6 +208,7 @@ func TestFindCanonicalGitRoot_FromNestedWorktreeDirectory(t *testing.T) {
 
 	repo := t.TempDir()
 	initTestRepo(t, repo)
+	expectedRepo := canonicalRoot(repo)
 	result, err := getOrCreateWorktree(context.Background(), repo, "nested-root")
 	if err != nil {
 		t.Fatalf("create worktree failed: %v", err)
@@ -217,7 +219,7 @@ func TestFindCanonicalGitRoot_FromNestedWorktreeDirectory(t *testing.T) {
 		t.Fatalf("mkdir nested worktree dir: %v", err)
 	}
 	root := FindCanonicalGitRoot(nested)
-	if root != repo {
-		t.Fatalf("nested worktree dir: expected %q, got %q", repo, root)
+	if root != expectedRepo {
+		t.Fatalf("nested worktree dir: expected %q, got %q", expectedRepo, root)
 	}
 }

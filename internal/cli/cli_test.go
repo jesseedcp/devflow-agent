@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
@@ -262,8 +263,8 @@ func TestConfirmRequirementsRetriesAfterEvidenceOnlyWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadDemand before retry returned error: %v", err)
 	}
-	normalizedBy := normalizeConfirmationText("alice")
-	normalizedSummary := normalizeConfirmationText("requirements are accurate")
+	normalizedBy := demandflow.NormalizeConfirmationText("alice")
+	normalizedSummary := demandflow.NormalizeConfirmationText("requirements are accurate")
 	confirmationID := expectedConfirmationID("add-coupon-check", "requirements", demand.UpdatedAt.UTC().Format(time.RFC3339Nano), normalizedBy, normalizedSummary)
 	confirmedAt := time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
 	record := fmt.Sprintf("- requirements confirmed by %s at %s: %s\n", normalizedBy, confirmedAt.Format(time.RFC3339), normalizedSummary)
@@ -1548,8 +1549,8 @@ func expectedConfirmationID(demandID, stage, cycleToken, by, summary string) str
 	normalizedDemandID := strings.ToLower(strings.TrimSpace(demandID))
 	normalizedStage := strings.TrimSpace(stage)
 	normalizedCycleToken := strings.TrimSpace(cycleToken)
-	normalizedBy := normalizeConfirmationText(by)
-	normalizedSummary := normalizeConfirmationText(summary)
+	normalizedBy := demandflow.NormalizeConfirmationText(by)
+	normalizedSummary := demandflow.NormalizeConfirmationText(summary)
 
 	hash := sha256.Sum256([]byte(normalizedDemandID + "\x00" + normalizedStage + "\x00" + normalizedCycleToken + "\x00" + normalizedBy + "\x00" + normalizedSummary))
 	return hex.EncodeToString(hash[:8])

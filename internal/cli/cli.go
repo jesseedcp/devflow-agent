@@ -36,6 +36,7 @@ Usage:
   devflow status --demand <id>
   devflow next --demand <id>
   devflow doctor
+  devflow smoke --title <title> --description <text>
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow chat
   devflow tui
@@ -50,6 +51,7 @@ Commands:
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
   doctor   Diagnose config, environment, git, and GitLab readiness
+  smoke    Run an explicit local requirements-stage smoke test
   run       Run one backend-demand agent stage
   chat      Launch the interactive runtime (alias: tui)
   tui       Alias for chat
@@ -85,6 +87,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runNext(args[1:], stdout)
 	case "doctor":
 		return runDoctor(args[1:], stdout)
+	case "smoke":
+		return runSmoke(args[1:], stdout, stderr)
 	case "run":
 		return runDemandStage(args[1:], stdout, stderr)
 	default:

@@ -62,3 +62,9 @@ Optional GitLab gate:
 $env:GITLAB_TOKEN = "<private gitlab token>"
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release-readiness.ps1 -Version 0.1.0-dev -RunGitLabGate -GitLabProject "group/project" -GitLabMR "123"
 ```
+
+## Merge Request Sync
+
+Live dogfood creates or reuses an offline merge request during the implementation stage by default. The merge request evidence (IID, URL, state, action) is recorded in `progress.md` alongside quality results and implementation summaries.
+
+For production GitLab projects, use `devflow mr ensure` or `devflow run --stage implementation --create-mr-*` with a valid `GITLAB_TOKEN`.

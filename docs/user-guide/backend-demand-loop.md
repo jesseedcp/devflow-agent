@@ -54,6 +54,13 @@ devflow confirm --demand add-coupon-eligibility-check --stage plan --by dd --sum
 devflow run --demand add-coupon-eligibility-check --stage implementation --permission-mode acceptEdits --quality-command "go test ./..."
 ```
 
+To automatically create or reuse a GitLab merge request during implementation:
+
+```powershell
+$env:GITLAB_TOKEN = '<your-token>'
+devflow run --demand add-coupon-eligibility-check --stage implementation --permission-mode acceptEdits --quality-command "go test ./..." --create-mr-source-branch "feature/your-branch" --create-mr-target-branch "main" --create-mr-title "Implement coupon eligibility"
+```
+
 If the quality gate fails, fix the reported problem and rerun the same implementation command.
 
 ## 7. Run MR Review Gate

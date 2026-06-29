@@ -32,3 +32,20 @@ go run ./cmd/devflow start --title "Add coupon eligibility check" --description 
 ```
 
 The CLI writes demand workspaces under `.devflow/demands/<demand-id>/`.
+## Wave 6 usability commands
+
+Wave 6 adds first-run setup, status guidance, diagnostics, and an explicit live smoke path:
+
+```text
+devflow init
+devflow status
+devflow next
+devflow doctor
+devflow smoke
+```
+
+User-facing references:
+
+- [Backend demand loop user guide](docs/user-guide/backend-demand-loop.md)
+- [OpenAI-compatible example config](docs/examples/config.openai-compat.yaml)
+- [Anthropic example config](docs/examples/config.anthropic.yaml)

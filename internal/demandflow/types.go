@@ -58,5 +58,6 @@ type Options struct {
 	QualityCommands []quality.Command
 	Runner          Runner
 	Review          ReviewOptions
+	MergeRequest    MergeRequestOptions
 	Now             func() time.Time
 }

@@ -35,3 +35,9 @@ func renderReviewSummary(comments []adapters.ReviewComment) string {
 	b.WriteString("\n")
 	return b.String()
 }
+
+// MergeRequestOptions describes an optional merge request sync operation.
+type MergeRequestOptions struct {
+	Adapter adapters.MergeRequestAdapter
+	Spec    adapters.MergeRequestSpec
+}

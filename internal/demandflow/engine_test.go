@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jesseedcp/devflow-agent/internal/adapters"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
@@ -501,5 +502,74 @@ func TestRequirementsRunnerUsesRunnerRoot(t *testing.T) {
 	}
 	if runner.root != codeRoot {
 		t.Fatalf("runner root = %q, want %q", runner.root, codeRoot)
+	}
+}
+
+type fakeMergeRequestSyncAdapter struct {
+	result adapters.MergeRequestResult
+	err    error
+}
+
+func (f fakeMergeRequestSyncAdapter) EnsureMergeRequest(_ context.Context, _ adapters.MergeRequestSpec) (adapters.MergeRequestResult, error) {
+	return f.result, f.err
+}
+
+func TestEngineImplementationSyncMergeRequestPasses(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+	}}
+
+	fakeAdapter := fakeMergeRequestSyncAdapter{
+		result: adapters.MergeRequestResult{
+			IID: 42, WebURL: "https://gitlab.com/p/-/42", Title: "MR", State: "opened", WasCreated: false,
+		},
+	}
+
+	if err := engine.Run(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+		MergeRequest: MergeRequestOptions{
+			Adapter: fakeAdapter,
+			Spec:    adapters.MergeRequestSpec{Project: "p", SourceBranch: "s", TargetBranch: "t", Title: "MR"},
+		},
+	}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	body := readArtifact(t, engine, artifacts.ProgressFile)
+	if !strings.Contains(body, "!42") {
+		t.Fatalf("progress.md missing MR evidence:\n%s", body)
+	}
+}
+
+func TestEngineImplementationSyncMergeRequestSkippedWhenNil(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+	}}
+
+	if err := engine.Run(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+	}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.MRReview) {
+		t.Fatalf("state = %q want mr_review", demand.State)
 	}
 }

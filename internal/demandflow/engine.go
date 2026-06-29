@@ -6,9 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jesseedcp/devflow-agent/internal/adapters"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
+
+	"strconv"
 )
 
 type Engine struct {
@@ -273,6 +276,12 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 		}
 	}
 
+	if opts.MergeRequest.Adapter != nil {
+		if err := e.syncMergeRequest(ctx, opts, &demand); err != nil {
+			return err
+		}
+	}
+
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),
 		Type:    "implementation.completed",
@@ -434,6 +443,12 @@ func (e Engine) runMRReview(ctx context.Context, opts Options, result *RunResult
 		}
 	}
 
+	if opts.MergeRequest.Adapter != nil {
+		if err := e.syncMergeRequest(ctx, opts, &demand); err != nil {
+			return err
+		}
+	}
+
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),
 		Type:    "mr_review.cleared",
@@ -491,4 +506,54 @@ func summarizeQuality(result quality.GateResult) string {
 		return "quality gate failed"
 	}
 	return strings.Join(failing, "; ")
+}
+
+func renderMergeRequestEvidence(result adapters.MergeRequestResult) string {
+	verb := "Reused"
+	if result.WasCreated {
+		verb = "Created"
+	}
+	return fmt.Sprintf("\n## 合并请求\n\n%s !%d\n\n- **Title:** %s\n- **State:** %s\n- **URL:** %s\n- **Action:** %s\n\n",
+		verb, result.IID, result.Title, result.State, result.WebURL, verb)
+}
+
+func (e Engine) syncMergeRequest(ctx context.Context, opts Options, demand *artifacts.Demand) error {
+	adapter := opts.MergeRequest.Adapter
+	if adapter == nil {
+		return nil
+	}
+	result, err := adapter.EnsureMergeRequest(ctx, opts.MergeRequest.Spec)
+	if err != nil {
+		eventErr := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+			Time:    opts.Now(),
+			Type:    "merge_request.sync_failed",
+			Message: "merge request sync failed: " + err.Error(),
+			Data:    map[string]string{"blocked_need_platform": err.Error()},
+		})
+		if eventErr != nil {
+			return fmt.Errorf("mr sync failed: %w (event: %v)", err, eventErr)
+		}
+		return fmt.Errorf("merge request sync failed (blocked_need_platform): %w", err)
+	}
+	evidence := renderMergeRequestEvidence(result)
+	if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, evidence); err != nil {
+		return err
+	}
+	eventData := map[string]string{
+		"mr_iid":    strconv.Itoa(result.IID),
+		"mr_url":    result.WebURL,
+		"mr_action": "reused",
+	}
+	if result.WasCreated {
+		eventData["mr_action"] = "created"
+	}
+	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+		Time:    opts.Now(),
+		Type:    "merge_request.synced",
+		Message: fmt.Sprintf("merge request !%d %s", result.IID, eventData["mr_action"]),
+		Data:    eventData,
+	}); err != nil {
+		return err
+	}
+	return nil
 }

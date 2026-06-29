@@ -311,12 +311,16 @@ func evaluateLeaf(condition string, ctx HookContext) bool {
 				matched, _ := regexp.MatchString(pattern, val)
 				return matched
 			case "=*":
-				matched, _ := path.Match(filepath.ToSlash(right), filepath.ToSlash(val))
+				matched, _ := path.Match(normalizeGlobPath(right), normalizeGlobPath(val))
 				return matched
 			}
 		}
 	}
 	return resolveVar(condition, ctx) != ""
+}
+
+func normalizeGlobPath(value string) string {
+	return strings.ReplaceAll(filepath.ToSlash(value), `\`, "/")
 }
 
 func resolveVar(name string, ctx HookContext) string {

@@ -306,10 +306,18 @@ func hasReparsePoint(info os.FileInfo) (bool, error) {
 }
 
 func samePath(left, right string) bool {
-	left = filepath.Clean(left)
-	right = filepath.Clean(right)
+	left = canonicalComparePath(left)
+	right = canonicalComparePath(right)
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(left, right)
 	}
 	return left == right
+}
+
+func canonicalComparePath(path string) string {
+	path = filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return path
 }

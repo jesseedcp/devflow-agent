@@ -56,6 +56,15 @@ func (f fakeQualityRunner) Run(_ context.Context, _ string, name string, args ..
 	}
 }
 
+type recordingQualityRunner struct {
+	root string
+}
+
+func (r *recordingQualityRunner) Run(_ context.Context, root string, name string, args ...string) quality.Result {
+	r.root = root
+	return quality.Result{Command: name, Args: args, Dir: root, ExitCode: 0, Stdout: "ok"}
+}
+
 func newTestEngine(t *testing.T, state workflow.State) (Engine, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -93,6 +102,43 @@ func TestEngineRequiresRunner(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "runner is required") {
 		t.Fatalf("err = %v want runner is required", err)
+	}
+}
+
+func TestImplementationQualityGateUsesQualityRoot(t *testing.T) {
+	artifactRoot := t.TempDir()
+	repoRoot := t.TempDir()
+	store := artifacts.NewStore(artifactRoot)
+	if err := store.CreateDemand(artifacts.Demand{
+		ID:          "quality-root-check",
+		Title:       "Quality root check",
+		Description: "Quality commands should run in repo root",
+		Source:      "test",
+		State:       string(workflow.Implementation),
+	}); err != nil {
+		t.Fatalf("create demand: %v", err)
+	}
+
+	runner := &recordingQualityRunner{}
+	engine := NewEngine(artifactRoot)
+	engine.Gate = quality.Gate{Runner: runner}
+
+	err := engine.Run(context.Background(), Options{
+		Root:        artifactRoot,
+		QualityRoot: repoRoot,
+		DemandID:    "quality-root-check",
+		Stage:       StageImplementation,
+		Runner: &StaticRunner{Responses: map[Stage]RunnerResponse{
+			StageImplementation: {Text: "implementation body"},
+		}},
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test", "./..."}}},
+		Now:             fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("implementation: %v", err)
+	}
+	if runner.root != repoRoot {
+		t.Fatalf("quality root = %q, want %q", runner.root, repoRoot)
 	}
 }
 
@@ -311,6 +357,36 @@ func TestEngineVerificationStaysAndWritesArtifact(t *testing.T) {
 	}
 	if body := readArtifact(t, engine, artifacts.VerificationFile); !strings.Contains(body, "all green") {
 		t.Fatalf("verification.md = %q", body)
+	}
+}
+
+func TestEngineVerificationFailsQualityGate(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Verification)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 1, stderr: "verification failed"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageVerification: {Text: "# Verification: coupon flow\n\n## 结论\n\nneeds work\n"},
+	}}
+	result, err := engine.RunDetailed(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageVerification,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "quality gate failed") {
+		t.Fatalf("err = %v want quality gate failed", err)
+	}
+	if result.CurrentState != workflow.FailedQualityGate {
+		t.Fatalf("current state = %s want %s", result.CurrentState, workflow.FailedQualityGate)
+	}
+	if result.QualityPassed == nil || *result.QualityPassed {
+		t.Fatalf("quality passed = %#v", result.QualityPassed)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.FailedQualityGate) {
+		t.Fatalf("state = %q want failed_quality_gate", demand.State)
 	}
 }
 

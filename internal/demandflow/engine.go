@@ -25,6 +25,13 @@ func NewEngine(root string) Engine {
 	}
 }
 
+func qualityRoot(opts Options) string {
+	if strings.TrimSpace(opts.QualityRoot) != "" {
+		return opts.QualityRoot
+	}
+	return opts.Root
+}
+
 func (e Engine) Run(ctx context.Context, opts Options) error {
 	_, err := e.RunDetailed(ctx, opts)
 	return err
@@ -244,7 +251,7 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 	result.Artifacts = append(result.Artifacts, artifacts.ProgressFile)
 
 	if len(opts.QualityCommands) > 0 {
-		gateResult := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
+		gateResult := e.Gate.Run(ctx, qualityRoot(opts), opts.QualityCommands...)
 		passed := gateResult.Passed
 		result.QualityPassed = &passed
 		if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderQualityEvidence(gateResult)); err != nil {
@@ -300,16 +307,29 @@ func (e Engine) runVerification(ctx context.Context, opts Options, result *RunRe
 	}
 
 	body := strings.TrimSpace(resp.Text)
+	qualityFailed := false
+	qualitySummary := ""
 	if len(opts.QualityCommands) > 0 {
-		gateResult := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
+		gateResult := e.Gate.Run(ctx, qualityRoot(opts), opts.QualityCommands...)
 		passed := gateResult.Passed
 		result.QualityPassed = &passed
 		body += "\n\n" + renderQualityEvidence(gateResult)
+		if !gateResult.Passed {
+			qualityFailed = true
+			qualitySummary = summarizeQuality(gateResult)
+		}
 	}
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.VerificationFile, body+"\n"); err != nil {
 		return err
 	}
 	result.Artifacts = append(result.Artifacts, artifacts.VerificationFile)
+	if qualityFailed {
+		if err := e.advance(&demand, workflow.FailedQualityGate); err != nil {
+			return err
+		}
+		result.Message = "quality gate failed: " + qualitySummary
+		return fmt.Errorf("quality gate failed: %s", qualitySummary)
+	}
 	result.Message = "verification drafted by demand runner"
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),

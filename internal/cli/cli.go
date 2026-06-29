@@ -17,6 +17,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/runtime/config"
 	"github.com/jesseedcp/devflow-agent/internal/runtime/tui"
@@ -37,6 +38,7 @@ Usage:
   devflow status --demand <id>
   devflow next --demand <id>
   devflow doctor [--require-gitlab]
+  devflow dogfood [--scenario coupon-eligibility] [--quality-command <command>]
   devflow smoke --title <title> --description <text>
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow chat
@@ -53,6 +55,7 @@ Commands:
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
   doctor   Diagnose config, environment, git, and GitLab readiness
+  dogfood  Run a deterministic full backend-demand loop
   smoke    Run an explicit local requirements-stage smoke test
   run       Run one backend-demand agent stage
   chat      Launch the interactive runtime (alias: tui)
@@ -91,6 +94,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runNext(args[1:], stdout)
 	case "doctor":
 		return runDoctor(args[1:], stdout)
+	case "dogfood":
+		return runDogfood(args[1:], stdout, stderr)
 	case "smoke":
 		return runSmoke(args[1:], stdout, stderr)
 	case "run":
@@ -189,65 +194,19 @@ func runConfirm(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	root = strings.TrimSpace(root)
-	demandID = strings.TrimSpace(demandID)
-	stage = strings.TrimSpace(stage)
-	by = normalizeConfirmationText(by)
-	summary = normalizeConfirmationText(summary)
-	if root == "" {
-		root = "."
-	}
-	if demandID == "" || stage == "" || by == "" || summary == "" {
-		return fmt.Errorf("--demand, --stage, --by, and --summary are required")
-	}
-
-	artifactName, requiredCurrent, nextState, label, err := confirmationTarget(stage)
+	result, err := demandflow.Confirm(demandflow.ConfirmOptions{
+		Root:     root,
+		DemandID: demandID,
+		Stage:    stage,
+		By:       by,
+		Summary:  summary,
+		Now:      time.Now,
+	})
 	if err != nil {
 		return err
 	}
-
-	store := artifacts.NewStore(root)
-	return store.WithDemandLock(demandID, func() error {
-		demand, err := store.LoadDemand(demandID)
-		if err != nil {
-			return err
-		}
-
-		current := workflow.State(demand.State)
-		if current != requiredCurrent {
-			return fmt.Errorf("confirmation stage %q requires current state %s, got %s", stage, requiredCurrent, current)
-		}
-
-		advanced, err := workflow.Advance(current, nextState)
-		if err != nil {
-			return err
-		}
-
-		confirmedAt := time.Now().UTC()
-		cycleToken := demand.UpdatedAt.UTC().Format(time.RFC3339Nano)
-		confirmationID := confirmationID(demandID, stage, cycleToken, by, summary)
-		record := fmt.Sprintf("- %s confirmed by %s at %s: %s\n", label, by, confirmedAt.Format(time.RFC3339), summary)
-		if err := store.EnsureConfirmationEvidence(demandID, artifactName, confirmationID, record, artifacts.Event{
-			Time:    confirmedAt,
-			Type:    "stage.confirmed",
-			Message: label + " confirmed",
-			Data: map[string]string{
-				"by":      by,
-				"stage":   stage,
-				"summary": summary,
-			},
-		}); err != nil {
-			return err
-		}
-
-		demand.State = string(advanced)
-		if err := store.SaveDemand(demand); err != nil {
-			return err
-		}
-
-		_, err = fmt.Fprintf(stdout, "%s confirmed for %s\n", label, demandID)
-		return err
-	})
+	_, err = fmt.Fprintf(stdout, "%s confirmed for %s\n", result.Label, result.DemandID)
+	return err
 }
 
 func runVerify(args []string, stdout io.Writer) error {
@@ -500,36 +459,6 @@ func containsNonASCII(value string) bool {
 		}
 	}
 	return false
-}
-
-func confirmationTarget(stage string) (artifact string, requiredCurrent workflow.State, next workflow.State, label string, err error) {
-	switch stage {
-	case "requirements":
-		return artifacts.RequirementsFile, workflow.RequirementsReview, workflow.PlanDrafting, "requirements", nil
-	case "plan":
-		return artifacts.PlanFile, workflow.PlanReview, workflow.Implementation, "plan", nil
-	case "verification":
-		return artifacts.VerificationFile, workflow.Verification, workflow.Closeout, "verification", nil
-	case "closeout":
-		return artifacts.CloseoutFile, workflow.Closeout, workflow.Completed, "closeout", nil
-	default:
-		return "", "", "", "", fmt.Errorf("unsupported confirmation stage %q", stage)
-	}
-}
-
-func normalizeConfirmationText(value string) string {
-	return strings.Join(strings.Fields(value), " ")
-}
-
-func confirmationID(demandID, stage, cycleToken, by, summary string) string {
-	normalizedDemandID := strings.ToLower(strings.TrimSpace(demandID))
-	normalizedStage := strings.TrimSpace(stage)
-	normalizedCycleToken := strings.TrimSpace(cycleToken)
-	normalizedBy := normalizeConfirmationText(by)
-	normalizedSummary := normalizeConfirmationText(summary)
-
-	hash := sha256.Sum256([]byte(normalizedDemandID + "\x00" + normalizedStage + "\x00" + normalizedCycleToken + "\x00" + normalizedBy + "\x00" + normalizedSummary))
-	return hex.EncodeToString(hash[:8])
 }
 
 func verificationReport(title, commandText, status string, result quality.Result) string {

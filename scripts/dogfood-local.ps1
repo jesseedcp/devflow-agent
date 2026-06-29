@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($Root)) {
-    $Root = Join-Path ([System.IO.Path]::GetTempPath()) 'devflow-dogfood-local'
+    $Root = Join-Path ([System.IO.Path]::GetTempPath()) ('devflow-dogfood-local-' + [guid]::NewGuid().ToString('N'))
 }
 $rootPath = [System.IO.Path]::GetFullPath($Root)
 $tempPath = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
@@ -29,21 +29,16 @@ if ((-not $UseExistingBinary) -or (-not (Test-Path -LiteralPath $binary))) {
 & $binary version
 if ($LASTEXITCODE -ne 0) { throw "devflow version failed" }
 
-& $binary init --root $rootPath --provider openai-compat
-if ($LASTEXITCODE -ne 0) { throw "devflow init failed" }
+$dogfoodRoot = Join-Path $rootPath 'artifacts'
+New-Item -ItemType Directory -Force -Path $dogfoodRoot | Out-Null
 
-& $binary start --root $rootPath --title "Dogfood coupon eligibility" --description "Only active members can claim coupons once"
-if ($LASTEXITCODE -ne 0) { throw "devflow start failed" }
+& $binary dogfood --root $dogfoodRoot --quality-root $repoRoot --quality-command "go test ./... -count=1 -timeout 5m"
+if ($LASTEXITCODE -ne 0) { throw "devflow dogfood failed" }
 
-$demandID = "dogfood-coupon-eligibility"
-& $binary status --root $rootPath --demand $demandID
-if ($LASTEXITCODE -ne 0) { throw "devflow status failed" }
-
-$next = & $binary next --root $rootPath --demand $demandID
-if ($LASTEXITCODE -ne 0) { throw "devflow next failed" }
-if ($next -notmatch 'devflow run --demand dogfood-coupon-eligibility --stage requirements') {
-    throw "unexpected next command: $next"
+$report = Join-Path $dogfoodRoot '.devflow\demands\dogfood-coupon-eligibility\dogfood-report.md'
+if (-not (Test-Path -LiteralPath $report)) {
+    throw "dogfood report missing: $report"
 }
 
-Write-Host "dogfood root: $rootPath"
-Write-Host "next command: $next"
+Write-Host "dogfood root: $dogfoodRoot"
+Write-Host "dogfood report: $report"

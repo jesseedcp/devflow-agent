@@ -153,3 +153,44 @@ func TestRunQualityCommandParsesQuotedArguments(t *testing.T) {
 		t.Fatalf("state = %q want mr_review", demand.State)
 	}
 }
+
+func TestRunQualityCommandUsesQualityRoot(t *testing.T) {
+	artifactRoot := t.TempDir()
+	repoRoot := t.TempDir()
+	createDemandAtState(t, artifactRoot, workflow.Implementation)
+
+	t.Setenv("DEVFLOW_CLI_HELPER", "pwd")
+	executable := filepath.ToSlash(testCLIExecutable(t))
+	commandText := fmt.Sprintf(`"%s" -test.run=^TestCLICommandHelper$`, executable)
+
+	original := newDemandRunner
+	defer func() { newDemandRunner = original }()
+	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
+		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n"},
+		}}
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"run",
+		"--root", artifactRoot,
+		"--quality-root", repoRoot,
+		"--demand", "add-coupon-check",
+		"--stage", "implementation",
+		"--quality-command", commandText,
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run implementation: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "quality gate passed") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	progress, err := os.ReadFile(filepath.Join(artifactRoot, ".devflow", "demands", "add-coupon-check", artifacts.ProgressFile))
+	if err != nil {
+		t.Fatalf("read progress: %v", err)
+	}
+	if !strings.Contains(string(progress), filepath.Clean(repoRoot)) {
+		t.Fatalf("progress.md missing quality root %q: %q", repoRoot, string(progress))
+	}
+}

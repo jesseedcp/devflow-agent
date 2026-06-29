@@ -75,7 +75,7 @@ func TestEngineMRReviewNonblockingCommentAdvances(t *testing.T) {
 	}
 }
 
-func TestEngineMRReviewBlockingCommentHoldsAndErrors(t *testing.T) {
+func TestEngineMRReviewBlockingTestCommentRoutesToImplementation(t *testing.T) {
 	t.Parallel()
 
 	engine, root := newTestEngine(t, workflow.MRReview)
@@ -90,12 +90,12 @@ func TestEngineMRReviewBlockingCommentHoldsAndErrors(t *testing.T) {
 		Review:   mrReviewOptions(adapter),
 		Now:      fixedNow,
 	})
-	if err == nil || !strings.Contains(err.Error(), "blocking review comments remain") {
-		t.Fatalf("err = %v want blocking review comments remain", err)
+	if err == nil || !strings.Contains(err.Error(), "implementation updates") {
+		t.Fatalf("err = %v want implementation updates", err)
 	}
 	demand, _ := engine.Store.LoadDemand("add-coupon-check")
-	if demand.State != string(workflow.MRReview) {
-		t.Fatalf("state = %q want mr_review", demand.State)
+	if demand.State != string(workflow.Implementation) {
+		t.Fatalf("state = %q want implementation", demand.State)
 	}
 }
 
@@ -112,5 +112,81 @@ func TestEngineMRReviewRequiresAdapter(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "review adapter") {
 		t.Fatalf("err = %v want review adapter error", err)
+	}
+}
+
+func TestEngineMRReviewRequirementsCommentReturnsToRequirements(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	adapter := fakeReviewAdapter{comments: []adapters.ReviewComment{
+		{ID: "1", Author: "reviewer", Body: "missing acceptance criteria", Blocking: true, Category: adapters.CommentRequirements},
+	}}
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(adapter),
+		Now:      fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "requirements updates") {
+		t.Fatalf("err = %v want requirements updates", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.ReturnedToRequirements) {
+		t.Fatalf("state = %q want returned_to_requirements", demand.State)
+	}
+	body := readArtifact(t, engine, artifacts.ProgressFile)
+	if !strings.Contains(body, "MR Review Action Plan") || !strings.Contains(body, "returned_to_requirements") {
+		t.Fatalf("progress.md missing action plan:\n%s", body)
+	}
+}
+
+func TestEngineMRReviewPlanCommentReturnsToPlan(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	adapter := fakeReviewAdapter{comments: []adapters.ReviewComment{
+		{ID: "1", Author: "reviewer", Body: "adapter boundary is wrong", Blocking: true, Category: adapters.CommentPlan},
+	}}
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(adapter),
+		Now:      fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "plan updates") {
+		t.Fatalf("err = %v want plan updates", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.ReturnedToPlan) {
+		t.Fatalf("state = %q want returned_to_plan", demand.State)
+	}
+}
+
+func TestEngineMRReviewImplementationCommentReturnsToImplementation(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	adapter := fakeReviewAdapter{comments: []adapters.ReviewComment{
+		{ID: "1", Author: "reviewer", Body: "nil handling is wrong", Blocking: true, Category: adapters.CommentImplementation},
+	}}
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(adapter),
+		Now:      fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "implementation updates") {
+		t.Fatalf("err = %v want implementation updates", err)
+	}
+	demand, _ := engine.Store.LoadDemand("add-coupon-check")
+	if demand.State != string(workflow.Implementation) {
+		t.Fatalf("state = %q want implementation", demand.State)
 	}
 }

@@ -28,6 +28,7 @@ const helpText = `devflow - backend demand delivery agent
 
 Usage:
   devflow help
+  devflow version
   devflow start --title <title> --description <text>
   devflow init --provider <openai-compat|openai|anthropic>
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
@@ -43,6 +44,7 @@ Usage:
 
 Commands:
   help      Show this help text
+  version   Show build version and platform metadata
   start     Create a new demand workspace
   init      Create a no-secret .devflow/config.yaml
   confirm   Record a human confirmation and advance the workflow gate
@@ -69,6 +71,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 	switch args[0] {
 	case "":
 		return runChat(stdout, stderr)
+	case "version":
+		return runVersion(stdout)
 	case "chat", "tui":
 		return runChat(stdout, stderr)
 	case "start":

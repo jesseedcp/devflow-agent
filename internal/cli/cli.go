@@ -41,6 +41,8 @@ Usage:
   devflow dogfood [--scenario coupon-eligibility] [--quality-command <command>]
   devflow smoke --title <title> --description <text>
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
+  devflow review-gate --gitlab-project <project> --gitlab-mr <iid>
+  devflow live-dogfood [--root <path>] [--config <path>] [--with-gitlab]
   devflow chat
   devflow tui
 
@@ -58,6 +60,8 @@ Commands:
   dogfood  Run a deterministic full backend-demand loop
   smoke    Run an explicit local requirements-stage smoke test
   run       Run one backend-demand agent stage
+  review-gate Check unresolved GitLab MR comments directly
+  live-dogfood Run opt-in live provider sandbox dogfood
   chat      Launch the interactive runtime (alias: tui)
   tui       Alias for chat
 `
@@ -100,6 +104,10 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runSmoke(args[1:], stdout, stderr)
 	case "run":
 		return runDemandStage(args[1:], stdout, stderr)
+	case "review-gate":
+		return runReviewGate(args[1:], stdout, stderr)
+	case "live-dogfood":
+		return runLiveDogfood(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], helpText)
 	}

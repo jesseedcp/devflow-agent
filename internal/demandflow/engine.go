@@ -32,6 +32,13 @@ func qualityRoot(opts Options) string {
 	return opts.Root
 }
 
+func runnerRoot(opts Options) string {
+	if strings.TrimSpace(opts.RunnerRoot) != "" {
+		return opts.RunnerRoot
+	}
+	return opts.Root
+}
+
 func (e Engine) Run(ctx context.Context, opts Options) error {
 	_, err := e.RunDetailed(ctx, opts)
 	return err
@@ -131,7 +138,7 @@ func (e Engine) runRequirements(ctx context.Context, opts Options, result *RunRe
 	}
 	resp, err := opts.Runner.Run(ctx, RunnerRequest{
 		Stage:    StageRequirements,
-		Root:     opts.Root,
+		Root:     runnerRoot(opts),
 		DemandID: opts.DemandID,
 		Prompt:   prompt,
 		Context:  snapshot,
@@ -175,7 +182,7 @@ func (e Engine) runPlan(ctx context.Context, opts Options, result *RunResult) er
 	}
 	resp, err := opts.Runner.Run(ctx, RunnerRequest{
 		Stage:    StagePlan,
-		Root:     opts.Root,
+		Root:     runnerRoot(opts),
 		DemandID: opts.DemandID,
 		Prompt:   prompt,
 		Context:  snapshot,
@@ -231,7 +238,7 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 	}
 	resp, err := opts.Runner.Run(ctx, RunnerRequest{
 		Stage:    StageImplementation,
-		Root:     opts.Root,
+		Root:     runnerRoot(opts),
 		DemandID: opts.DemandID,
 		Prompt:   prompt,
 		Context:  snapshot,
@@ -296,7 +303,7 @@ func (e Engine) runVerification(ctx context.Context, opts Options, result *RunRe
 	}
 	resp, err := opts.Runner.Run(ctx, RunnerRequest{
 		Stage:    StageVerification,
-		Root:     opts.Root,
+		Root:     runnerRoot(opts),
 		DemandID: opts.DemandID,
 		Prompt:   prompt,
 		Context:  snapshot,
@@ -360,7 +367,7 @@ func (e Engine) runCloseout(ctx context.Context, opts Options, result *RunResult
 	}
 	resp, err := opts.Runner.Run(ctx, RunnerRequest{
 		Stage:    StageCloseout,
-		Root:     opts.Root,
+		Root:     runnerRoot(opts),
 		DemandID: opts.DemandID,
 		Prompt:   prompt,
 		Context:  snapshot,

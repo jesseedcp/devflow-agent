@@ -22,11 +22,13 @@ func runDoctor(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var configPath string
+	var requireGitLab bool
 	fs.StringVar(&configPath, "config", "", "config path")
+	fs.BoolVar(&requireGitLab, "require-gitlab", false, "require GITLAB_TOKEN for mr-review readiness")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	checks := runDoctorChecks(context.Background(), configPath)
+	checks := runDoctorChecks(context.Background(), configPath, requireGitLab)
 	failed := false
 	for _, check := range checks {
 		mark := "OK"
@@ -42,12 +44,17 @@ func runDoctor(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func runDoctorChecks(ctx context.Context, configPath string) []doctorCheck {
-	return []doctorCheck{
+func runDoctorChecks(ctx context.Context, configPath string, requireGitLab bool) []doctorCheck {
+	checks := []doctorCheck{
 		checkGit(ctx),
 		checkConfig(configPath),
-		checkGitLabToken(),
 	}
+	if requireGitLab {
+		checks = append(checks, checkGitLabToken())
+	} else {
+		checks = append(checks, doctorCheck{Name: "gitlab", OK: true, Message: "skipped; pass --require-gitlab to validate mr-review token setup"})
+	}
+	return checks
 }
 
 func checkGit(ctx context.Context) doctorCheck {

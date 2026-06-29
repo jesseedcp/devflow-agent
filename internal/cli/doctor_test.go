@@ -57,9 +57,46 @@ func TestDoctorHelpIsListed(t *testing.T) {
 		t.Fatalf("help: %v", err)
 	}
 	output := stdout.String()
-	for _, want := range []string{"devflow doctor", "doctor   Diagnose config, environment, git, and GitLab readiness"} {
+	for _, want := range []string{"devflow doctor [--require-gitlab]", "doctor   Diagnose config, environment, git, and GitLab readiness"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("help missing %q:\n%s", want, output)
 		}
+	}
+}
+func TestDoctorSkipsGitLabByDefault(t *testing.T) {
+	t.Setenv("GITLAB_TOKEN", "")
+	root := t.TempDir()
+	cfgPath := filepath.Join(root, "config.yaml")
+	body := "providers:\n  - name: test\n    protocol: openai\n    base_url: https://api.openai.com/v1\n    model: gpt-test\n    api_key: test-api-key\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--config", cfgPath}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("doctor: %v\nstdout:\n%s", err, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "[OK] gitlab: skipped; pass --require-gitlab to validate mr-review token setup") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestDoctorRequiresGitLabWhenFlagSet(t *testing.T) {
+	t.Setenv("GITLAB_TOKEN", "")
+	root := t.TempDir()
+	cfgPath := filepath.Join(root, "config.yaml")
+	body := "providers:\n  - name: test\n    protocol: openai\n    base_url: https://api.openai.com/v1\n    model: gpt-test\n    api_key: test-api-key\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--config", cfgPath, "--require-gitlab"}, &stdout, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "doctor found failing checks") {
+		t.Fatalf("err = %v want failing checks", err)
+	}
+	if !strings.Contains(stdout.String(), "[FAIL] gitlab: GITLAB_TOKEN is not set") {
+		t.Fatalf("stdout = %q", stdout.String())
 	}
 }

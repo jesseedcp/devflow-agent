@@ -36,7 +36,7 @@ Usage:
   devflow closeout --demand <id> --result <text> --knowledge <text>
   devflow status --demand <id>
   devflow next --demand <id>
-  devflow doctor
+  devflow doctor [--require-gitlab]
   devflow smoke --title <title> --description <text>
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow chat

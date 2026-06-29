@@ -26,30 +26,63 @@ func NewEngine(root string) Engine {
 }
 
 func (e Engine) Run(ctx context.Context, opts Options) error {
+	_, err := e.RunDetailed(ctx, opts)
+	return err
+}
+
+func (e Engine) RunDetailed(ctx context.Context, opts Options) (RunResult, error) {
 	if opts.Runner == nil {
-		return fmt.Errorf("runner is required")
+		return RunResult{}, fmt.Errorf("runner is required")
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	return e.Store.WithDemandLock(opts.DemandID, func() error {
+
+	var result RunResult
+	err := e.Store.WithDemandLock(opts.DemandID, func() error {
+		demand, loadErr := e.Store.LoadDemand(opts.DemandID)
+		if loadErr != nil {
+			return loadErr
+		}
+		result = RunResult{
+			DemandID:      opts.DemandID,
+			Stage:         opts.Stage,
+			PreviousState: workflow.State(demand.State),
+		}
 		switch opts.Stage {
 		case StageRequirements:
-			return e.runRequirements(ctx, opts)
+			return e.runRequirements(ctx, opts, &result)
 		case StagePlan:
-			return e.runPlan(ctx, opts)
+			return e.runPlan(ctx, opts, &result)
 		case StageImplementation:
-			return e.runImplementation(ctx, opts)
+			return e.runImplementation(ctx, opts, &result)
 		case StageMRReview:
-			return e.runMRReview(ctx, opts)
+			return e.runMRReview(ctx, opts, &result)
 		case StageVerification:
-			return e.runVerification(ctx, opts)
+			return e.runVerification(ctx, opts, &result)
 		case StageCloseout:
-			return e.runCloseout(ctx, opts)
+			return e.runCloseout(ctx, opts, &result)
 		default:
 			return fmt.Errorf("unsupported stage %q", opts.Stage)
 		}
 	})
+	if err != nil {
+		if result.DemandID != "" {
+			if demand, loadErr := e.Store.LoadDemand(opts.DemandID); loadErr == nil {
+				result.CurrentState = workflow.State(demand.State)
+				result.NextActions = NextActions(result.CurrentState, opts.DemandID)
+			}
+		}
+		return result, err
+	}
+
+	demand, err := e.Store.LoadDemand(opts.DemandID)
+	if err != nil {
+		return result, err
+	}
+	result.CurrentState = workflow.State(demand.State)
+	result.NextActions = NextActions(result.CurrentState, opts.DemandID)
+	return result, nil
 }
 
 func (e Engine) advance(demand *artifacts.Demand, next workflow.State) error {
@@ -62,7 +95,7 @@ func (e Engine) advance(demand *artifacts.Demand, next workflow.State) error {
 	return e.Store.SaveDemand(*demand)
 }
 
-func (e Engine) runRequirements(ctx context.Context, opts Options) error {
+func (e Engine) runRequirements(ctx context.Context, opts Options, result *RunResult) error {
 	demand, err := e.Store.LoadDemand(opts.DemandID)
 	if err != nil {
 		return err
@@ -104,6 +137,8 @@ func (e Engine) runRequirements(ctx context.Context, opts Options) error {
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.RequirementsFile, resp.Text); err != nil {
 		return err
 	}
+	result.Artifacts = append(result.Artifacts, artifacts.RequirementsFile)
+	result.Message = "requirements drafted by demand runner"
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),
 		Type:    "requirements.drafted",
@@ -114,7 +149,7 @@ func (e Engine) runRequirements(ctx context.Context, opts Options) error {
 	return e.advance(&demand, workflow.RequirementsReview)
 }
 
-func (e Engine) runPlan(ctx context.Context, opts Options) error {
+func (e Engine) runPlan(ctx context.Context, opts Options, result *RunResult) error {
 	demand, err := e.Store.LoadDemand(opts.DemandID)
 	if err != nil {
 		return err
@@ -146,6 +181,8 @@ func (e Engine) runPlan(ctx context.Context, opts Options) error {
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.PlanFile, resp.Text); err != nil {
 		return err
 	}
+	result.Artifacts = append(result.Artifacts, artifacts.PlanFile)
+	result.Message = "plan drafted by demand runner"
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),
 		Type:    "plan.drafted",
@@ -156,7 +193,7 @@ func (e Engine) runPlan(ctx context.Context, opts Options) error {
 	return e.advance(&demand, workflow.PlanReview)
 }
 
-func (e Engine) runImplementation(ctx context.Context, opts Options) error {
+func (e Engine) runImplementation(ctx context.Context, opts Options, result *RunResult) error {
 	demand, err := e.Store.LoadDemand(opts.DemandID)
 	if err != nil {
 		return err
@@ -192,17 +229,21 @@ func (e Engine) runImplementation(ctx context.Context, opts Options) error {
 	if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, progress+"\n\n"); err != nil {
 		return err
 	}
+	result.Artifacts = append(result.Artifacts, artifacts.ProgressFile)
 
 	if len(opts.QualityCommands) > 0 {
-		result := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
-		if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderQualityEvidence(result)); err != nil {
+		gateResult := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
+		passed := gateResult.Passed
+		result.QualityPassed = &passed
+		if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderQualityEvidence(gateResult)); err != nil {
 			return err
 		}
-		if !result.Passed {
+		if !gateResult.Passed {
 			if err := e.advance(&demand, workflow.FailedQualityGate); err != nil {
 				return err
 			}
-			return fmt.Errorf("quality gate failed: %s", summarizeQuality(result))
+			result.Message = "quality gate failed: " + summarizeQuality(gateResult)
+			return fmt.Errorf("quality gate failed: %s", summarizeQuality(gateResult))
 		}
 	}
 
@@ -213,10 +254,11 @@ func (e Engine) runImplementation(ctx context.Context, opts Options) error {
 	}); err != nil {
 		return err
 	}
+	result.Message = "implementation completed and quality gate passed"
 	return e.advance(&demand, workflow.MRReview)
 }
 
-func (e Engine) runVerification(ctx context.Context, opts Options) error {
+func (e Engine) runVerification(ctx context.Context, opts Options, result *RunResult) error {
 	demand, err := e.Store.LoadDemand(opts.DemandID)
 	if err != nil {
 		return err
@@ -247,12 +289,16 @@ func (e Engine) runVerification(ctx context.Context, opts Options) error {
 
 	body := strings.TrimSpace(resp.Text)
 	if len(opts.QualityCommands) > 0 {
-		result := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
-		body += "\n\n" + renderQualityEvidence(result)
+		gateResult := e.Gate.Run(ctx, opts.Root, opts.QualityCommands...)
+		passed := gateResult.Passed
+		result.QualityPassed = &passed
+		body += "\n\n" + renderQualityEvidence(gateResult)
 	}
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.VerificationFile, body+"\n"); err != nil {
 		return err
 	}
+	result.Artifacts = append(result.Artifacts, artifacts.VerificationFile)
+	result.Message = "verification drafted by demand runner"
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),
 		Type:    "verification.drafted",
@@ -263,7 +309,7 @@ func (e Engine) runVerification(ctx context.Context, opts Options) error {
 	return e.advance(&demand, workflow.Verification)
 }
 
-func (e Engine) runCloseout(ctx context.Context, opts Options) error {
+func (e Engine) runCloseout(ctx context.Context, opts Options, result *RunResult) error {
 	demand, err := e.Store.LoadDemand(opts.DemandID)
 	if err != nil {
 		return err
@@ -308,6 +354,8 @@ func (e Engine) runCloseout(ctx context.Context, opts Options) error {
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.MemoryCandidatesFile, memoryBody+"\n"); err != nil {
 		return err
 	}
+	result.Artifacts = append(result.Artifacts, artifacts.CloseoutFile, artifacts.MemoryCandidatesFile)
+	result.Message = "closeout and memory candidates drafted by demand runner"
 	if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
 		Time:    opts.Now(),
 		Type:    "closeout.drafted",
@@ -318,7 +366,7 @@ func (e Engine) runCloseout(ctx context.Context, opts Options) error {
 	return e.advance(&demand, workflow.Closeout)
 }
 
-func (e Engine) runMRReview(ctx context.Context, opts Options) error {
+func (e Engine) runMRReview(ctx context.Context, opts Options, result *RunResult) error {
 	demand, err := e.Store.LoadDemand(opts.DemandID)
 	if err != nil {
 		return err
@@ -338,9 +386,11 @@ func (e Engine) runMRReview(ctx context.Context, opts Options) error {
 	if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderReviewSummary(comments)); err != nil {
 		return err
 	}
+	result.Artifacts = append(result.Artifacts, artifacts.ProgressFile)
 
 	for _, comment := range comments {
 		if comment.Blocking {
+			result.Message = "blocking review comments remain"
 			return fmt.Errorf("blocking review comments remain")
 		}
 	}
@@ -352,6 +402,7 @@ func (e Engine) runMRReview(ctx context.Context, opts Options) error {
 	}); err != nil {
 		return err
 	}
+	result.Message = "mr review cleared, no blocking unresolved comments"
 	return e.advance(&demand, workflow.Verification)
 }
 

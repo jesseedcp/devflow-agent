@@ -106,12 +106,38 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 			},
 		}
 	}
-
 	engine := demandflow.NewEngine(root)
-	if err := engine.Run(context.Background(), opts); err != nil {
+	result, err := engine.RunDetailed(context.Background(), opts)
+	if err != nil {
+		if result.DemandID != "" {
+			printRunResult(stdout, result)
+		}
 		return err
 	}
-
-	fmt.Fprintf(stdout, "stage %s completed for %s\n", parsedStage, demandID)
+	printRunResult(stdout, result)
 	return nil
+}
+
+func printRunResult(stdout io.Writer, result demandflow.RunResult) {
+	fmt.Fprintf(stdout, "stage %s completed for %s\n", result.Stage, result.DemandID)
+	if result.PreviousState != "" || result.CurrentState != "" {
+		fmt.Fprintf(stdout, "state: %s -> %s\n", result.PreviousState, result.CurrentState)
+	}
+	if result.Message != "" {
+		fmt.Fprintf(stdout, "%s\n", result.Message)
+	}
+	if len(result.Artifacts) > 0 {
+		fmt.Fprintln(stdout, "artifacts:")
+		for _, artifact := range result.Artifacts {
+			fmt.Fprintf(stdout, "  - %s\n", artifact)
+		}
+	}
+	if len(result.NextActions) > 0 {
+		fmt.Fprintln(stdout, "next:")
+		action := result.NextActions[0]
+		fmt.Fprintf(stdout, "  %s\n", action.Label)
+		if strings.TrimSpace(action.Command) != "" {
+			fmt.Fprintf(stdout, "  %s\n", action.Command)
+		}
+	}
 }

@@ -121,6 +121,61 @@ func TestEngineRequirementsDraftsAndAdvances(t *testing.T) {
 	}
 }
 
+func TestEngineRunDetailedReportsResult(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Created)
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nimplement coupon check\n"},
+	}}
+	result, err := engine.RunDetailed(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageRequirements,
+		Runner:   runner,
+		Now:      fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("run detailed: %v", err)
+	}
+	if result.PreviousState != workflow.Created || result.CurrentState != workflow.RequirementsReview {
+		t.Fatalf("states = %s -> %s", result.PreviousState, result.CurrentState)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0] != artifacts.RequirementsFile {
+		t.Fatalf("artifacts = %#v", result.Artifacts)
+	}
+	if len(result.NextActions) == 0 || result.NextActions[0].Label != "Confirm requirements" {
+		t.Fatalf("next actions = %#v", result.NextActions)
+	}
+}
+
+func TestEngineRunDetailedReportsFailedQualityGate(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 1, stderr: "test failed"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+	}}
+	result, err := engine.RunDetailed(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "quality gate failed") {
+		t.Fatalf("err = %v want quality gate failed", err)
+	}
+	if result.CurrentState != workflow.FailedQualityGate {
+		t.Fatalf("current state = %s want %s", result.CurrentState, workflow.FailedQualityGate)
+	}
+	if result.QualityPassed == nil || *result.QualityPassed {
+		t.Fatalf("quality passed = %#v", result.QualityPassed)
+	}
+	if len(result.NextActions) == 0 || result.NextActions[0].Label != "Retry implementation" {
+		t.Fatalf("next actions = %#v", result.NextActions)
+	}
+}
 func TestEnginePlanDraftsAndAdvances(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.PlanDrafting)

@@ -42,6 +42,7 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	var root, runnerRoot, qualityRoot, demandID, stage, configPath, permissionMode, gitlabProject, gitlabMR, gitlabBaseURL string
+	var createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription string
 	var qualityCommands stringSliceFlag
 
 	fs.StringVar(&root, "root", ".", "root directory")
@@ -114,6 +115,8 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 			},
 		}
 	}
+
+	configureMergeRequest(parsedStage, createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, gitlabBaseURL, &opts)
 	engine := demandflow.NewEngine(root)
 	result, err := engine.RunDetailed(context.Background(), opts)
 	if err != nil {
@@ -150,3 +153,21 @@ func printRunResult(stdout io.Writer, result demandflow.RunResult) {
 	}
 }
 
+func configureMergeRequest(stage demandflow.Stage, sourceBranch, targetBranch, title, description, baseURL string, opts *demandflow.Options) {
+	if stage != demandflow.StageImplementation {
+		return
+	}
+	if strings.TrimSpace(sourceBranch) == "" || strings.TrimSpace(targetBranch) == "" || strings.TrimSpace(title) == "" {
+		return
+	}
+	opts.MergeRequest = demandflow.MergeRequestOptions{
+		Adapter: newMergeRequestAdapter(),
+		Spec: adapters.MergeRequestSpec{
+			SourceBranch: sourceBranch,
+			TargetBranch: targetBranch,
+			Title:        title,
+			Description:  description,
+			BaseURL:      baseURL,
+		},
+	}
+}

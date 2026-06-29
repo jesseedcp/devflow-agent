@@ -232,3 +232,48 @@ func TestRunUsesRunnerRootForDemandRunner(t *testing.T) {
 		t.Fatalf("runner root = %q, want %q", recorder.root, codeRoot)
 	}
 }
+
+func TestConfigureMergeRequestSetsFlags(t *testing.T) {
+	var opts demandflow.Options
+	configureMergeRequest(demandflow.StageImplementation, "feature/x", "main", "My MR", "desc", "", &opts)
+	if opts.MergeRequest.Adapter == nil {
+		t.Fatal("MergeRequest adapter not set")
+	}
+	if opts.MergeRequest.Spec.SourceBranch != "feature/x" {
+		t.Fatalf("source = %q, want feature/x", opts.MergeRequest.Spec.SourceBranch)
+	}
+	if opts.MergeRequest.Spec.TargetBranch != "main" {
+		t.Fatalf("target = %q, want main", opts.MergeRequest.Spec.TargetBranch)
+	}
+	if opts.MergeRequest.Spec.Title != "My MR" {
+		t.Fatalf("title = %q, want My MR", opts.MergeRequest.Spec.Title)
+	}
+}
+
+func TestConfigureMergeRequestSkipsNonImplementation(t *testing.T) {
+	var opts demandflow.Options
+	configureMergeRequest(demandflow.StageRequirements, "feature/x", "main", "title", "", "", &opts)
+	if opts.MergeRequest.Adapter != nil {
+		t.Fatal("expected nil adapter for non-implementation stage")
+	}
+}
+
+func TestConfigureMergeRequestSkipsMissingFlags(t *testing.T) {
+	tests := []struct {
+		name                  string
+		source, target, title string
+	}{
+		{"empty source", "", "main", "title"},
+		{"empty target", "feature/x", "", "title"},
+		{"empty title", "feature/x", "main", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts demandflow.Options
+			configureMergeRequest(demandflow.StageImplementation, tc.source, tc.target, tc.title, "", "", &opts)
+			if opts.MergeRequest.Adapter != nil {
+				t.Fatal("expected nil adapter when required flags are missing")
+			}
+		})
+	}
+}

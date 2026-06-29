@@ -42,6 +42,7 @@ devflow status
 devflow next
 devflow doctor
 devflow smoke
+devflow dogfood
 ```
 
 User-facing references:
@@ -65,5 +66,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
 Release and dogfood references:
 
 - [Dogfood and smoke guide](docs/user-guide/dogfood-smoke.md)
+- [Full-loop dogfood guide](docs/user-guide/full-loop-dogfood.md)
 - [v0.1 release notes](docs/release/v0.1.md)
 - [Coupon eligibility sample demand](docs/examples/demands/coupon-eligibility.md)

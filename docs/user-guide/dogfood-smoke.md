@@ -1,5 +1,9 @@
 # Dogfood And Smoke Guide
 
+For release readiness, prefer the full-loop dogfood guide. This page remains for first-step smoke and optional live provider checks.
+
+- [Full-loop dogfood guide](full-loop-dogfood.md)
+
 ## Deterministic Local Dogfood
 
 Run this path before opening a release PR. It does not call a live model provider and does not require API keys.
@@ -13,10 +17,9 @@ The dogfood script rebuilds the CLI by default so it validates the current check
 Expected checks:
 
 - `devflow version` prints build metadata.
-- `devflow init` creates a no-secret temp config.
-- `devflow start` creates `dogfood-coupon-eligibility`.
-- `devflow status` prints state and artifact paths.
-- `devflow next` recommends the requirements stage.
+- `devflow dogfood` creates `dogfood-coupon-eligibility`.
+- The deterministic workflow reaches `state: completed`.
+- The script prints the generated `dogfood-report.md` path.
 
 ## Optional Live Requirements Smoke
 

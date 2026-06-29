@@ -63,6 +63,13 @@ $env:GITLAB_TOKEN = '<your-token>'
 devflow run --demand add-coupon-eligibility-check --stage mr-review --gitlab-project "group/project" --gitlab-mr "123"
 ```
 
+Before running the workflow MR stage, you can check a real MR directly:
+
+```powershell
+$env:GITLAB_TOKEN = '<your-token>'
+devflow review-gate --gitlab-project "group/project" --gitlab-mr "123"
+```
+
 ## 8. Run Verification And Closeout
 
 ```powershell

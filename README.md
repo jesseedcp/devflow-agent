@@ -63,9 +63,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-windows.ps1 -V
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dogfood-local.ps1
 ```
 
+Wave 9 adds opt-in live release gates:
+
+```text
+devflow live-dogfood
+devflow review-gate
+```
+
 Release and dogfood references:
 
 - [Dogfood and smoke guide](docs/user-guide/dogfood-smoke.md)
 - [Full-loop dogfood guide](docs/user-guide/full-loop-dogfood.md)
+- [Live dogfood guide](docs/user-guide/live-dogfood.md)
 - [v0.1 release notes](docs/release/v0.1.md)
 - [Coupon eligibility sample demand](docs/examples/demands/coupon-eligibility.md)

@@ -59,3 +59,5 @@ GitLab is only required for the `mr-review` stage. Validate it explicitly:
 $env:GITLAB_TOKEN = "set-this-in-your-private-shell"
 devflow doctor --require-gitlab
 ```
+
+For live provider validation, see [Live dogfood guide](live-dogfood.md). Live dogfood is separate from deterministic dogfood and requires explicit environment opt-in.

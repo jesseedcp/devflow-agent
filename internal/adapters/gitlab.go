@@ -167,3 +167,151 @@ type gitlabNotePosition struct {
 	NewPath string `json:"new_path"`
 	NewLine int    `json:"new_line"`
 }
+
+type gitlabMergeRequest struct {
+	IID    int    `json:"iid"`
+	Title  string `json:"title"`
+	State  string `json:"state"`
+	WebURL string `json:"web_url"`
+}
+
+func validateMergeRequestSpec(spec MergeRequestSpec) error {
+	if spec.Project == "" {
+		return fmt.Errorf("gitlab project is required")
+	}
+	if spec.SourceBranch == "" {
+		return fmt.Errorf("source branch is required")
+	}
+	if spec.TargetBranch == "" {
+		return fmt.Errorf("target branch is required")
+	}
+	if spec.Title == "" {
+		return fmt.Errorf("title is required")
+	}
+	return nil
+}
+
+func (a GitLabReviewAdapter) EnsureMergeRequest(ctx context.Context, spec MergeRequestSpec) (MergeRequestResult, error) {
+	if err := validateMergeRequestSpec(spec); err != nil {
+		return MergeRequestResult{}, err
+	}
+
+	token := spec.Token
+	if token == "" {
+		t, err := a.token(ReviewRef{})
+		if err != nil {
+			return MergeRequestResult{}, err
+		}
+		token = t
+	}
+
+	baseURL := spec.BaseURL
+	if baseURL == "" {
+		baseURL = defaultGitLabBaseURL
+	} else {
+		baseURL = strings.TrimRight(baseURL, "/")
+	}
+
+	existing, err := a.findOpenMergeRequest(ctx, token, baseURL, spec.Project, spec.SourceBranch, spec.TargetBranch)
+	if err != nil {
+		return MergeRequestResult{}, err
+	}
+	if existing != nil {
+		return MergeRequestResult{
+			IID:        existing.IID,
+			WebURL:     existing.WebURL,
+			Title:      existing.Title,
+			State:      existing.State,
+			WasCreated: false,
+		}, nil
+	}
+
+	created, err := a.createMergeRequest(ctx, token, baseURL, spec)
+	if err != nil {
+		return MergeRequestResult{}, err
+	}
+	return MergeRequestResult{
+		IID:        created.IID,
+		WebURL:     created.WebURL,
+		Title:      created.Title,
+		State:      created.State,
+		WasCreated: true,
+	}, nil
+}
+
+func (a GitLabReviewAdapter) findOpenMergeRequest(ctx context.Context, token, baseURL, project, sourceBranch, targetBranch string) (*gitlabMergeRequest, error) {
+	endpoint := fmt.Sprintf("%s/api/v4/projects/%s/merge_requests?state=opened&source_branch=%s&target_branch=%s",
+		baseURL,
+		url.PathEscape(project),
+		url.QueryEscape(sourceBranch),
+		url.QueryEscape(targetBranch),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build gitlab list MRs request: %w", err)
+	}
+	req.Header.Set("PRIVATE-TOKEN", token)
+
+	resp, err := a.httpClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab list merge requests: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gitlab list merge requests status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var mrs []gitlabMergeRequest
+	if err := json.NewDecoder(resp.Body).Decode(&mrs); err != nil {
+		return nil, fmt.Errorf("decode gitlab merge requests: %w", err)
+	}
+
+	for i := range mrs {
+		if mrs[i].State == "opened" {
+			return &mrs[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func (a GitLabReviewAdapter) createMergeRequest(ctx context.Context, token, baseURL string, spec MergeRequestSpec) (*gitlabMergeRequest, error) {
+	endpoint := fmt.Sprintf("%s/api/v4/projects/%s/merge_requests",
+		baseURL,
+		url.PathEscape(spec.Project),
+	)
+
+	form := url.Values{}
+	form.Set("source_branch", spec.SourceBranch)
+	form.Set("target_branch", spec.TargetBranch)
+	form.Set("title", spec.Title)
+	if spec.Description != "" {
+		form.Set("description", spec.Description)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build gitlab create MR request: %w", err)
+	}
+	req.Header.Set("PRIVATE-TOKEN", token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := a.httpClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab create merge request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gitlab create merge request status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var mr gitlabMergeRequest
+	if err := json.NewDecoder(resp.Body).Decode(&mr); err != nil {
+		return nil, fmt.Errorf("decode created gitlab merge request: %w", err)
+	}
+	return &mr, nil
+}

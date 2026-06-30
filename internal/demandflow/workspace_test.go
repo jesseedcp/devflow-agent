@@ -72,6 +72,9 @@ func TestInspectWorkspaceSummarizesEvidence(t *testing.T) {
 	if summary.Memory.Pending != 1 || summary.Memory.Promoted != 1 || summary.Memory.Rejected != 0 {
 		t.Fatalf("Memory = %#v, want 1 pending, 1 promoted, 0 rejected", summary.Memory)
 	}
+	if len(summary.Actions) == 0 || summary.Actions[0].Label != "Confirm verification" {
+		t.Fatalf("Actions = %#v, want Confirm verification first despite pending memory", summary.Actions)
+	}
 	if summary.Attention != "ready to confirm verification" {
 		t.Fatalf("Attention = %q, want ready to confirm verification", summary.Attention)
 	}
@@ -111,7 +114,7 @@ func TestInspectWorkspaceVerificationFailure(t *testing.T) {
 	if err := store.CreateDemand(demand); err != nil {
 		t.Fatalf("CreateDemand returned error: %v", err)
 	}
-	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "verification.recorded", Message: "verification fail", Data: map[string]string{"status": "FAIL", "command": "go test ./..."}})
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "verification.recorded", Message: "verification fail", Data: map[string]string{"status": "FAIL", "command": "go test ./...", "failure_kind": "exit_nonzero"}})
 
 	summary, err := InspectWorkspace(root, demand.ID)
 	if err != nil {
@@ -120,6 +123,9 @@ func TestInspectWorkspaceVerificationFailure(t *testing.T) {
 
 	assertStageStatus(t, summary, "verification", "failed")
 	assertArtifactStatus(t, summary, artifacts.VerificationFile, "has_fail_evidence")
+	if summary.Verification.FailureKind != "exit_nonzero" {
+		t.Fatalf("FailureKind = %q, want exit_nonzero", summary.Verification.FailureKind)
+	}
 	if len(summary.Actions) == 0 || summary.Actions[0].Label != "Retry implementation" {
 		t.Fatalf("Actions = %#v, want Retry implementation first", summary.Actions)
 	}

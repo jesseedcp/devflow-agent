@@ -145,6 +145,9 @@ func printWorkspaceDetail(stdout io.Writer, summary demandflow.WorkspaceSummary)
 		fmt.Fprintf(stdout, "  latest: PASS %s\n", summary.Verification.Command)
 	case "fail":
 		fmt.Fprintf(stdout, "  latest: FAIL %s\n", summary.Verification.Command)
+		if summary.Verification.FailureKind != "" {
+			fmt.Fprintf(stdout, "  failure_kind: %s\n", summary.Verification.FailureKind)
+		}
 	default:
 		fmt.Fprintln(stdout, "  latest: none")
 	}
@@ -156,8 +159,6 @@ func printWorkspaceDetail(stdout io.Writer, summary demandflow.WorkspaceSummary)
 		fmt.Fprintf(stdout, "  candidates: %d pending, %d promoted, %d rejected\n", summary.Memory.Pending, summary.Memory.Promoted, summary.Memory.Rejected)
 	}
 
-	fmt.Fprintln(stdout, "\nNext actions:")
-	printActions(stdout, summary.Actions)
 	fmt.Fprintln(stdout, "\nNext:")
 	printActions(stdout, summary.Actions)
 }

@@ -23,7 +23,7 @@ func TestStatusPrintsDemandStateArtifactsAndNextActions(t *testing.T) {
 		"Demand: add-coupon-check",
 		"State: created",
 		"requirements.md",
-		"Next actions:",
+		"Next:",
 		"Draft requirements",
 		"devflow run --demand add-coupon-check --stage requirements",
 	} {
@@ -126,6 +126,33 @@ func TestRunStatusPrintsWorkspaceSummary(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status output missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "Next actions:") {
+		t.Fatalf("status output printed duplicate legacy Next actions section:\n%s", got)
+	}
+}
+
+func TestRunStatusPrintsVerificationFailureKind(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "cli-fail-kind", Title: "CLI fail kind", Description: "Show failure kind", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 3, 2, 0, 0, time.UTC), Type: "verification.recorded", Message: "verification fail", Data: map[string]string{"status": "fail", "command": "go test ./...", "failure_kind": "exit_nonzero"}}); err != nil {
+		t.Fatalf("AppendEvent verification returned error: %v", err)
+	}
+
+	var out strings.Builder
+	if err := runStatus([]string{"--root", root, "--demand", demand.ID}, &out); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "latest: FAIL go test ./...") {
+		t.Fatalf("status output missing FAIL line:\n%s", got)
+	}
+	if !strings.Contains(got, "failure_kind: exit_nonzero") {
+		t.Fatalf("status output missing failure kind:\n%s", got)
 	}
 }
 

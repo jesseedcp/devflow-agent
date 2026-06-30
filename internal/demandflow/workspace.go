@@ -45,6 +45,7 @@ type ArtifactSummary struct {
 type VerificationSummary struct {
 	Status       string
 	Command      string
+	FailureKind  string
 	EvidenceFile string
 	Message      string
 }
@@ -127,7 +128,7 @@ func ListWorkspaces(root string) ([]WorkspaceSummary, error) {
 
 func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 	idArg := shellQuote(summary.Demand.ID)
-	if summary.Memory.Pending > 0 {
+	if summary.Memory.Pending > 0 && (summary.State == workflow.Closeout || summary.State == workflow.Completed) {
 		return []NextAction{
 			{Label: "Review memory candidates", Command: "devflow memory list --demand " + idArg, Reason: "Stable knowledge candidates are still pending."},
 			{Label: "Promote memory candidate", Command: "devflow memory promote --demand " + idArg + " --candidate <index> --by <name>", Reason: "Promote reusable knowledge that should persist."},
@@ -346,6 +347,7 @@ func summarizeVerification(events []artifacts.Event) VerificationSummary {
 			continue
 		}
 		summary.Command = firstNonEmpty(event.Data["command"], event.Data["quality_command"])
+		summary.FailureKind = event.Data["failure_kind"]
 		summary.EvidenceFile = firstNonEmpty(event.Data["evidence_file"], artifacts.VerificationFile)
 		summary.Message = event.Message
 	}

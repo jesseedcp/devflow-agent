@@ -52,6 +52,18 @@ devflow status --all
 
 `status --all` scans `.devflow/demands` and sorts demands that need attention ahead of completed work. It does not call GitLab and does not mutate any artifact.
 
+### Operator console
+
+Use `devflow console` when you want an operator view rather than a material audit.
+
+```powershell
+devflow console
+devflow console --demand add-coupon-check
+devflow console --demand add-coupon-check --run-next
+```
+
+`console` is built on the same local workspace evidence as `status`, but it separates the recommended action from the run-ready action. `--run-next` only executes runner-safe agent stages such as requirements, plan, implementation, verification, and closeout. It does not auto-confirm human gates, promote memory, reject memory, or merge MRs.
+
 ## 4. Run Requirements
 
 ```powershell

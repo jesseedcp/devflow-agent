@@ -29,6 +29,29 @@ devflow status --demand add-coupon-eligibility-check
 devflow next --demand add-coupon-eligibility-check
 ```
 
+
+### Demand Workspace Status
+
+Use `devflow status` as the operator checkpoint before deciding the next command.
+
+```powershell
+devflow status --demand add-coupon-check
+devflow next --demand add-coupon-check
+devflow status --all
+```
+
+`status --demand` reads only local demand materials under `.devflow/demands/<id>` and summarizes:
+
+- workflow state from `demand.json`;
+- confirmation evidence from `events.jsonl`;
+- artifact state for requirements, plan, progress, verification, closeout, memory candidates, and events;
+- local MR review evidence from events and `progress.md`;
+- latest verification PASS/FAIL evidence;
+- stable memory candidate counts;
+- the recommended next command.
+
+`status --all` scans `.devflow/demands` and sorts demands that need attention ahead of completed work. It does not call GitLab and does not mutate any artifact.
+
 ## 4. Run Requirements
 
 ```powershell
@@ -130,3 +153,4 @@ devflow doctor
 ```
 
 The doctor command reports whether config, git, and GitLab token setup are ready without printing secret values.
+

@@ -191,15 +191,44 @@ func renderMemoryHits(hits []MemoryHit) string {
 	if len(hits) == 0 {
 		return "(none)"
 	}
-	var b strings.Builder
+
+	var stable []MemoryHit
+	var candidates []MemoryHit
 	for _, hit := range hits {
-		b.WriteString("- ")
-		b.WriteString(hit.DemandID)
-		if strings.TrimSpace(hit.Snippet) != "" {
-			b.WriteString(": ")
-			b.WriteString(strings.TrimSpace(hit.Snippet))
+		if hit.Source == "stable" {
+			stable = append(stable, hit)
+			continue
 		}
-		b.WriteString("\n")
+		candidates = append(candidates, hit)
+	}
+
+	var b strings.Builder
+	if len(stable) > 0 {
+		b.WriteString("Approved stable memory:\n")
+		for _, hit := range stable {
+			b.WriteString("- ")
+			b.WriteString(hit.Path)
+			if strings.TrimSpace(hit.Snippet) != "" {
+				b.WriteString(": ")
+				b.WriteString(strings.TrimSpace(hit.Snippet))
+			}
+			b.WriteString("\n")
+		}
+	}
+	if len(candidates) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("Unapproved candidate memory:\n")
+		for _, hit := range candidates {
+			b.WriteString("- ")
+			b.WriteString(hit.DemandID)
+			if strings.TrimSpace(hit.Snippet) != "" {
+				b.WriteString(": ")
+				b.WriteString(strings.TrimSpace(hit.Snippet))
+			}
+			b.WriteString("\n")
+		}
 	}
 	return strings.TrimSpace(b.String())
 }

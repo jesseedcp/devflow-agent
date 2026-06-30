@@ -47,6 +47,7 @@ type MemoryHit struct {
 	DemandID string
 	Path     string
 	Snippet  string
+	Source   string
 }
 
 type Options struct {

@@ -117,6 +117,7 @@ func (s Store) Search(query string) ([]Result, error) {
 				DemandID: demandID,
 				Path:     path,
 				Snippet:  firstLine(text),
+				Source:   SourceCandidate,
 			})
 		}
 	}
@@ -321,4 +322,72 @@ func canonicalComparePath(path string) string {
 		return filepath.Clean(resolved)
 	}
 	return path
+}
+
+func (s Store) SearchStable(query string) ([]Result, error) {
+	if s.root == "" {
+		return nil, fmt.Errorf("store root is required")
+	}
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	rootAbs, err := filepath.Abs(s.root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve store root: %w", err)
+	}
+	rootAbs = filepath.Clean(rootAbs)
+	rootResolved, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return nil, fmt.Errorf("resolve store root: %w", err)
+	}
+	memDir := filepath.Join(rootAbs, ".devflow", "memory")
+	expectedMemDir := filepath.Join(rootResolved, ".devflow", "memory")
+	exists, err := ensureSafePath(memDir, expectedMemDir)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(memDir)
+	if err != nil {
+		return nil, fmt.Errorf("read stable memory directory: %w", err)
+	}
+	results := make([]Result, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "MEMORY.md" || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(memDir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read stable memory %s: %w", entry.Name(), err)
+		}
+		text := string(data)
+		if !matchesAll(strings.ToLower(text), terms) {
+			continue
+		}
+		results = append(results, Result{
+			Path:    path,
+			Snippet: stableSnippet(text),
+			Source:  SourceStable,
+		})
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Path < results[j].Path
+	})
+	return results, nil
+}
+
+func stableSnippet(text string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "description:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "description:"))
+		}
+	}
+	return firstLine(text)
 }

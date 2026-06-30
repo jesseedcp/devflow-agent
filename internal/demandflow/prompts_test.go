@@ -94,3 +94,23 @@ func TestBuildPromptMRReviewUnsupported(t *testing.T) {
 		t.Fatalf("expected error for mr-review prompt, got nil")
 	}
 }
+
+func TestRenderMemoryHitsSeparatesStableAndCandidate(t *testing.T) {
+	t.Parallel()
+
+	got := renderMemoryHits([]MemoryHit{
+		{Source: "stable", Path: ".devflow/memory/coupon.md", Snippet: "stable coupon policy"},
+		{Source: "candidate", DemandID: "prior-work", Path: ".devflow/demands/prior-work/memory-candidates.md", Snippet: "candidate coupon note"},
+	})
+
+	for _, want := range []string{
+		"Approved stable memory:",
+		"- .devflow/memory/coupon.md: stable coupon policy",
+		"Unapproved candidate memory:",
+		"- prior-work: candidate coupon note",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("renderMemoryHits missing %q:\n%s", want, got)
+		}
+	}
+}

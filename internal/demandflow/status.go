@@ -2,8 +2,6 @@ package demandflow
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
@@ -32,44 +30,26 @@ type StatusReport struct {
 }
 
 func InspectStatus(root, demandID string) (StatusReport, error) {
-	store := artifacts.NewStore(root)
-	demand, err := store.LoadDemand(demandID)
+	summary, err := InspectWorkspace(root, demandID)
 	if err != nil {
 		return StatusReport{}, err
 	}
-
-	demandDir := store.DemandDir(demandID)
-	report := StatusReport{
-		Demand:    demand,
-		State:     workflow.State(demand.State),
-		DemandDir: demandDir,
-		Artifacts: inspectArtifacts(demandDir),
+	artifacts := make([]ArtifactInfo, 0, len(summary.Artifacts))
+	for _, artifact := range summary.Artifacts {
+		artifacts = append(artifacts, ArtifactInfo{
+			Name:   artifact.Name,
+			Path:   artifact.Path,
+			Exists: artifact.Exists,
+			Size:   artifact.Size,
+		})
 	}
-	report.Actions = NextActions(report.State, demand.ID)
-	return report, nil
-}
-
-func inspectArtifacts(demandDir string) []ArtifactInfo {
-	names := []string{
-		artifacts.RequirementsFile,
-		artifacts.PlanFile,
-		artifacts.ProgressFile,
-		artifacts.VerificationFile,
-		artifacts.CloseoutFile,
-		artifacts.MemoryCandidatesFile,
-		artifacts.EventsFile,
-	}
-	infos := make([]ArtifactInfo, 0, len(names))
-	for _, name := range names {
-		path := filepath.Join(demandDir, name)
-		info := ArtifactInfo{Name: name, Path: path}
-		if stat, err := os.Stat(path); err == nil {
-			info.Exists = true
-			info.Size = stat.Size()
-		}
-		infos = append(infos, info)
-	}
-	return infos
+	return StatusReport{
+		Demand:    summary.Demand,
+		State:     summary.State,
+		DemandDir: summary.DemandDir,
+		Artifacts: artifacts,
+		Actions:   summary.Actions,
+	}, nil
 }
 
 func NextActions(state workflow.State, demandID string) []NextAction {

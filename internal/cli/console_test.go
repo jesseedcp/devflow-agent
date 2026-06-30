@@ -52,7 +52,7 @@ func TestConsoleDetailRendersOperatorView(t *testing.T) {
 		t.Fatalf("console detail returned error: %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"Demand Console: console-detail", "State: verification", "Stages:", "Evidence:", "verification   PASS go test ./...", "Recommended:", "Confirm verification", "Run-ready:", "no safe runner action"} {
+	for _, want := range []string{"Demand Console: console-detail", "State: verification", "Stages:", "Evidence:", "verification   PASS go test ./...", "Quality:", "requirements", "Recommended:", "Confirm verification", "Run-ready:", "no safe runner action"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("console detail missing %q:\n%s", want, got)
 		}

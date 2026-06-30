@@ -38,7 +38,7 @@ func runConsole(args []string, stdout io.Writer, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		printConsoleDetail(stdout, summary)
+		printConsoleDetail(stdout, opts.root, summary)
 		return nil
 	}
 	summaries, err := demandflow.ListConsole(opts.root)
@@ -93,7 +93,7 @@ func printConsoleList(stdout io.Writer, summaries []demandflow.ConsoleSummary) {
 	fmt.Fprintf(stdout, "  devflow console --demand %s\n", summaries[0].Workspace.Demand.ID)
 }
 
-func printConsoleDetail(stdout io.Writer, summary demandflow.ConsoleSummary) {
+func printConsoleDetail(stdout io.Writer, root string, summary demandflow.ConsoleSummary) {
 	workspace := summary.Workspace
 	fmt.Fprintf(stdout, "Demand Console: %s\n", workspace.Demand.ID)
 	fmt.Fprintf(stdout, "State: %s\n", workspace.State)
@@ -107,6 +107,9 @@ func printConsoleDetail(stdout io.Writer, summary demandflow.ConsoleSummary) {
 	fmt.Fprintln(stdout, "\nEvidence:")
 	printConsoleEvidence(stdout, workspace)
 
+	fmt.Fprintln(stdout, "\nQuality:")
+	printConsoleQuality(stdout, root, workspace.Demand.ID)
+
 	fmt.Fprintln(stdout, "\nRecommended:")
 	printConsoleAction(stdout, summary.PrimaryAction)
 
@@ -115,6 +118,21 @@ func printConsoleDetail(stdout io.Writer, summary demandflow.ConsoleSummary) {
 		printConsoleAction(stdout, summary.RunReadyAction)
 	} else {
 		fmt.Fprintf(stdout, "  %s\n", summary.RunReadyAction.BlockReason)
+	}
+}
+
+func printConsoleQuality(stdout io.Writer, root, demandID string) {
+	evaluation, err := demandflow.EvaluateDemand(root, demandID)
+	if err != nil {
+		fmt.Fprintf(stdout, "  unavailable: %v\n", err)
+		return
+	}
+	for _, stage := range evaluation.Stages {
+		fmt.Fprintf(stdout, "  %-14s %s", stage.Stage, stage.Status)
+		if stage.Blockers > 0 || stage.Warnings > 0 {
+			fmt.Fprintf(stdout, " blockers=%d warnings=%d", stage.Blockers, stage.Warnings)
+		}
+		fmt.Fprintln(stdout)
 	}
 }
 

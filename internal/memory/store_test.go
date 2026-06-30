@@ -403,3 +403,69 @@ func createWindowsJunction(t *testing.T, linkPath, target string) {
 		}
 	})
 }
+
+func TestStoreSearchStableMemory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	memDir := filepath.Join(root, ".devflow", "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll memory dir: %v", err)
+	}
+	body := `---
+name: coupon-eligibility-policy
+description: membership gates coupon eligibility
+type: project
+---
+
+# coupon-eligibility-policy
+
+Active membership must be checked before coupon discount rules.
+`
+	if err := os.WriteFile(filepath.Join(memDir, "coupon-eligibility-policy.md"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write memory file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(memDir, "MEMORY.md"), []byte("- [coupon](coupon-eligibility-policy.md)\n"), 0o644); err != nil {
+		t.Fatalf("write MEMORY.md: %v", err)
+	}
+
+	got, err := NewStore(root).SearchStable("membership coupon")
+	if err != nil {
+		t.Fatalf("SearchStable returned error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("SearchStable returned %d results: %#v", len(got), got)
+	}
+	if got[0].Source != SourceStable {
+		t.Fatalf("Source = %q, want stable", got[0].Source)
+	}
+	if got[0].DemandID != "" {
+		t.Fatalf("DemandID = %q, want empty for stable memory", got[0].DemandID)
+	}
+	if !strings.Contains(got[0].Snippet, "membership gates coupon eligibility") {
+		t.Fatalf("Snippet = %q, want description", got[0].Snippet)
+	}
+}
+
+func TestStoreSearchStableRejectsLinkedMemoryFile(t *testing.T) {
+	root := t.TempDir()
+	memDir := filepath.Join(root, ".devflow", "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll memory dir: %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside-memory.md")
+	if err := os.WriteFile(outside, []byte("coupon stable outside\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile outside memory returned error: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(memDir, "coupon-eligibility-policy.md")); err != nil {
+		t.Skipf("symlink setup unavailable: %v", err)
+	}
+
+	got, err := NewStore(root).SearchStable("coupon")
+	if err == nil {
+		t.Fatalf("SearchStable results = %#v, want unsafe stable memory error", got)
+	}
+	if !strings.Contains(err.Error(), "unsafe") {
+		t.Fatalf("SearchStable error = %q, want unsafe path error", err)
+	}
+}

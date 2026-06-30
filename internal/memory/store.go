@@ -23,6 +23,7 @@ type Result struct {
 	DemandID string
 	Path     string
 	Snippet  string
+	Source   Source
 }
 
 type Store struct {
@@ -116,6 +117,7 @@ func (s Store) Search(query string) ([]Result, error) {
 				DemandID: demandID,
 				Path:     path,
 				Snippet:  firstLine(text),
+				Source:   SourceCandidate,
 			})
 		}
 	}
@@ -320,4 +322,166 @@ func canonicalComparePath(path string) string {
 		return filepath.Clean(resolved)
 	}
 	return path
+}
+
+type stableMemoryPaths struct {
+	devflowPath     string
+	expectedDevflow string
+	memDir          string
+	expectedMemDir  string
+}
+
+func (s Store) stableMemoryPaths() (stableMemoryPaths, error) {
+	if s.root == "" {
+		return stableMemoryPaths{}, fmt.Errorf("store root is required")
+	}
+	rootAbs, err := filepath.Abs(s.root)
+	if err != nil {
+		return stableMemoryPaths{}, fmt.Errorf("resolve store root: %w", err)
+	}
+	rootAbs = filepath.Clean(rootAbs)
+	rootResolved, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return stableMemoryPaths{}, fmt.Errorf("resolve store root: %w", err)
+	}
+	devflowPath := filepath.Join(rootAbs, ".devflow")
+	expectedDevflow := filepath.Join(rootResolved, ".devflow")
+	memDir := filepath.Join(devflowPath, "memory")
+	expectedMemDir := filepath.Join(expectedDevflow, "memory")
+	return stableMemoryPaths{
+		devflowPath:     devflowPath,
+		expectedDevflow: expectedDevflow,
+		memDir:          memDir,
+		expectedMemDir:  expectedMemDir,
+	}, nil
+}
+
+func (s Store) SearchStable(query string) ([]Result, error) {
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	paths, err := s.stableMemoryPaths()
+	if err != nil {
+		return nil, err
+	}
+	exists, err := ensureSafePath(paths.memDir, paths.expectedMemDir)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(paths.memDir)
+	if err != nil {
+		return nil, fmt.Errorf("read stable memory directory: %w", err)
+	}
+	results := make([]Result, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "MEMORY.md" || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(paths.memDir, entry.Name())
+		expectedPath := filepath.Join(paths.expectedMemDir, entry.Name())
+		data, err := readStableMemoryFile(path, expectedPath)
+		if err != nil {
+			return nil, fmt.Errorf("read stable memory %s: %w", entry.Name(), err)
+		}
+		text := string(data)
+		if !matchesAll(strings.ToLower(text), terms) {
+			continue
+		}
+		results = append(results, Result{
+			Path:    path,
+			Snippet: stableSnippet(text),
+			Source:  SourceStable,
+		})
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Path < results[j].Path
+	})
+	return results, nil
+}
+
+func stableSnippet(text string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "description:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "description:"))
+		}
+	}
+	return firstLine(text)
+}
+
+func readStableMemoryFile(path, expectedResolved string) (data []byte, err error) {
+	if _, err := inspectStableMemoryFile(path, expectedResolved); err != nil {
+		return nil, err
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open stable memory file: %w", err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			data = nil
+			if err != nil {
+				err = fmt.Errorf("%w (and close stable memory file: %v)", err, closeErr)
+				return
+			}
+			err = fmt.Errorf("close stable memory file: %w", closeErr)
+		}
+	}()
+
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("inspect opened stable memory file: %w", err)
+	}
+
+	currentInfo, err := inspectStableMemoryFile(path, expectedResolved)
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(openedInfo, currentInfo) {
+		return nil, fmt.Errorf("stable memory changed during read")
+	}
+
+	data, err = io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read stable memory file: %w", err)
+	}
+	return data, nil
+}
+
+func inspectStableMemoryFile(path, expectedResolved string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("unsafe stable memory path %q: symlink not allowed", path)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("stable memory path %q is a directory", path)
+	}
+
+	reparsePoint, err := hasReparsePoint(info)
+	if err != nil {
+		return nil, fmt.Errorf("inspect stable memory path reparse point: %w", err)
+	}
+	if reparsePoint {
+		return nil, fmt.Errorf("unsafe stable memory path %q: reparse point not allowed", path)
+	}
+
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve stable memory path: %w", err)
+	}
+	if !samePath(resolvedPath, expectedResolved) {
+		return nil, fmt.Errorf("unsafe stable memory path %q resolves outside %q", path, expectedResolved)
+	}
+
+	return info, nil
 }

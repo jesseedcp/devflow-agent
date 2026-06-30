@@ -3,6 +3,7 @@ package demandflow
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	memorystore "github.com/jesseedcp/devflow-agent/internal/memory"
@@ -34,20 +35,74 @@ func (l contextLoader) Load(demandID string) (ContextSnapshot, error) {
 	snapshot.Artifacts.Closeout = l.readArtifact(demandID, artifacts.CloseoutFile)
 	snapshot.Artifacts.MemoryCandidates = l.readArtifact(demandID, artifacts.MemoryCandidatesFile)
 
-	if hits, err := memorystore.NewStore(l.root).Search(demand.Title + " " + demand.Description); err == nil {
-		for _, hit := range hits {
-			if hit.DemandID == demand.ID {
-				continue
-			}
-			snapshot.Memories = append(snapshot.Memories, MemoryHit{
-				DemandID: hit.DemandID,
-				Path:     hit.Path,
-				Snippet:  hit.Snippet,
-			})
-		}
+	memoryStore := memorystore.NewStore(l.root)
+	query := demand.Title + " " + demand.Description
+
+	for _, hit := range searchMemoryQueries(query, memoryStore.SearchStable) {
+		snapshot.Memories = append(snapshot.Memories, MemoryHit{
+			Path:    hit.Path,
+			Snippet: hit.Snippet,
+			Source:  string(hit.Source),
+		})
 	}
 
+	for _, hit := range searchCandidateMemoryQueries(query, demand.ID, memoryStore.Search) {
+		snapshot.Memories = append(snapshot.Memories, MemoryHit{
+			DemandID: hit.DemandID,
+			Path:     hit.Path,
+			Snippet:  hit.Snippet,
+			Source:   string(hit.Source),
+		})
+	}
 	return snapshot, nil
+}
+
+func searchMemoryQueries(query string, search func(string) ([]memorystore.Result, error)) []memorystore.Result {
+	for _, candidateQuery := range memoryQueries(query) {
+		hits, err := search(candidateQuery)
+		if err != nil || len(hits) == 0 {
+			continue
+		}
+		return hits
+	}
+	return nil
+}
+
+func searchCandidateMemoryQueries(query string, currentDemandID string, search func(string) ([]memorystore.Result, error)) []memorystore.Result {
+	for _, candidateQuery := range memoryQueries(query) {
+		hits, err := search(candidateQuery)
+		if err != nil || len(hits) == 0 {
+			continue
+		}
+		filtered := make([]memorystore.Result, 0, len(hits))
+		for _, hit := range hits {
+			if hit.DemandID == currentDemandID {
+				continue
+			}
+			filtered = append(filtered, hit)
+		}
+		if len(filtered) > 0 {
+			return filtered
+		}
+	}
+	return nil
+}
+
+func memoryQueries(query string) []string {
+	queries := []string{query}
+	seenQuery := map[string]struct{}{query: {}}
+	for _, term := range strings.Fields(query) {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term == "" {
+			continue
+		}
+		if _, ok := seenQuery[term]; ok {
+			continue
+		}
+		seenQuery[term] = struct{}{}
+		queries = append(queries, term)
+	}
+	return queries
 }
 
 func (l contextLoader) readArtifact(demandID, name string) string {

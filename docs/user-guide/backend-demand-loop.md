@@ -99,6 +99,30 @@ devflow run --demand add-coupon-eligibility-check --stage closeout
 devflow confirm --demand add-coupon-eligibility-check --stage closeout --by dd --summary "closeout accepted"
 ```
 
+
+### Stable knowledge review
+
+After closeout, Devflow writes reviewable knowledge candidates to `memory-candidates.md`. These are not stable memory until a human promotes them.
+
+List candidates:
+
+```powershell
+devflow memory list --demand add-coupon-check
+```
+
+Promote an approved candidate into project memory:
+
+```powershell
+devflow memory promote --demand add-coupon-check --candidate 1 --name coupon-eligibility-policy --description "membership gates coupon eligibility" --by dd
+```
+
+Reject a candidate that is too narrow or stale:
+
+```powershell
+devflow memory reject --demand add-coupon-check --candidate 2 --by dd --reason "too specific to one fixture"
+```
+
+Promoted memories are stored under `.devflow/memory/` and indexed in `.devflow/memory/MEMORY.md`. Future requirements and plan stages render approved stable memory before unapproved candidate memory.
 ## 9. Diagnostics
 
 ```powershell

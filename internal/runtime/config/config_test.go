@@ -563,3 +563,46 @@ func writeRawConfig(t *testing.T, path, body string) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoadConfigBackendDemandDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(`providers:
+  - name: test
+    protocol: openai-compat
+    base_url: https://example.com/v1
+    model: test-model
+backend_demand:
+  runner_root: .
+  quality_root: .
+  quality_commands:
+    - go test ./... -count=1 -timeout 5m
+  permission_mode: acceptEdits
+  gitlab:
+    project: group/project
+    base_url: https://gitlab.example
+    default_target_branch: main
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+	if cfg.BackendDemand.RunnerRoot != "." {
+		t.Fatalf("RunnerRoot = %q, want .", cfg.BackendDemand.RunnerRoot)
+	}
+	if got := cfg.BackendDemand.QualityCommands; len(got) != 1 || got[0] != "go test ./... -count=1 -timeout 5m" {
+		t.Fatalf("QualityCommands = %#v", got)
+	}
+	if cfg.BackendDemand.PermissionMode != "acceptEdits" {
+		t.Fatalf("PermissionMode = %q, want acceptEdits", cfg.BackendDemand.PermissionMode)
+	}
+	if cfg.BackendDemand.GitLab.Project != "group/project" {
+		t.Fatalf("GitLab.Project = %q", cfg.BackendDemand.GitLab.Project)
+	}
+	if cfg.BackendDemand.GitLab.DefaultTargetBranch != "main" {
+		t.Fatalf("DefaultTargetBranch = %q", cfg.BackendDemand.GitLab.DefaultTargetBranch)
+	}
+}

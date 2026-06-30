@@ -39,6 +39,7 @@ Usage:
   devflow memory promote --demand <id> --candidate <n> --by <name>
   devflow memory reject --demand <id> --candidate <n> --by <name> --reason <text>
   devflow status --demand <id>
+  devflow status --all
   devflow next --demand <id>
   devflow doctor [--require-gitlab]
   devflow dogfood [--scenario coupon-eligibility] [--quality-command <command>]

@@ -16,6 +16,41 @@ func TestResolveDemandDefaultsReturnsEmptyWhenConfigMissing(t *testing.T) {
 	}
 }
 
+func TestResolveDemandDefaultsReturnsInvalidDiscoveredConfigError(t *testing.T) {
+	root := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd returned error: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWD); err != nil {
+			t.Fatalf("restore wd: %v", err)
+		}
+	}()
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("Chdir returned error: %v", err)
+	}
+	configPath := filepath.Join(root, ".devflow", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`providers:
+  - name: test
+    protocol: openai-compat
+    base_url: https://example.com/v1
+    model: test-model
+backend_demand:
+  permission_mode: nope
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err = resolveDemandDefaults("")
+	if err == nil {
+		t.Fatal("resolveDemandDefaults returned nil error, want invalid config error")
+	}
+}
+
 func TestResolveDemandDefaultsLoadsConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

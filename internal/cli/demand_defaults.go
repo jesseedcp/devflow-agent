@@ -24,7 +24,7 @@ func resolveDemandDefaults(configPath string) (demandCommandDefaults, error) {
 		if configPath != "" && errors.Is(err, os.ErrNotExist) {
 			return demandCommandDefaults{}, nil
 		}
-		if configPath == "" {
+		if configPath == "" && errors.Is(err, config.ErrNoConfigFound) {
 			return demandCommandDefaults{}, nil
 		}
 		return demandCommandDefaults{}, err

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,8 @@ var validProtocols = map[string]bool{
 }
 
 var statPath = os.Stat
+
+var ErrNoConfigFound = errors.New("no config file found")
 
 type ConfigError struct {
 	Message string
@@ -355,6 +358,7 @@ func loadDiscoveredConfig(home, wd string) (*AppConfig, error) {
 	if merged == nil {
 		return nil, &ConfigError{
 			Message: "No config file found. Expected .devflow/config.yaml or .devflow/config.local.yaml, or legacy .mewcode/config.yaml or .mewcode/config.local.yaml in the project or user home",
+			Cause:   ErrNoConfigFound,
 		}
 	}
 	if err := validateFinal(merged); err != nil {

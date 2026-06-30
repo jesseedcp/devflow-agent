@@ -18,10 +18,10 @@ func CouponEligibilityScenario() Scenario {
 		Description: "Only active members can claim coupons once",
 		Responses: map[demandflow.Stage]demandflow.RunnerResponse{
 			demandflow.StageRequirements: {
-				Text: "# Requirements: Dogfood coupon eligibility\n\n## Business Rules\n\n- Active members can claim an unexpired coupon once.\n- Inactive users are rejected with a clear reason.\n- Missing coupons are rejected with a clear reason.\n- Expired coupons are rejected with a clear reason.\n- Duplicate claims are rejected with a clear reason.\n",
+				Text: "# Requirements: Dogfood coupon eligibility\n\n## Business Rules\n\n- Active members can claim an unexpired coupon once.\n- Inactive users are rejected with a clear reason.\n- Missing coupons are rejected with a clear reason.\n- Expired coupons are rejected with a clear reason.\n- Duplicate claims are rejected with a clear reason.\n\n## Acceptance Criteria\n\n- Active members can claim one valid coupon successfully.\n- Inactive, missing, expired, and duplicate claims return distinct rejection reasons.\n\n## Risks\n\n- Coupon expiration and duplicate-claim checks must use the same clock source.\n",
 			},
 			demandflow.StagePlan: {
-				Text: "# Technical Plan: Dogfood coupon eligibility\n\n## Implementation Shape\n\n- Add an eligibility service that checks user status, coupon existence, expiration, and duplicate claims.\n- Cover each rejection reason with focused unit tests.\n- Keep persistence behind repository interfaces so policy can be tested without a database.\n",
+				Text: "# Technical Plan: Dogfood coupon eligibility\n\n## Implementation Steps\n\n- Add an eligibility service that checks user status, coupon existence, expiration, and duplicate claims.\n- Keep persistence behind repository interfaces so policy can be tested without a database.\n- Return stable rejection reason codes for each failed rule.\n\n## Test Strategy\n\n- Cover the successful claim path.\n- Cover inactive user, missing coupon, expired coupon, and duplicate claim rejections.\n\n## Risks\n\n- Repository clock drift can make expiration tests flaky unless the clock is injectable.\n",
 			},
 			demandflow.StageImplementation: {
 				Text:        "## Implementation Summary\n\nDeterministic dogfood records the intended backend implementation path without editing source files.\n",

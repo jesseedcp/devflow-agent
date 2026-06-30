@@ -90,6 +90,16 @@ Evaluation is deterministic local checking, not semantic LLM review. It reports 
 
 Use `devflow workbench` for an interactive demand list and selected-demand operator view.
 
+### Operator dogfood
+
+Use operator dogfood before relying on the workflow for real delivery. It runs the deterministic backend-demand loop while collecting console, drive, evaluate, and workbench evidence.
+
+```powershell
+devflow dogfood --operator-loop
+```
+
+The command writes `operator-dogfood-report.md` under the generated demand directory. The report is the quickest way to inspect whether the operator-facing loop is still coherent after changes.
+
 ## 4. Run Requirements
 
 ```powershell

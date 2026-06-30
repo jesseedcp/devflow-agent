@@ -64,6 +64,17 @@ devflow console --demand add-coupon-check --run-next
 
 `console` is built on the same local workspace evidence as `status`, but it separates the recommended action from the run-ready action. `--run-next` only executes runner-safe agent stages such as requirements, plan, implementation, verification, and closeout. It does not auto-confirm human gates, promote memory, reject memory, or merge MRs.
 
+### Guided drive
+
+Use `devflow drive` to run safe agent stages until the next manual gate.
+
+```powershell
+devflow drive --demand add-coupon-check
+devflow drive --demand add-coupon-check --dry-run
+```
+
+Drive never confirms stages, promotes memory, rejects memory, or merges MRs. It stops with an explicit reason when the next step needs a human.
+
 ## 4. Run Requirements
 
 ```powershell

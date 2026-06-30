@@ -42,6 +42,7 @@ Usage:
   devflow status --all
   devflow next --demand <id>
   devflow console [--demand <id>] [--run-next]
+  devflow drive --demand <id> [--dry-run]
   devflow doctor [--require-gitlab]
   devflow dogfood [--scenario coupon-eligibility] [--quality-command <command>]
   devflow smoke --title <title> --description <text>
@@ -64,6 +65,7 @@ Commands:
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
   console  Show the operator demand console
+  drive     Run runner-safe stages until the next manual gate
   doctor   Diagnose config, environment, git, and GitLab readiness
   dogfood  Run a deterministic full backend-demand loop
   smoke    Run an explicit local requirements-stage smoke test
@@ -109,6 +111,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runNext(args[1:], stdout)
 	case "console":
 		return runConsole(args[1:], stdout, stderr)
+	case "drive":
+		return runDrive(args[1:], stdout, stderr)
 	case "doctor":
 		return runDoctor(args[1:], stdout)
 	case "dogfood":

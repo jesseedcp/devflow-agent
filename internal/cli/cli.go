@@ -35,6 +35,9 @@ Usage:
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
   devflow verify --demand <id> --command <program and args>
   devflow closeout --demand <id> --result <text> --knowledge <text>
+  devflow memory list --demand <id>
+  devflow memory promote --demand <id> --candidate <n> --by <name>
+  devflow memory reject --demand <id> --candidate <n> --by <name> --reason <text>
   devflow status --demand <id>
   devflow next --demand <id>
   devflow doctor [--require-gitlab]
@@ -55,6 +58,7 @@ Commands:
   confirm   Record a human confirmation and advance the workflow gate
   verify    Record local verification evidence without advancing workflow
   closeout  Record closeout and memory-candidate reports without advancing workflow
+  memory    Review, promote, and reject stable knowledge candidates
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
   doctor   Diagnose config, environment, git, and GitLab readiness
@@ -94,6 +98,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runVerify(args[1:], stdout)
 	case "closeout":
 		return runCloseout(args[1:], stdout)
+	case "memory":
+		return runMemory(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(args[1:], stdout)
 	case "next":

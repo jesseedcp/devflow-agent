@@ -86,6 +86,22 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
+	defaults, err := resolveDemandDefaults(configPath)
+	if err != nil {
+		return err
+	}
+	runnerRoot = firstNonEmpty(strings.TrimSpace(runnerRoot), defaults.RunnerRoot)
+	qualityRoot = firstNonEmpty(strings.TrimSpace(qualityRoot), defaults.QualityRoot)
+	permissionMode = firstNonEmpty(strings.TrimSpace(permissionMode), defaults.PermissionMode)
+	gitlabProject = firstNonEmpty(strings.TrimSpace(gitlabProject), defaults.GitLabProject)
+	gitlabBaseURL = firstNonEmpty(strings.TrimSpace(gitlabBaseURL), defaults.GitLabBaseURL)
+	createMRTargetBranch = firstNonEmpty(strings.TrimSpace(createMRTargetBranch), defaults.CreateMRTargetBranch)
+	if len(qualityCommands) == 0 {
+		for _, command := range defaults.QualityCommands {
+			qualityCommands = append(qualityCommands, command)
+		}
+	}
+
 	var commands []quality.Command
 	for _, raw := range qualityCommands {
 		parts, err := parseCommandLine(raw)

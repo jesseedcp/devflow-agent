@@ -23,6 +23,7 @@ type Result struct {
 	DemandID string
 	Path     string
 	Snippet  string
+	Source   Source
 }
 
 type Store struct {

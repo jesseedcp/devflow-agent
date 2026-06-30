@@ -446,3 +446,26 @@ Active membership must be checked before coupon discount rules.
 		t.Fatalf("Snippet = %q, want description", got[0].Snippet)
 	}
 }
+
+func TestStoreSearchStableRejectsLinkedMemoryFile(t *testing.T) {
+	root := t.TempDir()
+	memDir := filepath.Join(root, ".devflow", "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll memory dir: %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside-memory.md")
+	if err := os.WriteFile(outside, []byte("coupon stable outside\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile outside memory returned error: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(memDir, "coupon-eligibility-policy.md")); err != nil {
+		t.Skipf("symlink setup unavailable: %v", err)
+	}
+
+	got, err := NewStore(root).SearchStable("coupon")
+	if err == nil {
+		t.Fatalf("SearchStable results = %#v, want unsafe stable memory error", got)
+	}
+	if !strings.Contains(err.Error(), "unsafe") {
+		t.Fatalf("SearchStable error = %q, want unsafe path error", err)
+	}
+}

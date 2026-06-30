@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -173,6 +174,82 @@ func TestStoreCandidateErrorsAreClear(t *testing.T) {
 	_, err := NewStore(root).PromoteCandidate(PromoteOptions{DemandID: "add-coupon-check", CandidateIndex: 1, By: "dd", Now: fixedMemoryTime})
 	if err == nil || !strings.Contains(err.Error(), "no memory candidates found") {
 		t.Fatalf("PromoteCandidate error = %v, want no memory candidates found", err)
+	}
+}
+
+func TestStorePromoteCandidateRejectsUnsafeStableMemoryDirectory(t *testing.T) {
+	root := t.TempDir()
+	seedDemandWithCandidates(t, root)
+
+	outside := t.TempDir()
+	devflowDir := filepath.Join(root, ".devflow")
+	if err := os.MkdirAll(devflowDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll .devflow returned error: %v", err)
+	}
+	linkPath := filepath.Join(devflowDir, "memory")
+	switch runtime.GOOS {
+	case "windows":
+		createWindowsJunction(t, linkPath, outside)
+	default:
+		if err := os.Symlink(outside, linkPath); err != nil {
+			t.Skipf("symlink setup unavailable: %v", err)
+		}
+	}
+
+	_, err := NewStore(root).PromoteCandidate(PromoteOptions{
+		DemandID:       "add-coupon-check",
+		CandidateIndex: 1,
+		Name:           "coupon-eligibility-policy",
+		Description:    "membership gates coupon eligibility",
+		By:             "dd",
+		Now:            fixedMemoryTime,
+	})
+	if err == nil {
+		t.Fatal("PromoteCandidate returned nil error for linked stable memory directory")
+	}
+	if !strings.Contains(err.Error(), "unsafe") {
+		t.Fatalf("PromoteCandidate error = %q, want unsafe path error", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(outside, "coupon-eligibility-policy.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("outside stable memory file stat err = %v, want not exist", statErr)
+	}
+}
+
+func TestStorePromoteCandidateRejectsUnsafeMemoryIndex(t *testing.T) {
+	root := t.TempDir()
+	seedDemandWithCandidates(t, root)
+
+	memDir := filepath.Join(root, ".devflow", "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll memory dir returned error: %v", err)
+	}
+	linkPath := filepath.Join(memDir, "MEMORY.md")
+	switch runtime.GOOS {
+	case "windows":
+		createWindowsJunction(t, linkPath, t.TempDir())
+	default:
+		outside := filepath.Join(t.TempDir(), "outside-index.md")
+		if err := os.WriteFile(outside, []byte("- outside\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile outside index returned error: %v", err)
+		}
+		if err := os.Symlink(outside, linkPath); err != nil {
+			t.Skipf("symlink setup unavailable: %v", err)
+		}
+	}
+
+	_, err := NewStore(root).PromoteCandidate(PromoteOptions{
+		DemandID:       "add-coupon-check",
+		CandidateIndex: 1,
+		Name:           "coupon-eligibility-policy",
+		Description:    "membership gates coupon eligibility",
+		By:             "dd",
+		Now:            fixedMemoryTime,
+	})
+	if err == nil {
+		t.Fatal("PromoteCandidate returned nil error for linked MEMORY.md")
+	}
+	if !strings.Contains(err.Error(), "unsafe") {
+		t.Fatalf("PromoteCandidate error = %q, want unsafe path error", err)
 	}
 }
 

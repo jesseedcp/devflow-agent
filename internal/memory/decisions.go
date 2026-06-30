@@ -89,13 +89,13 @@ func (s Store) PromoteCandidate(opts PromoteOptions) (PromoteResult, error) {
 	if err != nil {
 		return PromoteResult{}, err
 	}
-	fileName := name + ".md"
-	path := filepath.Join(memDir, fileName)
-	if _, err := os.Lstat(path); err == nil {
-		fileName = name + "-" + opts.DemandID + ".md"
-		path = filepath.Join(memDir, fileName)
-	} else if err != nil && !os.IsNotExist(err) {
-		return PromoteResult{}, fmt.Errorf("inspect stable memory path: %w", err)
+	paths, err := s.stableMemoryPaths()
+	if err != nil {
+		return PromoteResult{}, err
+	}
+	fileName, path, err := stableMemoryTarget(memDir, paths.expectedMemDir, name, opts.DemandID)
+	if err != nil {
+		return PromoteResult{}, err
 	}
 
 	promotedAt := now()
@@ -105,7 +105,8 @@ func (s Store) PromoteCandidate(opts PromoteOptions) (PromoteResult, error) {
 	}
 
 	indexPath := filepath.Join(memDir, "MEMORY.md")
-	if err := appendMemoryIndex(indexPath, name, fileName, description); err != nil {
+	expectedIndexPath := filepath.Join(paths.expectedMemDir, "MEMORY.md")
+	if err := appendMemoryIndex(indexPath, expectedIndexPath, name, fileName, description); err != nil {
 		return PromoteResult{}, err
 	}
 
@@ -255,18 +256,89 @@ func (s Store) eventsPath(demandID string) (string, error) {
 }
 
 func (s Store) ensureStableMemoryDir() (string, error) {
-	if s.root == "" {
-		return "", fmt.Errorf("store root is required")
-	}
-	rootAbs, err := filepath.Abs(s.root)
+	paths, err := s.stableMemoryPaths()
 	if err != nil {
-		return "", fmt.Errorf("resolve store root: %w", err)
+		return "", err
 	}
-	memDir := filepath.Join(rootAbs, ".devflow", memoryDirName)
-	if err := os.MkdirAll(memDir, 0o755); err != nil {
-		return "", fmt.Errorf("create stable memory directory: %w", err)
+
+	exists, err := ensureSafePath(paths.devflowPath, paths.expectedDevflow)
+	if err != nil {
+		return "", err
 	}
-	return memDir, nil
+	if !exists {
+		if err := os.MkdirAll(paths.devflowPath, 0o755); err != nil {
+			return "", fmt.Errorf("create .devflow directory: %w", err)
+		}
+		if _, err := ensureSafePath(paths.devflowPath, paths.expectedDevflow); err != nil {
+			return "", err
+		}
+	}
+
+	exists, err = ensureSafePath(paths.memDir, paths.expectedMemDir)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		if err := os.MkdirAll(paths.memDir, 0o755); err != nil {
+			return "", fmt.Errorf("create stable memory directory: %w", err)
+		}
+		if _, err := ensureSafePath(paths.memDir, paths.expectedMemDir); err != nil {
+			return "", err
+		}
+	}
+	return paths.memDir, nil
+}
+
+func stableMemoryTarget(memDir, expectedMemDir, name, demandID string) (string, string, error) {
+	fileName := name + ".md"
+	path := filepath.Join(memDir, fileName)
+	exists, err := stableMemoryTargetExists(path, filepath.Join(expectedMemDir, fileName))
+	if err != nil {
+		return "", "", err
+	}
+	if exists {
+		fileName = name + "-" + demandID + ".md"
+		path = filepath.Join(memDir, fileName)
+		exists, err = stableMemoryTargetExists(path, filepath.Join(expectedMemDir, fileName))
+		if err != nil {
+			return "", "", err
+		}
+		if exists {
+			return "", "", fmt.Errorf("stable memory path %q already exists", path)
+		}
+	}
+	return fileName, path, nil
+}
+
+func stableMemoryTargetExists(path, expectedResolved string) (bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect stable memory path: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false, fmt.Errorf("unsafe stable memory path %q: symlink not allowed", path)
+	}
+	if info.IsDir() {
+		return false, fmt.Errorf("stable memory path %q is a directory", path)
+	}
+	reparsePoint, err := hasReparsePoint(info)
+	if err != nil {
+		return false, fmt.Errorf("inspect stable memory path reparse point: %w", err)
+	}
+	if reparsePoint {
+		return false, fmt.Errorf("unsafe stable memory path %q: reparse point not allowed", path)
+	}
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false, fmt.Errorf("resolve stable memory path: %w", err)
+	}
+	if !samePath(resolvedPath, expectedResolved) {
+		return false, fmt.Errorf("unsafe stable memory path %q resolves outside %q", path, expectedResolved)
+	}
+	return true, nil
 }
 
 func normalizeStableName(value string) string {
@@ -292,11 +364,18 @@ func stableMemoryBody(name, description, candidate, demandID, by string, promote
 	return b.String()
 }
 
-func appendMemoryIndex(indexPath, name, fileName, description string) error {
+func appendMemoryIndex(indexPath, expectedIndexPath, name, fileName, description string) error {
 	entry := "- [" + name + "](" + fileName + ") - " + description
-	data, err := os.ReadFile(indexPath)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read MEMORY.md: %w", err)
+	exists, err := stableMemoryTargetExists(indexPath, expectedIndexPath)
+	if err != nil {
+		return err
+	}
+	var data []byte
+	if exists {
+		data, err = os.ReadFile(indexPath)
+		if err != nil {
+			return fmt.Errorf("read MEMORY.md: %w", err)
+		}
 	}
 	text := string(data)
 	for _, line := range strings.Split(text, "\n") {

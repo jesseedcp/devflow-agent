@@ -132,3 +132,56 @@ func TestWorkbenchRefreshKeyReloadsDemands(t *testing.T) {
 		t.Fatal("refresh key did not return a load command")
 	}
 }
+
+func TestWorkbenchSnapshotRendersDemandList(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "snapshot-demand", Title: "Snapshot demand", Description: "Snapshot", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{"Devflow Workbench Snapshot", "snapshot-demand", "verification"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("snapshot output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestWorkbenchSnapshotSelectedDemandShowsDetail(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "snapshot-detail", Title: "Snapshot detail", Description: "Snapshot", Source: "test", State: string(workflow.Created)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{"Summary", "State:", "Attention:", "Quality:", "Next:", "Run-ready:"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("snapshot detail missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestWorkbenchSnapshotMissingDemandReturnsError(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	if err := store.CreateDemand(artifacts.Demand{ID: "known", Title: "Known", Source: "test", State: string(workflow.Created)}); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", "missing"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), `demand "missing" not found`) {
+		t.Fatalf("err = %v, want missing demand error", err)
+	}
+}

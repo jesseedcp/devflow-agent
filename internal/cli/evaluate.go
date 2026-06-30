@@ -34,7 +34,7 @@ func runEvaluate(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 	printEvaluation(stdout, evaluation)
-	if opts.strict && evaluation.Overall == demandflow.EvaluationFail {
+	if opts.strict && (evaluation.Overall == demandflow.EvaluationFail || evaluation.Overall == demandflow.EvaluationWarning) {
 		return fmt.Errorf("evaluation failed for %s", opts.demandID)
 	}
 	return nil

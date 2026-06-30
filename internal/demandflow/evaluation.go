@@ -109,7 +109,7 @@ func evaluateVerification(root, demandID string) (StageEvaluation, error) {
 		if event.Type != "verification.recorded" {
 			continue
 		}
-		latestStatus = strings.TrimSpace(event.Data["status"])
+		latestStatus = normalizeVerificationEvaluationStatus(event.Data["status"])
 		latestCommand = strings.TrimSpace(event.Data["command"])
 	}
 	checks := []EvaluationCheck{
@@ -118,6 +118,17 @@ func evaluateVerification(root, demandID string) (StageEvaluation, error) {
 		statusCheck("verification.command", "verification command is recorded", latestCommand != "", "warning", latestCommand),
 	}
 	return buildStageEvaluation(StageVerification, checks), nil
+}
+
+func normalizeVerificationEvaluationStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pass", "passed", "success", "ok":
+		return "pass"
+	case "fail", "failed", "failure", "error":
+		return "fail"
+	default:
+		return strings.ToLower(strings.TrimSpace(status))
+	}
 }
 
 func evaluateCloseout(root, demandID string) StageEvaluation {

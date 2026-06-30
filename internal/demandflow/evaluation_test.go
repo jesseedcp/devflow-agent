@@ -92,6 +92,26 @@ func TestEvaluateVerificationFailsWithoutPassEvidence(t *testing.T) {
 	}
 }
 
+func TestEvaluateVerificationAcceptsUppercasePassEvidence(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-verification-pass", Title: "Eval verification pass", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC), Type: "verification.recorded", Message: "pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+
+	eval, err := EvaluateDemand(root, demand.ID, StageVerification)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationPass {
+		t.Fatalf("verification status = %s, want pass", eval.Stages[0].Status)
+	}
+}
+
 func TestEvaluateCloseoutWarnsWithoutMemoryCandidates(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

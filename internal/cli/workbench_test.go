@@ -120,3 +120,15 @@ func TestWorkbenchShortcutsUpdateMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkbenchRefreshKeyReloadsDemands(t *testing.T) {
+	model := workbenchModel{demands: []workbenchDemand{{ID: "stale"}}}
+	next, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	updated := next.(workbenchModel)
+	if updated.message != "Refreshing demands..." {
+		t.Fatalf("message = %q, want refresh message", updated.message)
+	}
+	if cmd == nil {
+		t.Fatal("refresh key did not return a load command")
+	}
+}

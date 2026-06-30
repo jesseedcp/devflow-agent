@@ -118,7 +118,9 @@ func (m workbenchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loadDemands
 		case "e":
 			m.message = m.runSelected(workbenchEvaluate)
-		case "refresh":
+			return m, m.loadDemands
+		case "R", "ctrl+r":
+			m.message = "Refreshing demands..."
 			return m, m.loadDemands
 		}
 	}
@@ -145,7 +147,7 @@ func (m workbenchModel) View() string {
 	if m.message != "" {
 		fmt.Fprintf(&builder, "\n%s\n", m.message)
 	}
-	builder.WriteString("\n↑/↓ select · enter detail · r run · d drive · e evaluate · q quit\n")
+	builder.WriteString("\n↑/↓ select · enter detail · r run · d drive · e evaluate · R refresh · q quit\n")
 	return builder.String()
 }
 

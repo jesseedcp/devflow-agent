@@ -29,6 +29,27 @@ func runDrive(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	consoleOpts := consoleArgs{
+		root:           opts.root,
+		demandID:       opts.demandID,
+		runnerRoot:     opts.runnerRoot,
+		qualityRoot:    opts.qualityRoot,
+		configPath:     opts.configPath,
+		permissionMode: opts.permissionMode,
+		gitlabProject:  opts.gitlabProject,
+		gitlabMR:       opts.gitlabMR,
+		gitlabBaseURL:  opts.gitlabBaseURL,
+		qualityCommand: opts.qualityCommand,
+	}
+	if err := applyDefaultsToConsoleArgs(&consoleOpts); err != nil {
+		return err
+	}
+	opts.runnerRoot = consoleOpts.runnerRoot
+	opts.qualityRoot = consoleOpts.qualityRoot
+	opts.permissionMode = consoleOpts.permissionMode
+	opts.gitlabProject = consoleOpts.gitlabProject
+	opts.gitlabBaseURL = consoleOpts.gitlabBaseURL
+	opts.qualityCommand = consoleOpts.qualityCommand
 	if opts.dryRun {
 		return runDriveDryRun(opts, stdout)
 	}

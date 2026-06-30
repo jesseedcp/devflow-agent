@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,8 @@ var validProtocols = map[string]bool{
 }
 
 var statPath = os.Stat
+
+var ErrNoConfigFound = errors.New("no config file found")
 
 type ConfigError struct {
 	Message string
@@ -86,10 +89,77 @@ type MCPServerConfig struct {
 }
 
 type AppConfig struct {
-	Providers      []ProviderConfig  `yaml:"providers"`
-	PermissionMode string            `yaml:"permission_mode"`
-	MCPServers     []MCPServerConfig `yaml:"mcp_servers"`
-	Hooks          []hooks.Hook      `yaml:"hooks"`
+	Providers      []ProviderConfig    `yaml:"providers"`
+	PermissionMode string              `yaml:"permission_mode"`
+	BackendDemand  BackendDemandConfig `yaml:"backend_demand"`
+	MCPServers     []MCPServerConfig   `yaml:"mcp_servers"`
+	Hooks          []hooks.Hook        `yaml:"hooks"`
+}
+
+type BackendDemandConfig struct {
+	RunnerRoot           string       `yaml:"runner_root"`
+	QualityRoot          string       `yaml:"quality_root"`
+	QualityCommands      []string     `yaml:"quality_commands"`
+	PermissionMode       string       `yaml:"permission_mode"`
+	GitLab               GitLabConfig `yaml:"gitlab"`
+	CreateMRTargetBranch string       `yaml:"create_mr_target_branch"`
+}
+
+type GitLabConfig struct {
+	Project             string `yaml:"project"`
+	BaseURL             string `yaml:"base_url"`
+	DefaultTargetBranch string `yaml:"default_target_branch"`
+}
+
+func cloneBackendDemandConfig(in BackendDemandConfig) BackendDemandConfig {
+	out := in
+	if in.QualityCommands != nil {
+		out.QualityCommands = append([]string(nil), in.QualityCommands...)
+	}
+	return out
+}
+
+func mergeBackendDemand(base, override BackendDemandConfig) BackendDemandConfig {
+	merged := cloneBackendDemandConfig(base)
+	if override.RunnerRoot != "" {
+		merged.RunnerRoot = override.RunnerRoot
+	}
+	if override.QualityRoot != "" {
+		merged.QualityRoot = override.QualityRoot
+	}
+	if override.QualityCommands != nil {
+		merged.QualityCommands = append([]string(nil), override.QualityCommands...)
+	}
+	if override.PermissionMode != "" {
+		merged.PermissionMode = override.PermissionMode
+	}
+	if override.CreateMRTargetBranch != "" {
+		merged.CreateMRTargetBranch = override.CreateMRTargetBranch
+	}
+	if override.GitLab.Project != "" {
+		merged.GitLab.Project = override.GitLab.Project
+	}
+	if override.GitLab.BaseURL != "" {
+		merged.GitLab.BaseURL = override.GitLab.BaseURL
+	}
+	if override.GitLab.DefaultTargetBranch != "" {
+		merged.GitLab.DefaultTargetBranch = override.GitLab.DefaultTargetBranch
+	}
+	return merged
+}
+
+func validateBackendDemand(cfg BackendDemandConfig) error {
+	for i, raw := range cfg.QualityCommands {
+		if strings.TrimSpace(raw) == "" {
+			return &ConfigError{Message: fmt.Sprintf("backend_demand.quality_commands[%d] must not be empty", i)}
+		}
+	}
+	switch cfg.PermissionMode {
+	case "", "default", "acceptEdits", "bypassPermissions":
+		return nil
+	default:
+		return &ConfigError{Message: fmt.Sprintf("backend_demand.permission_mode %q is invalid", cfg.PermissionMode)}
+	}
 }
 
 func loadSingleFile(path string) (*AppConfig, error) {
@@ -120,6 +190,7 @@ func mergeConfig(base, override *AppConfig) *AppConfig {
 	if override.PermissionMode != "" {
 		merged.PermissionMode = override.PermissionMode
 	}
+	merged.BackendDemand = mergeBackendDemand(merged.BackendDemand, override.BackendDemand)
 	if len(override.MCPServers) > 0 {
 		byName := make(map[string]int, len(merged.MCPServers))
 		for i, server := range merged.MCPServers {
@@ -204,6 +275,9 @@ func validateLayer(cfg *AppConfig) error {
 	if err := validateUniqueNames(cfg); err != nil {
 		return err
 	}
+	if err := validateBackendDemand(cfg.BackendDemand); err != nil {
+		return err
+	}
 	if err := hooks.Validate(cfg.Hooks); err != nil {
 		return &ConfigError{Message: fmt.Sprintf("Invalid hooks configuration: %s", err)}
 	}
@@ -284,6 +358,7 @@ func loadDiscoveredConfig(home, wd string) (*AppConfig, error) {
 	if merged == nil {
 		return nil, &ConfigError{
 			Message: "No config file found. Expected .devflow/config.yaml or .devflow/config.local.yaml, or legacy .mewcode/config.yaml or .mewcode/config.local.yaml in the project or user home",
+			Cause:   ErrNoConfigFound,
 		}
 	}
 	if err := validateFinal(merged); err != nil {
@@ -322,6 +397,7 @@ func cloneAppConfig(cfg *AppConfig) *AppConfig {
 	return &AppConfig{
 		Providers:      cloneProviderConfigs(cfg.Providers),
 		PermissionMode: cfg.PermissionMode,
+		BackendDemand:  cloneBackendDemandConfig(cfg.BackendDemand),
 		MCPServers:     cloneMCPServers(cfg.MCPServers),
 		Hooks:          cloneHooks(cfg.Hooks),
 	}

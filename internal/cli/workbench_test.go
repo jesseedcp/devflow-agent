@@ -185,3 +185,25 @@ func TestWorkbenchSnapshotMissingDemandReturnsError(t *testing.T) {
 		t.Fatalf("err = %v, want missing demand error", err)
 	}
 }
+
+func TestWorkbenchDriveUsesBackendDemandDefaults(t *testing.T) {
+	root := t.TempDir()
+	configPath := writeBackendDemandDefaultsConfig(t, root)
+	var got workbenchOptions
+	old := workbenchDrive
+	defer func() { workbenchDrive = old }()
+	workbenchDrive = func(opts workbenchOptions, demandID string) string {
+		got = opts
+		return "drive called"
+	}
+
+	model := workbenchModel{opts: workbenchOptions{root: root, configPath: configPath}, demands: []workbenchDemand{{ID: "wb-defaults"}}}
+	next, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	updated := next.(workbenchModel)
+	if updated.message != "drive called" {
+		t.Fatalf("message = %q", updated.message)
+	}
+	if len(got.qualityCommand) != 1 || got.qualityCommand[0] != "go test ./..." {
+		t.Fatalf("quality defaults = %#v", got.qualityCommand)
+	}
+}

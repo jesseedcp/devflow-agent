@@ -54,7 +54,22 @@ func runDoctorChecks(ctx context.Context, configPath string, requireGitLab bool)
 	} else {
 		checks = append(checks, doctorCheck{Name: "gitlab", OK: true, Message: "skipped; pass --require-gitlab to validate mr-review token setup"})
 	}
+	checks = append(checks, checkBackendDemandDefaults(configPath))
 	return checks
+}
+
+func checkBackendDemandDefaults(configPath string) doctorCheck {
+	defaults, err := resolveDemandDefaults(configPath)
+	if err != nil {
+		return doctorCheck{Name: "backend-demand", OK: false, Message: err.Error()}
+	}
+	if len(defaults.QualityCommands) == 0 && defaults.PermissionMode == "" && defaults.GitLabProject == "" {
+		return doctorCheck{Name: "backend-demand", OK: true, Message: "no defaults configured; CLI flags remain required"}
+	}
+	if len(defaults.QualityCommands) > 0 {
+		return doctorCheck{Name: "backend-demand", OK: true, Message: "quality command defaults configured"}
+	}
+	return doctorCheck{Name: "backend-demand", OK: true, Message: "defaults configured"}
 }
 
 func checkGit(ctx context.Context) doctorCheck {

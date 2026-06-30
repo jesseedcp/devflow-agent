@@ -139,3 +139,34 @@ func TestDriveStopsOnRunnerFailure(t *testing.T) {
 		t.Fatalf("stdout = %q, want runner_failed", stdout.String())
 	}
 }
+
+func TestDriveUsesBackendDemandDefaults(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "drive-defaults", Title: "Drive defaults", Source: "test", State: string(workflow.Implementation)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	configPath := writeBackendDemandDefaultsConfig(t, root)
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var got []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		got = append([]string(nil), args...)
+		loaded, err := store.LoadDemand(demand.ID)
+		if err != nil {
+			return err
+		}
+		loaded.State = string(workflow.MRReview)
+		return store.SaveDemand(loaded)
+	}
+
+	if err := Run([]string{"drive", "--root", root, "--config", configPath, "--demand", demand.ID, "--max-steps", "1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("drive returned error: %v", err)
+	}
+	for _, want := range []string{"--permission-mode", "acceptEdits", "--quality-command", "go test ./..."} {
+		if !containsString(got, want) {
+			t.Fatalf("drive args missing %q: %#v", want, got)
+		}
+	}
+}

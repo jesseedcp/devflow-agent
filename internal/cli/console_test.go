@@ -243,3 +243,28 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+func TestConsoleRunNextUsesBackendDemandDefaults(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	if err := store.CreateDemand(artifacts.Demand{ID: "console-defaults", Title: "Console defaults", Source: "test", State: string(workflow.Implementation)}); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	configPath := writeBackendDemandDefaultsConfig(t, root)
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var got []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		got = append([]string(nil), args...)
+		return nil
+	}
+
+	if err := Run([]string{"console", "--root", root, "--config", configPath, "--demand", "console-defaults", "--run-next"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console returned error: %v", err)
+	}
+	for _, want := range []string{"--permission-mode", "acceptEdits", "--quality-command", "go test ./..."} {
+		if !containsString(got, want) {
+			t.Fatalf("console args missing %q: %#v", want, got)
+		}
+	}
+}

@@ -350,3 +350,45 @@ func TestRunImplementationCreateMergeRequestFlagsSyncMR(t *testing.T) {
 		t.Fatalf("progress.md missing MR evidence:\n%s", string(progress))
 	}
 }
+
+func TestRunImplementationUsesBackendDemandDefaults(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Implementation)
+	t.Setenv("DEVFLOW_CLI_HELPER", "pwd")
+
+	executable := filepath.ToSlash(testCLIExecutable(t))
+	commandText := fmt.Sprintf(`"%s" -test.run=^TestCLICommandHelper$`, executable)
+	configPath := filepath.Join(root, ".devflow", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+	configBody := "providers:\n  - name: test\n    protocol: openai-compat\n    base_url: https://example.com/v1\n    model: test-model\nbackend_demand:\n  runner_root: .\n  quality_root: .\n  quality_commands:\n    - '" + commandText + "'\n  permission_mode: acceptEdits\n"
+	if err := os.WriteFile(configPath, []byte(configBody), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	oldRunner := newDemandRunner
+	defer func() { newDemandRunner = oldRunner }()
+	var gotMode permissions.PermissionMode
+	newDemandRunner = func(configPath string, mode permissions.PermissionMode) demandflow.Runner {
+		gotMode = mode
+		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
+			demandflow.StageImplementation: {Text: "implemented"},
+		}}
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"run", "--root", root, "--config", configPath, "--demand", "add-coupon-check", "--stage", "implementation"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run returned error: %v\n%s", err, stdout.String())
+	}
+	if gotMode != permissions.ModeAcceptEdits {
+		t.Fatalf("permission mode = %s, want acceptEdits", gotMode)
+	}
+	progress, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.ProgressFile))
+	if err != nil {
+		t.Fatalf("read progress: %v", err)
+	}
+	if !strings.Contains(string(progress), "TestCLICommandHelper") {
+		t.Fatalf("progress missing default quality command:\n%s", string(progress))
+	}
+}

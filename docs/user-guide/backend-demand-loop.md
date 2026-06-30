@@ -86,6 +86,10 @@ devflow evaluate --demand add-coupon-check --stage requirements --strict
 
 Evaluation is deterministic local checking, not semantic LLM review. It reports missing sections, verification evidence, and closeout memory-candidate signals without mutating demand state.
 
+### Workbench TUI
+
+Use `devflow workbench` for an interactive demand list and selected-demand operator view.
+
 ## 4. Run Requirements
 
 ```powershell

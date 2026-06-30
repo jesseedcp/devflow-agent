@@ -51,6 +51,7 @@ Usage:
   devflow review-gate --gitlab-project <project> --gitlab-mr <iid>
   devflow mr ensure --gitlab-project <project> --source-branch <branch> --target-branch <branch> --title <text>
   devflow live-dogfood [--root <path>] [--config <path>] [--with-gitlab]
+  devflow workbench
   devflow chat
   devflow tui
 
@@ -75,6 +76,7 @@ Commands:
   review-gate Check unresolved GitLab MR comments directly
   mr        Create or reuse GitLab merge requests
   live-dogfood Run opt-in live provider sandbox dogfood
+  workbench Launch the demand workbench TUI
   chat      Launch the interactive runtime (alias: tui)
   tui       Alias for chat
 `
@@ -131,6 +133,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runMR(args[1:], stdout, stderr)
 	case "live-dogfood":
 		return runLiveDogfood(args[1:], stdout, stderr)
+	case "workbench":
+		return runWorkbench(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], helpText)
 	}

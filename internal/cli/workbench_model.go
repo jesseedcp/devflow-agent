@@ -196,7 +196,11 @@ func (m workbenchModel) runSelected(fn func(workbenchOptions, string) string) st
 	if demandID == "" {
 		return "Blocked: no demand selected"
 	}
-	return fn(m.opts, demandID)
+	opts := m.opts
+	if err := applyDefaultsToWorkbenchOptions(&opts); err != nil {
+		return "Blocked: " + err.Error()
+	}
+	return fn(opts, demandID)
 }
 
 func (m workbenchModel) renderDetail(builder *strings.Builder) {

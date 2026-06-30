@@ -60,3 +60,34 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
+func applyDefaultsToConsoleArgs(opts *consoleArgs) error {
+	defaults, err := resolveDemandDefaults(opts.configPath)
+	if err != nil {
+		return err
+	}
+	opts.runnerRoot = firstNonEmpty(strings.TrimSpace(opts.runnerRoot), defaults.RunnerRoot)
+	opts.qualityRoot = firstNonEmpty(strings.TrimSpace(opts.qualityRoot), defaults.QualityRoot)
+	opts.permissionMode = firstNonEmpty(strings.TrimSpace(opts.permissionMode), defaults.PermissionMode)
+	opts.gitlabProject = firstNonEmpty(strings.TrimSpace(opts.gitlabProject), defaults.GitLabProject)
+	opts.gitlabBaseURL = firstNonEmpty(strings.TrimSpace(opts.gitlabBaseURL), defaults.GitLabBaseURL)
+	if len(opts.qualityCommand) == 0 {
+		for _, command := range defaults.QualityCommands {
+			opts.qualityCommand = append(opts.qualityCommand, command)
+		}
+	}
+	return nil
+}
+
+func applyDefaultsToWorkbenchOptions(opts *workbenchOptions) error {
+	defaults, err := resolveDemandDefaults(opts.configPath)
+	if err != nil {
+		return err
+	}
+	if len(opts.qualityCommand) == 0 {
+		for _, command := range defaults.QualityCommands {
+			opts.qualityCommand = append(opts.qualityCommand, command)
+		}
+	}
+	return nil
+}

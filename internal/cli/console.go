@@ -30,6 +30,9 @@ func runConsole(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if err := applyDefaultsToConsoleArgs(&opts); err != nil {
+		return err
+	}
 	if opts.runNext {
 		return runConsoleNext(opts, stdout, stderr)
 	}

@@ -34,6 +34,9 @@ func runWorkbench(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if err := applyDefaultsToWorkbenchOptions(&opts); err != nil {
+		return err
+	}
 	if opts.snapshot {
 		text, err := renderWorkbenchSnapshot(opts)
 		if err != nil {

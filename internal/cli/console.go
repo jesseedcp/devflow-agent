@@ -152,8 +152,11 @@ func runConsoleNext(opts consoleArgs, stdout io.Writer, stderr io.Writer) error 
 	if err != nil {
 		return err
 	}
-	action := summary.PrimaryAction
+	action := consoleRunnableAction(opts, summary.PrimaryAction)
 	if !action.Runnable {
+		if action.Kind == demandflow.ConsoleActionMRReview {
+			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+		}
 		fmt.Fprintf(stdout, "next action is not runner-safe: %s\n", action.Label)
 		if action.BlockReason != "" {
 			fmt.Fprintf(stdout, "%s\n", action.BlockReason)
@@ -164,6 +167,18 @@ func runConsoleNext(opts consoleArgs, stdout io.Writer, stderr io.Writer) error 
 		return nil
 	}
 	return runConsoleStageAction(opts, action, stdout, stderr)
+}
+
+func consoleRunnableAction(opts consoleArgs, action demandflow.ConsoleAction) demandflow.ConsoleAction {
+	if action.Kind != demandflow.ConsoleActionMRReview {
+		return action
+	}
+	if strings.TrimSpace(opts.gitlabProject) == "" || strings.TrimSpace(opts.gitlabMR) == "" {
+		return action
+	}
+	action.Runnable = true
+	action.BlockReason = ""
+	return action
 }
 
 func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, stdout io.Writer, stderr io.Writer) error {

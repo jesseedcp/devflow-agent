@@ -166,6 +166,48 @@ func TestConsoleRunNextPassesQualityAndRunnerFlags(t *testing.T) {
 	}
 }
 
+func TestConsoleRunNextRunsMRReviewWithGitLabFlags(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-mr", Title: "Console MR", Description: "Review MR", Source: "test", State: string(workflow.MRReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var gotArgs []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next", "--gitlab-project", "group/project", "--gitlab-mr", "12", "--gitlab-base-url", "https://gitlab.example"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	for _, want := range []string{"--stage", "mr-review", "--gitlab-project", "group/project", "--gitlab-mr", "12", "--gitlab-base-url", "https://gitlab.example"} {
+		if !containsString(gotArgs, want) {
+			t.Fatalf("runner args = %#v, missing %q", gotArgs, want)
+		}
+	}
+}
+
+func TestConsoleRunNextRefusesMRReviewWithoutGitLabFlags(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-mr-missing", Title: "Console MR missing", Description: "Review MR", Source: "test", State: string(workflow.MRReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next"}, &stdout, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--gitlab-project and --gitlab-mr are required for mr-review") {
+		t.Fatalf("err = %v, stdout = %q, want missing GitLab flags error", err, stdout.String())
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

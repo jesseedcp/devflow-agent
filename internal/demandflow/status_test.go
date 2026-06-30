@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
@@ -118,5 +119,63 @@ func TestNextActionsForMRReviewReturns(t *testing.T) {
 				t.Fatalf("command = %q, want contains %q", actions[0].Command, tc.want)
 			}
 		})
+	}
+}
+
+func TestInspectStatusVerificationPassPrefersConfirmation(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{
+		ID:          "status-pass-next",
+		Title:       "Status pass next",
+		Description: "Pass evidence next action",
+		Source:      "test",
+		State:       string(workflow.Verification),
+	}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 2, 0, 0, 0, time.UTC), Type: "verification.recorded", Message: "pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+
+	report, err := InspectStatus(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectStatus returned error: %v", err)
+	}
+	if len(report.Actions) == 0 {
+		t.Fatal("InspectStatus returned no actions")
+	}
+	if report.Actions[0].Label != "Confirm verification" {
+		t.Fatalf("first action = %#v, want Confirm verification", report.Actions[0])
+	}
+}
+
+func TestInspectStatusCompletedWithPendingMemoryPrefersMemoryReview(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{
+		ID:          "status-memory-next",
+		Title:       "Status memory next",
+		Description: "Memory next action",
+		Source:      "test",
+		State:       string(workflow.Completed),
+	}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.MemoryCandidatesFile, "# Memory Candidates: Status memory next\n\n## 稳定知识候选\n\n- Reuse this product rule\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+
+	report, err := InspectStatus(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectStatus returned error: %v", err)
+	}
+	if len(report.Actions) == 0 {
+		t.Fatal("InspectStatus returned no actions")
+	}
+	if report.Actions[0].Label != "Review memory candidates" {
+		t.Fatalf("first action = %#v, want Review memory candidates", report.Actions[0])
 	}
 }

@@ -10,33 +10,23 @@ import (
 )
 
 func runStatus(args []string, stdout io.Writer) error {
-	opts, err := parseDemandLookupArgs("status", args)
+	opts, err := parseStatusArgs(args)
 	if err != nil {
 		return err
 	}
-	report, err := demandflow.InspectStatus(opts.root, opts.demandID)
+	if opts.all {
+		summaries, err := demandflow.ListWorkspaces(opts.root)
+		if err != nil {
+			return err
+		}
+		printWorkspaceList(stdout, summaries)
+		return nil
+	}
+	summary, err := demandflow.InspectWorkspace(opts.root, opts.demandID)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "Demand: %s\n", report.Demand.ID)
-	fmt.Fprintf(stdout, "Title: %s\n", report.Demand.Title)
-	fmt.Fprintf(stdout, "State: %s\n", report.State)
-	fmt.Fprintf(stdout, "Directory: %s\n\n", report.DemandDir)
-	fmt.Fprintln(stdout, "Artifacts:")
-	for _, artifact := range report.Artifacts {
-		status := "missing"
-		if artifact.Exists {
-			status = fmt.Sprintf("%d bytes", artifact.Size)
-		}
-		fmt.Fprintf(stdout, "  - %s: %s\n", artifact.Name, status)
-	}
-	fmt.Fprintln(stdout, "\nNext actions:")
-	for _, action := range report.Actions {
-		fmt.Fprintf(stdout, "  - %s: %s\n", action.Label, action.Reason)
-		if strings.TrimSpace(action.Command) != "" {
-			fmt.Fprintf(stdout, "    %s\n", action.Command)
-		}
-	}
+	printWorkspaceDetail(stdout, summary)
 	return nil
 }
 
@@ -45,16 +35,49 @@ func runNext(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	report, err := demandflow.InspectStatus(opts.root, opts.demandID)
+	summary, err := demandflow.InspectWorkspace(opts.root, opts.demandID)
 	if err != nil {
 		return err
 	}
-	if len(report.Actions) == 0 || strings.TrimSpace(report.Actions[0].Command) == "" {
-		fmt.Fprintf(stdout, "No next command for %s in state %s\n", report.Demand.ID, report.State)
+	if len(summary.Actions) == 0 || strings.TrimSpace(summary.Actions[0].Command) == "" {
+		fmt.Fprintf(stdout, "No next command for %s in state %s\n", summary.Demand.ID, summary.State)
 		return nil
 	}
-	fmt.Fprintln(stdout, report.Actions[0].Command)
+	fmt.Fprintln(stdout, summary.Actions[0].Command)
 	return nil
+}
+
+type statusArgs struct {
+	root     string
+	demandID string
+	all      bool
+}
+
+func parseStatusArgs(args []string) (statusArgs, error) {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var opts statusArgs
+	fs.StringVar(&opts.root, "root", ".", "root directory")
+	fs.StringVar(&opts.demandID, "demand", "", "demand id")
+	fs.BoolVar(&opts.all, "all", false, "list all demands")
+	if err := fs.Parse(args); err != nil {
+		return statusArgs{}, err
+	}
+	opts.root = strings.TrimSpace(opts.root)
+	if opts.root == "" {
+		opts.root = "."
+	}
+	opts.demandID = strings.TrimSpace(opts.demandID)
+	if opts.all {
+		if opts.demandID != "" {
+			return statusArgs{}, fmt.Errorf("--all cannot be combined with --demand")
+		}
+		return opts, nil
+	}
+	if opts.demandID == "" {
+		return statusArgs{}, fmt.Errorf("--demand is required")
+	}
+	return opts, nil
 }
 
 type demandLookupArgs struct {
@@ -80,4 +103,85 @@ func parseDemandLookupArgs(name string, args []string) (demandLookupArgs, error)
 		return demandLookupArgs{}, fmt.Errorf("--demand is required")
 	}
 	return opts, nil
+}
+
+func printWorkspaceDetail(stdout io.Writer, summary demandflow.WorkspaceSummary) {
+	fmt.Fprintf(stdout, "Demand: %s\n", summary.Demand.ID)
+	fmt.Fprintf(stdout, "Title: %s\n", summary.Demand.Title)
+	fmt.Fprintf(stdout, "State: %s\n", summary.State)
+	fmt.Fprintf(stdout, "Attention: %s\n", summary.Attention)
+	fmt.Fprintf(stdout, "Directory: %s\n\n", summary.DemandDir)
+
+	fmt.Fprintln(stdout, "Stage summary:")
+	for _, stage := range summary.Stages {
+		fmt.Fprintf(stdout, "  %-14s %s\n", stage.Name, humanStatus(stage.Status))
+	}
+
+	fmt.Fprintln(stdout, "\nArtifacts:")
+	for _, artifact := range summary.Artifacts {
+		detail := humanStatus(artifact.Status)
+		if artifact.Error != "" {
+			detail += ", " + artifact.Error
+		}
+		fmt.Fprintf(stdout, "  %-22s %s\n", artifact.Name, detail)
+	}
+
+	fmt.Fprintln(stdout, "\nMR:")
+	mrLine := humanStatus(summary.MergeRequest.Status)
+	if summary.MergeRequest.Reference != "" {
+		mrLine = summary.MergeRequest.Reference + " " + mrLine
+	}
+	fmt.Fprintf(stdout, "  %s\n", mrLine)
+	if summary.MergeRequest.URL != "" {
+		fmt.Fprintf(stdout, "  url: %s\n", summary.MergeRequest.URL)
+	}
+	if summary.MergeRequest.Message != "" {
+		fmt.Fprintf(stdout, "  evidence: %s\n", summary.MergeRequest.Message)
+	}
+
+	fmt.Fprintln(stdout, "\nVerification:")
+	switch summary.Verification.Status {
+	case "pass":
+		fmt.Fprintf(stdout, "  latest: PASS %s\n", summary.Verification.Command)
+	case "fail":
+		fmt.Fprintf(stdout, "  latest: FAIL %s\n", summary.Verification.Command)
+	default:
+		fmt.Fprintln(stdout, "  latest: none")
+	}
+
+	fmt.Fprintln(stdout, "\nMemory:")
+	if summary.Memory.Error != "" && summary.Memory.Status == "none" {
+		fmt.Fprintln(stdout, "  candidates: none")
+	} else {
+		fmt.Fprintf(stdout, "  candidates: %d pending, %d promoted, %d rejected\n", summary.Memory.Pending, summary.Memory.Promoted, summary.Memory.Rejected)
+	}
+
+	fmt.Fprintln(stdout, "\nNext actions:")
+	printActions(stdout, summary.Actions)
+	fmt.Fprintln(stdout, "\nNext:")
+	printActions(stdout, summary.Actions)
+}
+
+func printActions(stdout io.Writer, actions []demandflow.NextAction) {
+	for _, action := range actions {
+		fmt.Fprintf(stdout, "  - %s: %s\n", action.Label, action.Reason)
+		if strings.TrimSpace(action.Command) != "" {
+			fmt.Fprintf(stdout, "    %s\n", action.Command)
+		}
+	}
+}
+
+func printWorkspaceList(stdout io.Writer, summaries []demandflow.WorkspaceSummary) {
+	if len(summaries) == 0 {
+		fmt.Fprintln(stdout, "No demands found")
+		return
+	}
+	fmt.Fprintln(stdout, "Demand status:")
+	for _, summary := range summaries {
+		fmt.Fprintf(stdout, "  %-24s %-22s %s\n", summary.Demand.ID, summary.State, summary.Attention)
+	}
+}
+
+func humanStatus(status string) string {
+	return strings.ReplaceAll(status, "_", " ")
 }

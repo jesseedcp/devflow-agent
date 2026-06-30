@@ -1044,3 +1044,69 @@ func findEventType(events []Event, eventType string) (Event, bool) {
 	}
 	return Event{}, false
 }
+
+func TestReadEventsRecoversTrailingPartialEvent(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := Demand{
+		ID:          "read-events-trailing",
+		Title:       "Read events trailing",
+		Description: "Exercise event reader",
+		Source:      "test",
+	}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	eventsPath := filepath.Join(root, ".devflow", "demands", demand.ID, EventsFile)
+	if err := os.WriteFile(eventsPath, []byte(`{"time":"2026-06-30T01:02:03Z","type":"stage.confirmed","message":"requirements confirmed","data":{"stage":"requirements"}}`+"\n"+`{"time":`), 0o644); err != nil {
+		t.Fatalf("write events log: %v", err)
+	}
+
+	events, err := store.ReadEvents(demand.ID)
+	if err != nil {
+		t.Fatalf("ReadEvents returned error: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("ReadEvents returned %d events, want 2", len(events))
+	}
+	if events[0].Type != "stage.confirmed" || events[0].Data["stage"] != "requirements" {
+		t.Fatalf("ReadEvents returned unexpected event: %#v", events[0])
+	}
+	if events[1].Type != "events.repaired" {
+		t.Fatalf("ReadEvents repair event = %#v, want events.repaired", events[1])
+	}
+}
+
+func TestReadEventsFailsOnMalformedMiddleEvent(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := Demand{
+		ID:          "read-events-middle",
+		Title:       "Read events middle",
+		Description: "Exercise event reader",
+		Source:      "test",
+	}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	eventsPath := filepath.Join(root, ".devflow", "demands", demand.ID, EventsFile)
+	body := strings.Join([]string{
+		`{"time":"2026-06-30T01:02:03Z","type":"demand.created","message":"created"}`,
+		`{"time":`,
+		`{"time":"2026-06-30T01:03:03Z","type":"stage.confirmed","message":"requirements confirmed","data":{"stage":"requirements"}}`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(eventsPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write events log: %v", err)
+	}
+
+	_, err := store.ReadEvents(demand.ID)
+	if err == nil {
+		t.Fatal("ReadEvents returned nil error for malformed middle event")
+	}
+	if !strings.Contains(err.Error(), "decode events log events.jsonl line 2") {
+		t.Fatalf("ReadEvents error = %q, want decode line context", err)
+	}
+}

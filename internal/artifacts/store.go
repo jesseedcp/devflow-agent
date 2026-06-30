@@ -168,6 +168,17 @@ func (s Store) AppendEvent(id string, event Event) error {
 	}
 	return appendEventFile(filepath.Join(paths.demandDir, EventsFile), event)
 }
+func (s Store) ReadEvents(demandID string) ([]Event, error) {
+	paths, err := s.prepareDemandPaths(demandID, false)
+	if err != nil {
+		return nil, err
+	}
+	events, err := readEventsLogRecoverTrailing(filepath.Join(paths.demandDir, EventsFile))
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
 
 func (s Store) AppendToArtifact(id, name, content string) error {
 	paths, err := s.prepareDemandPaths(id, false)

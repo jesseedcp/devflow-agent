@@ -143,3 +143,38 @@ func TestGitLabMissingTokenReturnsError(t *testing.T) {
 		t.Fatalf("reply err = %v want token error", err)
 	}
 }
+
+func TestGitLabListUnresolvedClassifiesComments(t *testing.T) {
+	t.Parallel()
+
+	payload := `[
+		{"id":"discussion-1","notes":[
+			{"id":7,"body":"Please add regression coverage.","resolved":false,"resolvable":true,"author":{"username":"reviewer"},"position":{"new_path":"internal/service/coupon.go","new_line":12}}
+		]}
+	]`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer server.Close()
+
+	adapter := GitLabReviewAdapter{}
+	comments, err := adapter.ListUnresolved(context.Background(), ReviewRef{
+		Project:      "group/project",
+		MergeRequest: "1",
+		BaseURL:      server.URL,
+		Token:        "glpat-test",
+	})
+	if err != nil {
+		t.Fatalf("ListUnresolved: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("comments = %d, want 1", len(comments))
+	}
+	if comments[0].Category != CommentTest {
+		t.Fatalf("category = %s, want %s", comments[0].Category, CommentTest)
+	}
+}

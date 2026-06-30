@@ -61,3 +61,5 @@ devflow doctor --require-gitlab
 ```
 
 For live provider validation, see [Live dogfood guide](live-dogfood.md). Live dogfood is separate from deterministic dogfood and requires explicit environment opt-in.
+
+The deterministic dogfood path also records an `MR Review Action Plan` section. In the default offline path, the selected next state is `verification` because the offline review adapter returns no blocking comments.

@@ -70,6 +70,12 @@ func TestRunCompletesFullDeterministicLoop(t *testing.T) {
 	if !strings.Contains(string(progressData), "!1") {
 		t.Fatalf("progress.md missing MR evidence:\n%s", string(progressData))
 	}
+	if !strings.Contains(string(progressData), "MR Review Action Plan") {
+		t.Fatalf("progress.md missing MR review action plan:\n%s", string(progressData))
+	}
+	if !strings.Contains(string(progressData), "Next state: `verification`") {
+		t.Fatalf("progress.md missing verification routing:\n%s", string(progressData))
+	}
 }
 
 func TestRunRejectsUnknownScenario(t *testing.T) {

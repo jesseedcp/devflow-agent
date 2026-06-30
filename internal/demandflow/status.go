@@ -87,6 +87,10 @@ func NextActions(state workflow.State, demandID string) []NextAction {
 		return []NextAction{{Label: "Confirm plan", Command: "devflow confirm --demand " + idArg + " --stage plan --by <name> --summary <summary>", Reason: "The technical plan needs human confirmation before implementation."}}
 	case workflow.Implementation:
 		return []NextAction{{Label: "Run implementation", Command: "devflow run --demand " + idArg + " --stage implementation --permission-mode acceptEdits --quality-command \"go test ./...\"", Reason: "Implementation can now edit code and run quality gates."}}
+	case workflow.ReturnedToRequirements:
+		return []NextAction{{Label: "Revise requirements", Command: "devflow run --demand " + idArg + " --stage requirements", Reason: "MR review found requirements-level feedback; revise requirements before planning again."}}
+	case workflow.ReturnedToPlan:
+		return []NextAction{{Label: "Revise plan", Command: "devflow run --demand " + idArg + " --stage plan", Reason: "MR review found plan-level feedback; revise the plan before implementation resumes."}}
 	case workflow.FailedQualityGate:
 		return []NextAction{{Label: "Retry implementation", Command: "devflow run --demand " + idArg + " --stage implementation --permission-mode acceptEdits --quality-command \"go test ./...\"", Reason: "The previous quality gate failed; rerun implementation after addressing failures."}}
 	case workflow.MRReview:

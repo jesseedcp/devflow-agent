@@ -24,7 +24,11 @@ func renderReviewSummary(comments []adapters.ReviewComment) string {
 		if c.Blocking {
 			status = "blocking"
 		}
-		fmt.Fprintf(&b, "- [%s] %s", status, c.Author)
+		category := c.Category
+		if category == "" {
+			category = adapters.ClassifyReviewComment(c.Body, c.FilePath)
+		}
+		fmt.Fprintf(&b, "- [%s][%s] %s", category, status, c.Author)
 		if c.FilePath != "" {
 			fmt.Fprintf(&b, " (%s:%d)", c.FilePath, c.Line)
 		}

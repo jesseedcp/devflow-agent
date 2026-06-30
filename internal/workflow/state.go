@@ -81,6 +81,7 @@ var allowedTransitions = map[State]map[State]struct{}{
 		Cancelled:           {},
 	},
 	MRReview: {
+		Implementation:         {},
 		Verification:           {},
 		ReturnedToRequirements: {},
 		ReturnedToPlan:         {},

@@ -54,7 +54,11 @@ func runReviewGate(args []string, stdout io.Writer, stderr io.Writer) error {
 		if strings.TrimSpace(location) == "" {
 			location = "(no file location)"
 		}
-		fmt.Fprintf(stdout, "- %s by %s: %s\n", location, comment.Author, strings.TrimSpace(comment.Body))
+		category := comment.Category
+		if category == "" {
+			category = adapters.ClassifyReviewComment(comment.Body, comment.FilePath)
+		}
+		fmt.Fprintf(stdout, "- [%s] %s by %s: %s\n", category, location, comment.Author, strings.TrimSpace(comment.Body))
 	}
 	return fmt.Errorf("review gate blocked by unresolved GitLab comments")
 }

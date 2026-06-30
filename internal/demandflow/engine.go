@@ -2,6 +2,7 @@ package demandflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -436,11 +437,27 @@ func (e Engine) runMRReview(ctx context.Context, opts Options, result *RunResult
 	}
 	result.Artifacts = append(result.Artifacts, artifacts.ProgressFile)
 
-	for _, comment := range comments {
-		if comment.Blocking {
-			result.Message = "blocking review comments remain"
-			return fmt.Errorf("blocking review comments remain")
+	actionPlan := BuildReviewActionPlan(comments)
+	if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, RenderReviewActionPlan(actionPlan)); err != nil {
+		return err
+	}
+
+	if actionPlan.NextState != workflow.Verification {
+		if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+			Time:    opts.Now(),
+			Type:    "mr_review.action_required",
+			Message: actionPlan.Message,
+			Data: map[string]string{
+				"next_state": string(actionPlan.NextState),
+			},
+		}); err != nil {
+			return err
 		}
+		if err := e.advance(&demand, actionPlan.NextState); err != nil {
+			return err
+		}
+		result.Message = actionPlan.Message
+		return errors.New(actionPlan.Message)
 	}
 
 	if opts.MergeRequest.Adapter != nil {

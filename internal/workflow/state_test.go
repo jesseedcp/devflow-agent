@@ -150,3 +150,15 @@ func TestRequiresHumanConfirmation(t *testing.T) {
 		t.Fatalf("RequiresHumanConfirmation(%s) = true, want false", Implementation)
 	}
 }
+
+func TestAdvanceAllowsMRReviewBackToImplementation(t *testing.T) {
+	t.Parallel()
+
+	next, err := Advance(MRReview, Implementation)
+	if err != nil {
+		t.Fatalf("advance %s -> %s returned error: %v", MRReview, Implementation, err)
+	}
+	if next != Implementation {
+		t.Fatalf("state after advance = %s, want %s", next, Implementation)
+	}
+}

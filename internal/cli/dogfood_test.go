@@ -48,3 +48,27 @@ func TestDogfoodRejectsUnknownScenario(t *testing.T) {
 		t.Fatalf("err = %v, want unsupported scenario", err)
 	}
 }
+
+func TestDogfoodOperatorLoopCompletes(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEVFLOW_DOGFOOD_HELPER", "1")
+	helper := testCLIExecutable(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := Run([]string{
+		"dogfood",
+		"--operator-loop",
+		"--root", root,
+		"--quality-root", t.TempDir(),
+		"--quality-command", `"` + helper + `" -test.run=^TestCLICommandHelper$`,
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("dogfood operator loop: %v\nstderr:\n%s", err, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{"operator dogfood completed", "state: completed", "report:"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, output)
+		}
+	}
+}

@@ -19,10 +19,12 @@ func runDogfood(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	var root, qualityRoot, scenario string
 	var qualityCommands stringSliceFlag
+	var operatorLoop bool
 	fs.StringVar(&root, "root", "", "demand artifact root; defaults to a new temp directory")
 	fs.StringVar(&qualityRoot, "quality-root", ".", "working directory for quality commands")
 	fs.StringVar(&scenario, "scenario", "coupon-eligibility", "dogfood scenario")
 	fs.Var(&qualityCommands, "quality-command", "quality command as a quoted program and args (repeatable)")
+	fs.BoolVar(&operatorLoop, "operator-loop", false, "run operator-facing dogfood through console, drive, evaluate, and workbench evidence")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -44,6 +46,25 @@ func runDogfood(args []string, stdout io.Writer, stderr io.Writer) error {
 			return err
 		}
 		qualityRoot = wd
+	}
+
+	if operatorLoop {
+		result, err := dogfood.RunOperator(context.Background(), dogfood.OperatorOptions{
+			Root:            root,
+			QualityRoot:     qualityRoot,
+			ScenarioName:    scenario,
+			QualityCommands: commands,
+			Now:             time.Now,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "operator dogfood completed for %s\n", result.DemandID)
+		fmt.Fprintf(stdout, "state: %s\n", result.FinalState)
+		fmt.Fprintf(stdout, "root: %s\n", result.Root)
+		fmt.Fprintf(stdout, "quality-root: %s\n", result.QualityRoot)
+		fmt.Fprintf(stdout, "report: %s\n", result.ReportPath)
+		return nil
 	}
 
 	result, err := dogfood.Run(context.Background(), dogfood.Options{

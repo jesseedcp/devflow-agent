@@ -185,6 +185,10 @@ func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, st
 	if action.Stage == "" {
 		return fmt.Errorf("console action %q has no runnable stage", action.Label)
 	}
+	actionArgs, err := parseCommandLine(action.Command)
+	if err != nil {
+		return fmt.Errorf("parse console action command: %w", err)
+	}
 	args := []string{
 		"--root", opts.root,
 		"--demand", opts.demandID,
@@ -199,10 +203,18 @@ func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, st
 	if strings.TrimSpace(opts.configPath) != "" {
 		args = append(args, "--config", strings.TrimSpace(opts.configPath))
 	}
+	permissionMode := firstConsoleFlagValue(actionArgs, "--permission-mode")
 	if strings.TrimSpace(opts.permissionMode) != "" {
-		args = append(args, "--permission-mode", strings.TrimSpace(opts.permissionMode))
+		permissionMode = strings.TrimSpace(opts.permissionMode)
 	}
-	for _, command := range opts.qualityCommand {
+	if permissionMode != "" {
+		args = append(args, "--permission-mode", permissionMode)
+	}
+	qualityCommands := consoleFlagValues(actionArgs, "--quality-command")
+	if len(opts.qualityCommand) > 0 {
+		qualityCommands = opts.qualityCommand
+	}
+	for _, command := range qualityCommands {
 		if strings.TrimSpace(command) != "" {
 			args = append(args, "--quality-command", strings.TrimSpace(command))
 		}
@@ -217,4 +229,23 @@ func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, st
 		}
 	}
 	return runConsoleDemandStage(args, stdout, stderr)
+}
+
+func firstConsoleFlagValue(args []string, name string) string {
+	values := consoleFlagValues(args, name)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func consoleFlagValues(args []string, name string) []string {
+	var values []string
+	for index := 0; index < len(args)-1; index++ {
+		if args[index] == name {
+			values = append(values, args[index+1])
+			index++
+		}
+	}
+	return values
 }

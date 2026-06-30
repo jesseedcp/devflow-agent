@@ -166,6 +166,33 @@ func TestConsoleRunNextPassesQualityAndRunnerFlags(t *testing.T) {
 	}
 }
 
+func TestConsoleRunNextUsesGeneratedImplementationDefaults(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-defaults", Title: "Console defaults", Description: "Use next action defaults", Source: "test", State: string(workflow.Implementation)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var gotArgs []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	for _, want := range []string{"--permission-mode", "acceptEdits", "--quality-command", "go test ./..."} {
+		if !containsString(gotArgs, want) {
+			t.Fatalf("runner args = %#v, missing generated default %q", gotArgs, want)
+		}
+	}
+}
+
 func TestConsoleRunNextRunsMRReviewWithGitLabFlags(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

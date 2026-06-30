@@ -9,6 +9,8 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 )
 
+var runConsoleDemandStage = runDemandStage
+
 type consoleArgs struct {
 	root           string
 	demandID       string
@@ -161,5 +163,43 @@ func runConsoleNext(opts consoleArgs, stdout io.Writer, stderr io.Writer) error 
 		}
 		return nil
 	}
-	return fmt.Errorf("console --run-next is not implemented")
+	return runConsoleStageAction(opts, action, stdout, stderr)
+}
+
+func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, stdout io.Writer, stderr io.Writer) error {
+	if action.Stage == "" {
+		return fmt.Errorf("console action %q has no runnable stage", action.Label)
+	}
+	args := []string{
+		"--root", opts.root,
+		"--demand", opts.demandID,
+		"--stage", string(action.Stage),
+	}
+	if strings.TrimSpace(opts.runnerRoot) != "" {
+		args = append(args, "--runner-root", strings.TrimSpace(opts.runnerRoot))
+	}
+	if strings.TrimSpace(opts.qualityRoot) != "" {
+		args = append(args, "--quality-root", strings.TrimSpace(opts.qualityRoot))
+	}
+	if strings.TrimSpace(opts.configPath) != "" {
+		args = append(args, "--config", strings.TrimSpace(opts.configPath))
+	}
+	if strings.TrimSpace(opts.permissionMode) != "" {
+		args = append(args, "--permission-mode", strings.TrimSpace(opts.permissionMode))
+	}
+	for _, command := range opts.qualityCommand {
+		if strings.TrimSpace(command) != "" {
+			args = append(args, "--quality-command", strings.TrimSpace(command))
+		}
+	}
+	if action.Stage == demandflow.StageMRReview {
+		if strings.TrimSpace(opts.gitlabProject) == "" || strings.TrimSpace(opts.gitlabMR) == "" {
+			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+		}
+		args = append(args, "--gitlab-project", strings.TrimSpace(opts.gitlabProject), "--gitlab-mr", strings.TrimSpace(opts.gitlabMR))
+		if strings.TrimSpace(opts.gitlabBaseURL) != "" {
+			args = append(args, "--gitlab-base-url", strings.TrimSpace(opts.gitlabBaseURL))
+		}
+	}
+	return runConsoleDemandStage(args, stdout, stderr)
 }

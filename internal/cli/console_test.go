@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -72,4 +74,103 @@ func TestConsoleHelpIncludesCommand(t *testing.T) {
 
 func fixedConsoleCLITime() time.Time {
 	return time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC)
+}
+
+func TestConsoleRunNextCallsRunnerForAgentStage(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-run", Title: "Console run", Description: "Run requirements", Source: "test", State: string(workflow.Created)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var gotArgs []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		gotArgs = append([]string(nil), args...)
+		fmt.Fprintln(stdout, "stub runner called")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "stub runner called") {
+		t.Fatalf("stdout = %q, want stub runner output", stdout.String())
+	}
+	wantArgs := []string{"--root", root, "--demand", demand.ID, "--stage", "requirements"}
+	for _, want := range wantArgs {
+		if !containsString(gotArgs, want) {
+			t.Fatalf("runner args = %#v, missing %q", gotArgs, want)
+		}
+	}
+}
+
+func TestConsoleRunNextRefusesHumanConfirmation(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-confirm", Title: "Console confirm", Description: "Confirm", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 1, 0, 0, time.UTC), Type: "verification.recorded", Message: "pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+
+	var called bool
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		called = true
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	if called {
+		t.Fatal("runner was called for human confirmation")
+	}
+	if !strings.Contains(stdout.String(), "next action is not runner-safe: Confirm verification") {
+		t.Fatalf("stdout = %q, want runner-safe refusal", stdout.String())
+	}
+}
+
+func TestConsoleRunNextPassesQualityAndRunnerFlags(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-implementation", Title: "Console implementation", Description: "Implement", Source: "test", State: string(workflow.Implementation)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var gotArgs []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next", "--runner-root", root, "--quality-root", root, "--config", "devflow.yaml", "--permission-mode", "acceptEdits", "--quality-command", "go test ./..."}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	for _, want := range []string{"--runner-root", "--quality-root", "--config", "devflow.yaml", "--permission-mode", "acceptEdits", "--quality-command", "go test ./..."} {
+		if !containsString(gotArgs, want) {
+			t.Fatalf("runner args = %#v, missing %q", gotArgs, want)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

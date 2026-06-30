@@ -153,4 +153,3 @@ devflow doctor
 ```
 
 The doctor command reports whether config, git, and GitLab token setup are ready without printing secret values.
-

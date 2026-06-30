@@ -100,6 +100,22 @@ devflow dogfood --operator-loop
 
 The command writes `operator-dogfood-report.md` under the generated demand directory. The report is the quickest way to inspect whether the operator-facing loop is still coherent after changes.
 
+### Backend demand defaults
+
+Put repeated operator flags in `.devflow/config.yaml`:
+
+```yaml
+backend_demand:
+  quality_commands:
+    - go test ./... -count=1 -timeout 5m
+  permission_mode: acceptEdits
+  gitlab:
+    project: group/project
+    default_target_branch: main
+```
+
+Explicit CLI flags override these defaults.
+
 ## 4. Run Requirements
 
 ```powershell

@@ -100,3 +100,17 @@ func TestDoctorRequiresGitLabWhenFlagSet(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
+
+func TestDoctorReportsBackendDemandDefaults(t *testing.T) {
+	root := t.TempDir()
+	configPath := writeBackendDemandDefaultsConfig(t, root)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--config", configPath}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("doctor returned error: %v\n%s", err, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "[OK] backend-demand: quality command defaults configured") {
+		t.Fatalf("doctor output missing backend-demand defaults:\n%s", stdout.String())
+	}
+}

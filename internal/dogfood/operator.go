@@ -150,6 +150,21 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	}); err != nil {
 		return result, err
 	}
+	if err := store.AppendEvent(scenario.DemandID, artifacts.Event{
+		Time:    opts.Now().UTC(),
+		Type:    "verification.recorded",
+		Message: "operator dogfood verification passed",
+		Data: map[string]string{
+			"status":        "PASS",
+			"command":       operatorQualityCommandText(opts.QualityCommands),
+			"evidence_file": artifacts.VerificationFile,
+		},
+	}); err != nil {
+		return result, fmt.Errorf("record operator verification: %w", err)
+	}
+	if err := record("record verification", "operator dogfood recorded PASS verification evidence"); err != nil {
+		return result, err
+	}
 	if err := confirm("verification", "operator dogfood verification accepted"); err != nil {
 		return result, err
 	}
@@ -252,6 +267,23 @@ func renderOperatorWorkbenchSnapshot(result OperatorResult) string {
 		fmt.Fprintf(&builder, "%s %s %s\n", step.Name, step.State, step.Attention)
 	}
 	return builder.String()
+}
+
+func operatorQualityCommandText(commands []quality.Command) string {
+	var rendered []string
+	for _, command := range commands {
+		text := strings.TrimSpace(command.Name)
+		if len(command.Args) > 0 {
+			text = strings.TrimSpace(text + " " + strings.Join(command.Args, " "))
+		}
+		if text != "" {
+			rendered = append(rendered, text)
+		}
+	}
+	if len(rendered) == 0 {
+		return "operator dogfood quality gate"
+	}
+	return strings.Join(rendered, "; ")
 }
 
 func escapeReportCell(value string) string {

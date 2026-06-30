@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
@@ -33,6 +34,13 @@ func TestRunOperatorCompletesAndWritesEvidence(t *testing.T) {
 	}
 	if result.ReportPath == "" {
 		t.Fatal("ReportPath is empty")
+	}
+	evaluation, err := demandflow.EvaluateDemand(root, result.DemandID)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if evaluation.Overall != demandflow.EvaluationPass {
+		t.Fatalf("final evaluation = %s, want pass; stages=%#v", evaluation.Overall, evaluation.Stages)
 	}
 	report, err := os.ReadFile(result.ReportPath)
 	if err != nil {

@@ -75,6 +75,17 @@ devflow drive --demand add-coupon-check --dry-run
 
 Drive never confirms stages, promotes memory, rejects memory, or merges MRs. It stops with an explicit reason when the next step needs a human.
 
+### Deterministic stage evaluation
+
+Use `devflow evaluate` to inspect structural quality signals before confirming stage outputs.
+
+```powershell
+devflow evaluate --demand add-coupon-check
+devflow evaluate --demand add-coupon-check --stage requirements --strict
+```
+
+Evaluation is deterministic local checking, not semantic LLM review. It reports missing sections, verification evidence, and closeout memory-candidate signals without mutating demand state.
+
 ## 4. Run Requirements
 
 ```powershell

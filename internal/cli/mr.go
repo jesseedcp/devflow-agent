@@ -11,6 +11,13 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/adapters"
 )
 
+// runChangeRequest is the provider-neutral entry point for change requests.
+// In Wave 27 it wraps the existing GitLab merge-request implementation while
+// the mr command remains supported for backward compatibility.
+func runChangeRequest(args []string, stdout io.Writer, stderr io.Writer) error {
+	return runMR(args, stdout, stderr)
+}
+
 func runMR(args []string, stdout io.Writer, stderr io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("mr requires a subcommand: ensure")

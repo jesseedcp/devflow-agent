@@ -106,3 +106,51 @@ func (f *fakeMergeRequestAdapter) EnsureMergeRequest(_ context.Context, spec ada
 	f.spec = spec
 	return f.result, f.err
 }
+
+func TestRunChangeRequestEnsureViaDispatch(t *testing.T) {
+	original := newMergeRequestAdapter
+	defer func() { newMergeRequestAdapter = original }()
+	newMergeRequestAdapter = func() adapters.MergeRequestAdapter {
+		return &fakeMergeRequestAdapter{result: adapters.MergeRequestResult{
+			IID: 55, WebURL: "https://gitlab.com/p/-/55", Title: "CR", State: "opened",
+		}}
+	}
+
+	var buf bytes.Buffer
+	err := Run([]string{"change-request", "ensure", "--gitlab-project", "p", "--source-branch", "feature/x", "--target-branch", "main", "--title", "CR"}, &buf, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("change-request ensure: %v", err)
+	}
+	if !strings.Contains(buf.String(), "!55") {
+		t.Fatalf("unexpected output:\n%s", buf.String())
+	}
+}
+
+func TestRunChangeRequestAliasCR(t *testing.T) {
+	original := newMergeRequestAdapter
+	defer func() { newMergeRequestAdapter = original }()
+	newMergeRequestAdapter = func() adapters.MergeRequestAdapter {
+		return &fakeMergeRequestAdapter{result: adapters.MergeRequestResult{
+			IID: 56, WebURL: "https://gitlab.com/p/-/56", Title: "CR", State: "opened",
+		}}
+	}
+
+	var buf bytes.Buffer
+	err := Run([]string{"cr", "ensure", "--gitlab-project", "p", "--source-branch", "feature/x", "--target-branch", "main", "--title", "CR"}, &buf, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("cr ensure: %v", err)
+	}
+	if !strings.Contains(buf.String(), "!56") {
+		t.Fatalf("unexpected output:\n%s", buf.String())
+	}
+}
+
+func TestChangeRequestHelpIsListed(t *testing.T) {
+	var stdout bytes.Buffer
+	if err := Run([]string{"help"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "change-request Create or reuse change requests") {
+		t.Fatalf("help missing change-request entry:\n%s", stdout.String())
+	}
+}

@@ -61,6 +61,7 @@ type Options struct {
 	Runner          Runner
 	Review          ReviewOptions
 	MergeRequest    MergeRequestOptions
+	ChangeRequest   ChangeRequestOptions
 	CIGate          CIGateOptions
 	Now             func() time.Time
 }

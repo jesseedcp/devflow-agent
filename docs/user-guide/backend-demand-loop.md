@@ -194,6 +194,14 @@ devflow run --demand add-coupon-eligibility-check --stage implementation --permi
 
 If the quality gate fails, fix the reported problem and rerun the same implementation command.
 
+### Change Request Terminology
+
+GitLab merge requests (MRs) and GitHub pull requests (PRs) are both *change requests*. Devflow exposes provider-neutral vocabulary while keeping the legacy commands:
+
+- `devflow change-request ensure` (alias `cr`) is the provider-neutral entry point; `devflow mr ensure` remains a supported alias.
+- The workflow stage name `mr-review` is unchanged in v0.1 for compatibility.
+- GitLab MR and GitHub PR are providers behind the same change-request path.
+
 ## 7. Run MR Review Collaboration
 
 ```powershell

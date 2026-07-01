@@ -55,6 +55,7 @@ Usage:
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow review-gate --gitlab-project <project> --gitlab-mr <iid> | --github-repo <owner/repo> --github-pr <number>
   devflow ci-gate --github-repo <owner/repo> --github-pr <number>
+  devflow change-request ensure --gitlab-project <project> --source-branch <branch> --target-branch <branch> --title <text>
   devflow mr ensure --gitlab-project <project> --source-branch <branch> --target-branch <branch> --title <text>
   devflow live-dogfood [--root <path>] [--config <path>] [--with-gitlab]
   devflow workbench
@@ -84,6 +85,7 @@ Commands:
   run       Run one backend-demand agent stage
   review-gate Check unresolved GitLab MR or GitHub PR comments directly
   ci-gate   Check GitHub PR CI status directly
+  change-request Create or reuse change requests (alias: cr)
   mr        Create or reuse GitLab merge requests
   live-dogfood Run opt-in live provider sandbox dogfood
   workbench Launch the demand workbench TUI
@@ -149,6 +151,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCIGate(args[1:], stdout, stderr)
 	case "mr":
 		return runMR(args[1:], stdout, stderr)
+	case "change-request", "cr":
+		return runChangeRequest(args[1:], stdout, stderr)
 	case "live-dogfood":
 		return runLiveDogfood(args[1:], stdout, stderr)
 	case "workbench":

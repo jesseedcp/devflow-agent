@@ -2,6 +2,9 @@ package templates
 
 import "fmt"
 
+func Intake(title, source string) string {
+	return fmt.Sprintf("# Intake: %s\n\nSource: `%s`\n\n## 原始需求材料\n", title, source)
+}
 func Requirements(title, description string) string {
 	return fmt.Sprintf(`# Requirements: %s
 

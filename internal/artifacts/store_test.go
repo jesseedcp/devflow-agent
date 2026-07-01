@@ -29,6 +29,7 @@ func TestCreateDemandWorkspace(t *testing.T) {
 	demandDir := filepath.Join(root, ".devflow", "demands", demand.ID)
 	files := []string{
 		DemandFile,
+		IntakeFile,
 		RequirementsFile,
 		PlanFile,
 		ProgressFile,
@@ -264,6 +265,28 @@ func TestWriteArtifactRequiresExistingWorkspace(t *testing.T) {
 	}
 }
 
+func TestWriteArtifactSupportsIntakeFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("intake-artifact")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	if err := store.WriteArtifact(demand.ID, IntakeFile, "# Intake\n\nraw demand"); err != nil {
+		t.Fatalf("WriteArtifact intake returned error: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", demand.ID, IntakeFile))
+	if err != nil {
+		t.Fatalf("ReadFile intake returned error: %v", err)
+	}
+	if string(body) != "# Intake\n\nraw demand" {
+		t.Fatalf("intake.md = %q", string(body))
+	}
+}
 func TestEnsureConfirmationEvidenceIsIdempotent(t *testing.T) {
 	t.Parallel()
 

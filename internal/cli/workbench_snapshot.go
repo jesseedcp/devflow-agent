@@ -55,6 +55,9 @@ func renderWorkbenchSnapshot(opts workbenchOptions) (string, error) {
 				fmt.Fprintf(&builder, " blockers=%d warnings=%d", stage.Blockers, stage.Warnings)
 			}
 			fmt.Fprintln(&builder)
+			if stage.Stage == demandflow.StageRequirements {
+				renderRequirementQualityChecks(&builder, stage, "    ")
+			}
 		}
 	}
 	fmt.Fprintln(&builder, "Next:")

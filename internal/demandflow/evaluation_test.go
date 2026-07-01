@@ -1,6 +1,7 @@
 package demandflow
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -133,4 +134,205 @@ func TestEvaluateCloseoutWarnsWithoutMemoryCandidates(t *testing.T) {
 	if eval.Stages[0].Status != EvaluationWarning {
 		t.Fatalf("closeout status = %s, want warning", eval.Stages[0].Status)
 	}
+}
+func TestEvaluateRequirementsChecksIntakeCoverage(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-intake-coverage", Title: "Eval intake coverage", Description: "coupon eligibility", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.IntakeFile, `# Intake: Coupon
+
+## 原始需求材料
+
+## 目标
+- Active members can claim coupons.
+
+## 业务规则
+- User status must be active.
+
+## 验收标准
+- Inactive users are blocked.
+`); err != nil {
+		t.Fatalf("WriteArtifact intake returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, `# Requirements: Coupon
+
+## 目标行为
+
+- Active members can claim coupons.
+
+## 非目标范围
+
+- 待人工补充。
+
+## 业务规则
+
+- User status must be active.
+
+## 用户/调用方影响
+
+- 待确认。
+
+## 验收标准
+
+- Inactive users are blocked.
+
+## 风险与歧义
+
+- 待确认。
+
+## 待确认问题
+
+- Confirm inactive error code.
+
+## 人工确认记录
+`); err != nil {
+		t.Fatalf("WriteArtifact requirements returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateDemand(root, demand.ID, StageRequirements)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "requirements.intake_coverage")
+	if check.Status != EvaluationPass {
+		t.Fatalf("intake coverage status = %s, evidence=%q", check.Status, check.Evidence)
+	}
+}
+
+func TestEvaluateRequirementsWarnsOnMissingIntakeCoverage(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-intake-missing", Title: "Eval intake missing", Description: "coupon eligibility", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.IntakeFile, `# Intake: Coupon
+
+## 原始需求材料
+
+## 验收标准
+- Inactive users are blocked.
+`); err != nil {
+		t.Fatalf("WriteArtifact intake returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, `# Requirements: Coupon
+
+## 业务规则
+
+- User status must be active.
+
+## 验收标准
+
+- Active users can claim coupons.
+`); err != nil {
+		t.Fatalf("WriteArtifact requirements returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateDemand(root, demand.ID, StageRequirements)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "requirements.intake_coverage")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("intake coverage status = %s, want warning", check.Status)
+	}
+	if !strings.Contains(check.Evidence, "Inactive users are blocked") {
+		t.Fatalf("evidence = %q, want missing intake bullet", check.Evidence)
+	}
+}
+
+func TestEvaluateRequirementsChecksContextMemorySafety(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-context-safety", Title: "Eval context safety", Description: "coupon eligibility", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ContextFile, "# Context: Coupon\n\n## Approved Stable Memory\n\n- `memory/coupon.md`: Coupon active member checks must happen before claim writes.\n\n## Historical Demand Candidates\n\n- `coupon-old`: Candidate says expired coupons may use a generic error.\n"); err != nil {
+		t.Fatalf("WriteArtifact context returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, `# Requirements: Coupon
+
+## 目标行为
+
+- Coupon active member checks must happen before claim writes.
+
+## 业务规则
+
+- User status must be active.
+
+## 验收标准
+
+- Inactive users are blocked.
+
+## 待确认问题
+
+- Confirm whether expired coupons use a generic error.
+`); err != nil {
+		t.Fatalf("WriteArtifact requirements returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateDemand(root, demand.ID, StageRequirements)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	stable := findEvaluationCheck(t, evaluation.Stages[0], "requirements.stable_memory_reference")
+	if stable.Status != EvaluationPass {
+		t.Fatalf("stable memory reference status = %s evidence=%q", stable.Status, stable.Evidence)
+	}
+	candidate := findEvaluationCheck(t, evaluation.Stages[0], "requirements.candidate_guard")
+	if candidate.Status != EvaluationPass {
+		t.Fatalf("candidate guard status = %s evidence=%q", candidate.Status, candidate.Evidence)
+	}
+}
+
+func TestEvaluateRequirementsWarnsWhenCandidateMemoryHasNoQuestion(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-candidate-no-question", Title: "Eval candidate no question", Description: "coupon eligibility", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ContextFile, "# Context: Coupon\n\n## Approved Stable Memory\n\nNo approved stable memory recalled.\n\n## Historical Demand Candidates\n\n- `coupon-old`: Candidate says expired coupons may use a generic error.\n"); err != nil {
+		t.Fatalf("WriteArtifact context returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, `# Requirements: Coupon
+
+## 业务规则
+
+- User status must be active.
+
+## 验收标准
+
+- Inactive users are blocked.
+
+## 待确认问题
+
+- 待人工补充。
+`); err != nil {
+		t.Fatalf("WriteArtifact requirements returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateDemand(root, demand.ID, StageRequirements)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "requirements.candidate_guard")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("candidate guard status = %s, want warning", check.Status)
+	}
+}
+
+func findEvaluationCheck(t *testing.T, stage StageEvaluation, id string) EvaluationCheck {
+	t.Helper()
+	for _, check := range stage.Checks {
+		if check.ID == id {
+			return check
+		}
+	}
+	t.Fatalf("check %s missing from %#v", id, stage.Checks)
+	return EvaluationCheck{}
 }

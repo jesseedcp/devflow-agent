@@ -136,6 +136,32 @@ func printConsoleQuality(stdout io.Writer, root, demandID string) {
 			fmt.Fprintf(stdout, " blockers=%d warnings=%d", stage.Blockers, stage.Warnings)
 		}
 		fmt.Fprintln(stdout)
+		if stage.Stage == demandflow.StageRequirements {
+			printRequirementQualityChecks(stdout, stage)
+		}
+	}
+}
+
+func printRequirementQualityChecks(stdout io.Writer, stage demandflow.StageEvaluation) {
+	var builder strings.Builder
+	renderRequirementQualityChecks(&builder, stage, "    ")
+	if builder.Len() > 0 {
+		fmt.Fprint(stdout, builder.String())
+	}
+}
+
+func renderRequirementQualityChecks(builder *strings.Builder, stage demandflow.StageEvaluation, indent string) {
+	for _, check := range stage.Checks {
+		if !strings.HasPrefix(check.ID, "requirements.") {
+			continue
+		}
+		if check.Status == demandflow.EvaluationPass || check.Status == demandflow.EvaluationNotApplicable {
+			continue
+		}
+		fmt.Fprintf(builder, "%s%-36s %s\n", indent, check.ID, check.Status)
+		if strings.TrimSpace(check.Evidence) != "" {
+			fmt.Fprintf(builder, "%s  %s\n", indent, check.Evidence)
+		}
 	}
 }
 

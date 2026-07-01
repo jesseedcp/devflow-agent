@@ -60,13 +60,13 @@ try {
         @"
 # Coupon eligibility
 
-## 目标
+## Goals
 - Active members can claim coupons.
 
-## 业务规则
+## Business Rules
 - User status must be active.
 
-## 验收标准
+## Acceptance Criteria
 - Inactive users are blocked.
 "@ | Set-Content -Encoding UTF8 $prdPath
 
@@ -76,8 +76,43 @@ try {
         if (-not (Test-Path $contextPath)) {
             throw "context.md was not created by intake recall"
         }
-        .\dist\devflow-windows-amd64.exe evaluate --root $intakeRoot --demand coupon-eligibility --stage requirements --strict
-        .\dist\devflow-windows-amd64.exe console --root $intakeRoot --demand coupon-eligibility | Tee-Object -FilePath (Join-Path $intakeRoot 'console-output.txt') | Out-Host
+        $requirementsPath = Join-Path $intakeRoot '.devflow\demands\coupon-eligibility\requirements.md'
+        @"
+# Requirements: Coupon eligibility
+
+## 业务规则
+
+- User status must be active.
+
+## 验收标准
+
+- Active users can claim coupons.
+
+## 风险与歧义
+
+- Confirm inactive-user handling before approval.
+"@ | Set-Content -Encoding UTF8 $requirementsPath
+
+        $evaluateOutput = .\dist\devflow-windows-amd64.exe evaluate --root $intakeRoot --demand coupon-eligibility --stage requirements 2>&1
+        $evaluateOutput | Tee-Object -FilePath (Join-Path $intakeRoot 'evaluate-output.txt') | Out-Host
+        $evaluateText = $evaluateOutput -join [Environment]::NewLine
+        if ($evaluateText -notmatch 'requirements\.intake_coverage') {
+            throw "requirements.intake_coverage missing from evaluate output"
+        }
+
+        $consoleOutput = .\dist\devflow-windows-amd64.exe console --root $intakeRoot --demand coupon-eligibility 2>&1
+        $consoleOutput | Tee-Object -FilePath (Join-Path $intakeRoot 'console-output.txt') | Out-Host
+        $consoleText = $consoleOutput -join [Environment]::NewLine
+        if ($consoleText -notmatch 'Quality:') {
+            throw "Quality section missing from console output"
+        }
+
+        $snapshotOutput = .\dist\devflow-windows-amd64.exe workbench --root $intakeRoot --snapshot --demand coupon-eligibility 2>&1
+        $snapshotOutput | Tee-Object -FilePath (Join-Path $intakeRoot 'workbench-output.txt') | Out-Host
+        $snapshotText = $snapshotOutput -join [Environment]::NewLine
+        if ($snapshotText -notmatch 'requirements\.intake_coverage') {
+            throw "requirements.intake_coverage missing from workbench snapshot"
+        }
     }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./... -count=1 -timeout 5m" }

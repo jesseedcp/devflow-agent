@@ -69,7 +69,10 @@ func printEvaluation(stdout io.Writer, evaluation demandflow.DemandEvaluation) {
 	for _, stage := range evaluation.Stages {
 		fmt.Fprintf(stdout, "%-14s %-8s blockers=%d warnings=%d\n", stage.Stage, stage.Status, stage.Blockers, stage.Warnings)
 		for _, check := range stage.Checks {
-			fmt.Fprintf(stdout, "  %-28s %-8s %s\n", check.ID, check.Status, check.Label)
+			fmt.Fprintf(stdout, "  %-36s %-14s %s\n", check.ID, check.Status, check.Label)
+			if check.Evidence != "" && check.Status != demandflow.EvaluationPass {
+				fmt.Fprintf(stdout, "    evidence: %s\n", check.Evidence)
+			}
 		}
 	}
 }

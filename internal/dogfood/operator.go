@@ -165,6 +165,21 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	if err := record("record verification", "operator dogfood recorded PASS verification evidence"); err != nil {
 		return result, err
 	}
+	if err := store.AppendEvent(scenario.DemandID, artifacts.Event{
+		Time:    opts.Now().UTC(),
+		Type:    "verification.evidence_recorded",
+		Message: "operator dogfood recorded manual acceptance evidence",
+		Data: map[string]string{
+			"status":        "pass",
+			"type":          "manual",
+			"criterion":     "Dogfood operator records acceptance evidence",
+			"summary":       "Operator loop recorded manual evidence for the full dogfood workflow.",
+			"by":            "operator",
+			"evidence_file": artifacts.VerificationFile,
+		},
+	}); err != nil {
+		return result, fmt.Errorf("record operator manual evidence: %w", err)
+	}
 	if err := confirm("verification", "operator dogfood verification accepted"); err != nil {
 		return result, err
 	}

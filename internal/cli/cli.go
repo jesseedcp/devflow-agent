@@ -46,6 +46,8 @@ Usage:
   devflow next --demand <id>
   devflow console [--demand <id>] [--run-next]
   devflow drive --demand <id> [--dry-run]
+  devflow evidence add --demand <id> --type <api|log|monitor|manual|link> --criterion <text> --summary <text>
+  devflow evidence list --demand <id>
   devflow evaluate --demand <id> [--stage <stage>] [--strict]
   devflow doctor [--require-gitlab]
   devflow dogfood [--scenario coupon-eligibility] [--quality-command <command>]
@@ -73,6 +75,7 @@ Commands:
   next      Print the next recommended command for a demand
   console  Show the operator demand console
   drive     Run runner-safe stages until the next manual gate
+  evidence  Record and list manual verification evidence
   evaluate  Run deterministic stage quality checks
   doctor   Diagnose config, environment, git, and GitLab readiness
   dogfood  Run a deterministic full backend-demand loop
@@ -126,6 +129,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runConsole(args[1:], stdout, stderr)
 	case "drive":
 		return runDrive(args[1:], stdout, stderr)
+	case "evidence":
+		return runEvidence(args[1:], stdout, stderr)
 	case "evaluate":
 		return runEvaluate(args[1:], stdout, stderr)
 	case "doctor":

@@ -114,6 +114,75 @@ try {
             throw "requirements.intake_coverage missing from workbench snapshot"
         }
     }
+    Invoke-Step "url intake smoke" {
+        $urlRoot = Join-Path $readinessRoot 'url-intake-smoke'
+        New-Item -ItemType Directory -Force $urlRoot | Out-Null
+        $port = Get-Random -Minimum 20000 -Maximum 50000
+        $prefix = "http://127.0.0.1:$port/"
+        $html = @"
+<!doctype html>
+<html>
+<head><title>Coupon URL PRD</title></head>
+<body>
+  <h1>Coupon URL PRD</h1>
+  <h2>Goals</h2>
+  <p>Active members can claim URL coupons.</p>
+  <h2>Business Rules</h2>
+  <p>User status must be active.</p>
+  <h2>Acceptance Criteria</h2>
+  <p>Inactive users are blocked.</p>
+</body>
+</html>
+"@
+        $serverJob = Start-Job -ScriptBlock {
+            param($Prefix, $Body)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($Prefix)
+            $listener.Start()
+            try {
+                $context = $listener.GetContext()
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+                $context.Response.StatusCode = 200
+                $context.Response.ContentType = 'text/html; charset=utf-8'
+                $context.Response.ContentLength64 = $bytes.Length
+                $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                $context.Response.OutputStream.Close()
+            }
+            finally {
+                $listener.Stop()
+                $listener.Close()
+            }
+        } -ArgumentList $prefix, $html
+        try {
+            Start-Sleep -Milliseconds 500
+            $url = $prefix + 'prd'
+            $urlOutput = .\dist\devflow-windows-amd64.exe intake --root $urlRoot --url $url 2>&1
+            $urlOutput | Tee-Object -FilePath (Join-Path $urlRoot 'url-intake-output.txt') | Out-Host
+            Wait-Job $serverJob -Timeout 10 | Out-Null
+            if ($serverJob.State -eq 'Failed') {
+                Receive-Job $serverJob
+                throw "local URL intake server failed"
+            }
+            $urlText = $urlOutput -join [Environment]::NewLine
+            if ($urlText -notmatch 'url: http://127\.0\.0\.1:') {
+                throw "URL source missing from intake output"
+            }
+            $requirementsPath = Join-Path $urlRoot '.devflow\demands\coupon-url-prd\requirements.md'
+            if (-not (Test-Path $requirementsPath)) {
+                throw "URL intake requirements.md was not created"
+            }
+            $requirementsText = Get-Content -Raw -LiteralPath $requirementsPath
+            if ($requirementsText -notmatch 'Active members can claim URL coupons') {
+                throw "URL intake requirements missing fetched PRD content"
+            }
+        }
+        finally {
+            if ($serverJob.State -eq 'Running') {
+                Stop-Job $serverJob
+            }
+            Remove-Job $serverJob -Force
+        }
+    }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./... -count=1 -timeout 5m" }
     Invoke-Step "git diff check" { git diff --check }

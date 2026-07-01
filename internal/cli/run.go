@@ -26,6 +26,10 @@ var newReviewAdapter = func() adapters.ReviewAdapter {
 	return adapters.GitLabReviewAdapter{}
 }
 
+var newGitHubReviewAdapter = func() adapters.ReviewAdapter {
+	return adapters.GitHubReviewAdapter{}
+}
+
 var newCIGateAdapter = func() adapters.CIGateAdapter {
 	return adapters.GitHubCIAdapter{}
 }
@@ -49,6 +53,7 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	var createMR bool
 	var createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile string
 	var githubRepo, githubPR, githubBaseURL string
+	var reviewProvider string
 	var qualityCommands stringSliceFlag
 
 	fs.StringVar(&root, "root", ".", "root directory")
@@ -64,6 +69,9 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&githubRepo, "github-repo", "", "GitHub repository in owner/repo form for mr-review CI gate")
 	fs.StringVar(&githubPR, "github-pr", "", "GitHub pull request number for mr-review CI gate")
 	fs.StringVar(&githubBaseURL, "github-base-url", "", "GitHub API base url override")
+	var githubCI bool
+	fs.StringVar(&reviewProvider, "review-provider", "", "review provider for mr-review (gitlab or github)")
+	fs.BoolVar(&githubCI, "github-ci", false, "enable GitHub CI gate during mr-review (implied for GitLab review when GitHub flags are set)")
 	fs.BoolVar(&createMR, "create-mr", false, "create or reuse a GitLab merge request after implementation")
 	fs.StringVar(&createMRSourceBranch, "create-mr-source-branch", "", "source branch for create-mr")
 	fs.StringVar(&createMRTargetBranch, "create-mr-target-branch", "", "target branch for create-mr")
@@ -134,33 +142,8 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	if parsedStage == demandflow.StageMRReview {
-		if strings.TrimSpace(gitlabProject) == "" || strings.TrimSpace(gitlabMR) == "" {
-			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
-		}
-		opts.Review = demandflow.ReviewOptions{
-			Adapter: newReviewAdapter(),
-			Ref: adapters.ReviewRef{
-				Project:      gitlabProject,
-				MergeRequest: gitlabMR,
-				BaseURL:      gitlabBaseURL,
-			},
-		}
-
-		githubRepo = strings.TrimSpace(githubRepo)
-		githubPR = strings.TrimSpace(githubPR)
-		if githubRepo != "" || githubPR != "" {
-			if githubRepo == "" || githubPR == "" {
-				return fmt.Errorf("--github-repo and --github-pr must be provided together for mr-review CI gate")
-			}
-			opts.CIGate = demandflow.CIGateOptions{
-				Adapter: newCIGateAdapter(),
-				Ref: adapters.CIRef{
-					Provider: "github",
-					Repo:     githubRepo,
-					PR:       githubPR,
-					BaseURL:  strings.TrimSpace(githubBaseURL),
-				},
-			}
+		if err := configureReview(reviewProvider, gitlabProject, gitlabMR, gitlabBaseURL, githubRepo, githubPR, githubBaseURL, githubCI, &opts); err != nil {
+			return err
 		}
 	}
 
@@ -203,6 +186,84 @@ func printRunResult(stdout io.Writer, result demandflow.RunResult) {
 	}
 }
 
+func configureReview(provider, gitlabProject, gitlabMR, gitlabBaseURL, githubRepo, githubPR, githubBaseURL string, githubCI bool, opts *demandflow.Options) error {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	gitlabProject = strings.TrimSpace(gitlabProject)
+	gitlabMR = strings.TrimSpace(gitlabMR)
+	githubRepo = strings.TrimSpace(githubRepo)
+	githubPR = strings.TrimSpace(githubPR)
+
+	gitlabPresent := gitlabProject != "" || gitlabMR != ""
+	githubPresent := githubRepo != "" || githubPR != ""
+
+	if provider == "" {
+		switch {
+		case gitlabPresent:
+			provider = "gitlab"
+		case githubPresent:
+			provider = "github"
+		default:
+			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+		}
+	}
+
+	switch provider {
+	case "gitlab":
+		if gitlabProject == "" || gitlabMR == "" {
+			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+		}
+		opts.Review = demandflow.ReviewOptions{
+			Adapter: newReviewAdapter(),
+			Ref: adapters.ReviewRef{
+				Provider:     "gitlab",
+				Project:      gitlabProject,
+				MergeRequest: gitlabMR,
+				BaseURL:      strings.TrimSpace(gitlabBaseURL),
+			},
+		}
+		if githubPresent {
+			if githubRepo == "" || githubPR == "" {
+				return fmt.Errorf("--github-repo and --github-pr must be provided together for mr-review CI gate")
+			}
+			opts.CIGate = demandflow.CIGateOptions{
+				Adapter: newCIGateAdapter(),
+				Ref: adapters.CIRef{
+					Provider: "github",
+					Repo:     githubRepo,
+					PR:       githubPR,
+					BaseURL:  strings.TrimSpace(githubBaseURL),
+				},
+			}
+		}
+	case "github":
+		if githubRepo == "" || githubPR == "" {
+			return fmt.Errorf("--github-repo and --github-pr are required for mr-review with --review-provider github")
+		}
+		opts.Review = demandflow.ReviewOptions{
+			Adapter: newGitHubReviewAdapter(),
+			Ref: adapters.ReviewRef{
+				Provider:    "github",
+				Repo:        githubRepo,
+				PullRequest: githubPR,
+				BaseURL:     strings.TrimSpace(githubBaseURL),
+			},
+		}
+		if githubCI {
+			opts.CIGate = demandflow.CIGateOptions{
+				Adapter: newCIGateAdapter(),
+				Ref: adapters.CIRef{
+					Provider: "github",
+					Repo:     githubRepo,
+					PR:       githubPR,
+					BaseURL:  strings.TrimSpace(githubBaseURL),
+				},
+			}
+		}
+	default:
+		return fmt.Errorf("unsupported --review-provider %q (want gitlab or github)", provider)
+	}
+	return nil
+}
 func configureMergeRequest(stage demandflow.Stage, enabled bool, project, sourceBranch, targetBranch, title, description, descriptionFile, baseURL string, opts *demandflow.Options) error {
 	if stage != demandflow.StageImplementation {
 		return nil

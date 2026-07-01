@@ -13,8 +13,11 @@ const (
 )
 
 type ReviewRef struct {
+	Provider     string
 	Project      string
 	MergeRequest string
+	Repo         string
+	PullRequest  string
 	BaseURL      string
 	Token        string
 }

@@ -24,6 +24,7 @@ type WorkspaceSummary struct {
 	Verification VerificationSummary
 	Evidence     EvidenceSummary
 	MergeRequest MergeRequestSummary
+	CIGate       CIGateSummary
 	Memory       MemorySummary
 	Actions      []NextAction
 	Attention    string
@@ -65,6 +66,15 @@ type MergeRequestSummary struct {
 	Message   string
 }
 
+type CIGateSummary struct {
+	Status   string
+	Provider string
+	Repo     string
+	PR       string
+	HeadSHA  string
+	Message  string
+}
+
 type MemorySummary struct {
 	Status   string
 	Pending  int
@@ -91,6 +101,7 @@ func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	summary.Verification = summarizeVerification(events)
 	summary.Evidence = summarizeManualEvidence(events)
 	summary.MergeRequest = summarizeMergeRequest(events, progressText)
+	summary.CIGate = summarizeCIGate(events)
 	summary.Memory = summarizeMemory(root, demandID)
 	summary.Stages = summarizeStages(summary.State, events, summary.Verification, summary.MergeRequest)
 	summary.Artifacts = summarizeArtifacts(demandDir, demand, eventsErr, summary)
@@ -159,6 +170,9 @@ func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 		}
 	}
 	if summary.State == workflow.MRReview && summary.MergeRequest.Status == "cleared" {
+		if summary.CIGate.Status == "failed" || summary.CIGate.Status == "pending" || summary.CIGate.Status == "unknown" {
+			return []NextAction{{Label: "Wait for GitHub CI", Command: "", Reason: "GitHub CI gate is not passing yet."}}
+		}
 		return []NextAction{{Label: "Draft verification", Command: "devflow run --demand " + idArg + " --stage verification --quality-command \"go test ./...\"", Reason: "MR review is clear and verification evidence should be generated."}}
 	}
 	return NextActions(summary.State, summary.Demand.ID)
@@ -416,6 +430,30 @@ func summarizeMergeRequest(events []artifacts.Event, progressText string) MergeR
 	return summary
 }
 
+func summarizeCIGate(events []artifacts.Event) CIGateSummary {
+	summary := CIGateSummary{Status: "not_checked"}
+	for _, event := range events {
+		switch event.Type {
+		case "ci_gate.passed", "ci_gate.blocked":
+			status := strings.TrimSpace(event.Data["status"])
+			if status == "" && event.Type == "ci_gate.passed" {
+				status = "passed"
+			}
+			if status == "" {
+				status = "blocked"
+			}
+			summary = CIGateSummary{
+				Status:   status,
+				Provider: event.Data["provider"],
+				Repo:     event.Data["repo"],
+				PR:       event.Data["pr"],
+				HeadSHA:  event.Data["head_sha"],
+				Message:  event.Message,
+			}
+		}
+	}
+	return summary
+}
 func summarizeMemory(root, demandID string) MemorySummary {
 	summary := MemorySummary{Status: "none"}
 	candidates, err := memory.NewStore(root).ListCandidates(demandID)
@@ -463,6 +501,9 @@ func workspaceAttention(summary WorkspaceSummary, eventsErr error) string {
 		return "returned to plan"
 	}
 	if summary.State == workflow.MRReview {
+		if summary.CIGate.Status == "failed" || summary.CIGate.Status == "pending" || summary.CIGate.Status == "unknown" {
+			return "needs GitHub CI gate"
+		}
 		if summary.MergeRequest.Status == "cleared" {
 			return "ready for verification"
 		}

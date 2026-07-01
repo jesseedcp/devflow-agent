@@ -221,6 +221,22 @@ $env:GITLAB_TOKEN = '<your-token>'
 devflow review-gate --gitlab-project "group/project" --gitlab-mr "123"
 ```
 
+### GitHub CI Gate
+
+For repositories hosted on GitHub, check PR CI directly:
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow ci-gate --github-repo "jesseedcp/devflow-agent" --github-pr "18"
+```
+
+To include CI status in the backend-demand `mr-review` stage:
+
+```powershell
+devflow run --demand add-coupon-eligibility-check --stage mr-review --gitlab-project "group/project" --gitlab-mr "123" --github-repo "jesseedcp/devflow-agent" --github-pr "18"
+```
+
+Wave 25 keeps GitLab review comments and GitHub CI as separate gates. If GitHub CI is pending or failing, the demand remains in `mr_review` and `verification` is not drafted.
 ## 8. Run Verification And Closeout
 
 ```powershell

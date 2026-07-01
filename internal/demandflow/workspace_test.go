@@ -181,6 +181,43 @@ func TestWorkspaceNextActionsMRReviewClearedDraftsVerification(t *testing.T) {
 	}
 }
 
+func TestInspectWorkspaceSummarizesPendingCIGate(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "workspace-ci-pending", Title: "CI pending", Description: "CI pending", Source: "test", State: string(workflow.MRReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "mr_review.cleared", Message: "review gate cleared", Data: map[string]string{"mr": "!34"}})
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{
+		Time:    fixedWorkspaceTime().Add(time.Minute),
+		Type:    "ci_gate.blocked",
+		Message: "github ci pending",
+		Data: map[string]string{
+			"provider": "github",
+			"repo":     "owner/repo",
+			"pr":       "42",
+			"status":   "pending",
+		},
+	})
+
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectWorkspace returned error: %v", err)
+	}
+	if summary.CIGate.Status != "pending" {
+		t.Fatalf("CIGate.Status = %q, want pending", summary.CIGate.Status)
+	}
+	if summary.CIGate.Repo != "owner/repo" || summary.CIGate.PR != "42" {
+		t.Fatalf("CIGate = %#v, want owner/repo#42", summary.CIGate)
+	}
+	if summary.Attention != "needs GitHub CI gate" {
+		t.Fatalf("Attention = %q, want needs GitHub CI gate", summary.Attention)
+	}
+	if len(summary.Actions) == 0 || summary.Actions[0].Label != "Wait for GitHub CI" {
+		t.Fatalf("Actions = %#v, want Wait for GitHub CI first", summary.Actions)
+	}
+}
 func appendWorkspaceEvent(t *testing.T, store artifacts.Store, demandID string, event artifacts.Event) {
 	t.Helper()
 	if err := store.AppendEvent(demandID, event); err != nil {

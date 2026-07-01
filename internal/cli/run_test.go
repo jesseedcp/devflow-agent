@@ -392,3 +392,50 @@ func TestRunImplementationUsesBackendDemandDefaults(t *testing.T) {
 		t.Fatalf("progress missing default quality command:\n%s", string(progress))
 	}
 }
+
+func TestRunMRReviewWithGitHubCIAdvancesToVerification(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.MRReview)
+
+	originalReview := newReviewAdapter
+	defer func() { newReviewAdapter = originalReview }()
+	newReviewAdapter = func() adapters.ReviewAdapter { return &fakeReviewGateAdapter{} }
+
+	originalCI := newCIGateAdapter
+	defer func() { newCIGateAdapter = originalCI }()
+	newCIGateAdapter = func() adapters.CIGateAdapter {
+		return &fakeCIGateAdapter{result: adapters.CIResult{
+			Provider: "github",
+			Repo:     "owner/repo",
+			PR:       "42",
+			HeadSHA:  "abc123",
+			Status:   adapters.CIStatusPassed,
+			Message:  "github ci passed",
+			Checks:   []adapters.CICheck{{Name: "Go verification", Status: "completed", Conclusion: "success"}},
+		}}
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{"run", "--root", root, "--demand", "add-coupon-check", "--stage", "mr-review", "--gitlab-project", "group/project", "--gitlab-mr", "1", "--github-repo", "owner/repo", "--github-pr", "42"}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "state: mr_review -> verification") {
+		t.Fatalf("stdout = %q want mr_review -> verification", stdout.String())
+	}
+	store := artifacts.NewStore(root)
+	progress, readErr := os.ReadFile(filepath.Join(store.DemandDir("add-coupon-check"), artifacts.ProgressFile))
+	if readErr != nil {
+		t.Fatalf("read progress: %v", readErr)
+	}
+	if !strings.Contains(string(progress), "## CI Gate") {
+		t.Fatalf("progress.md missing CI gate evidence:\n%s", string(progress))
+	}
+	events, readErr := os.ReadFile(filepath.Join(store.DemandDir("add-coupon-check"), artifacts.EventsFile))
+	if readErr != nil {
+		t.Fatalf("read events: %v", readErr)
+	}
+	if !strings.Contains(string(events), "ci_gate.passed") {
+		t.Fatalf("events.jsonl missing ci_gate.passed:\n%s", string(events))
+	}
+}

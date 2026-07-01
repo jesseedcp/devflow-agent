@@ -190,3 +190,86 @@ func TestEngineMRReviewImplementationCommentReturnsToImplementation(t *testing.T
 		t.Fatalf("state = %q want implementation", demand.State)
 	}
 }
+
+type fakeCIGate struct {
+	result adapters.CIResult
+	err    error
+}
+
+func (f fakeCIGate) Check(context.Context, adapters.CIRef) (adapters.CIResult, error) {
+	return f.result, f.err
+}
+
+func TestEngineMRReviewClearCommentsButPendingCIRemainsBlocked(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(fakeReviewAdapter{}),
+		CIGate: CIGateOptions{
+			Adapter: fakeCIGate{result: adapters.CIResult{
+				Provider: "github",
+				Repo:     "owner/repo",
+				PR:       "42",
+				Status:   adapters.CIStatusPending,
+				Message:  "github ci pending",
+				Checks:   []adapters.CICheck{{Name: "Go verification", Status: "queued"}},
+			}},
+			Ref: adapters.CIRef{Provider: "github", Repo: "owner/repo", PR: "42"},
+		},
+		Now: fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "ci gate blocked") {
+		t.Fatalf("err = %v, want ci gate blocked", err)
+	}
+	updated, loadErr := engine.Store.LoadDemand("add-coupon-check")
+	if loadErr != nil {
+		t.Fatalf("LoadDemand returned error: %v", loadErr)
+	}
+	if workflow.State(updated.State) != workflow.MRReview {
+		t.Fatalf("state = %s, want %s", updated.State, workflow.MRReview)
+	}
+	body := readArtifact(t, engine, artifacts.ProgressFile)
+	if !strings.Contains(body, "## CI Gate") || !strings.Contains(body, "pending") {
+		t.Fatalf("progress.md missing CI gate evidence:\n%s", body)
+	}
+}
+
+func TestEngineMRReviewClearCommentsAndPassingCIAdvancesToVerification(t *testing.T) {
+	t.Parallel()
+
+	engine, root := newTestEngine(t, workflow.MRReview)
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StageMRReview,
+		Runner:   &StaticRunner{},
+		Review:   mrReviewOptions(fakeReviewAdapter{}),
+		CIGate: CIGateOptions{
+			Adapter: fakeCIGate{result: adapters.CIResult{
+				Provider: "github",
+				Repo:     "owner/repo",
+				PR:       "42",
+				Status:   adapters.CIStatusPassed,
+				Checks:   []adapters.CICheck{{Name: "Go verification", Status: "completed", Conclusion: "success"}},
+				Message:  "github ci passed",
+			}},
+			Ref: adapters.CIRef{Provider: "github", Repo: "owner/repo", PR: "42"},
+		},
+		Now: fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	updated, loadErr := engine.Store.LoadDemand("add-coupon-check")
+	if loadErr != nil {
+		t.Fatalf("LoadDemand returned error: %v", loadErr)
+	}
+	if workflow.State(updated.State) != workflow.Verification {
+		t.Fatalf("state = %s, want %s", updated.State, workflow.Verification)
+	}
+}

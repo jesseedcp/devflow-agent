@@ -30,6 +30,7 @@ func TestCreateDemandWorkspace(t *testing.T) {
 	files := []string{
 		DemandFile,
 		IntakeFile,
+		ContextFile,
 		RequirementsFile,
 		PlanFile,
 		ProgressFile,
@@ -285,6 +286,28 @@ func TestWriteArtifactSupportsIntakeFile(t *testing.T) {
 	}
 	if string(body) != "# Intake\n\nraw demand" {
 		t.Fatalf("intake.md = %q", string(body))
+	}
+}
+func TestWriteArtifactSupportsContextFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("context-artifact")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	if err := store.WriteArtifact(demand.ID, ContextFile, "# Context\n\nmemory recall"); err != nil {
+		t.Fatalf("WriteArtifact context returned error: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", demand.ID, ContextFile))
+	if err != nil {
+		t.Fatalf("ReadFile context returned error: %v", err)
+	}
+	if string(body) != "# Context\n\nmemory recall" {
+		t.Fatalf("context.md = %q", string(body))
 	}
 }
 func TestEnsureConfirmationEvidenceIsIdempotent(t *testing.T) {

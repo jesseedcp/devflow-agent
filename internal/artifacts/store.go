@@ -75,6 +75,9 @@ func (s Store) CreateDemand(demand Demand) error {
 	if err := writeTextFile(filepath.Join(tempDir, IntakeFile), templates.Intake(demand.Title, demand.Source)); err != nil {
 		return fmt.Errorf("write intake template: %w", err)
 	}
+	if err := writeTextFile(filepath.Join(tempDir, ContextFile), templates.Context(demand.Title)); err != nil {
+		return fmt.Errorf("write context template: %w", err)
+	}
 	if err := writeTextFile(filepath.Join(tempDir, RequirementsFile), templates.Requirements(demand.Title, demand.Description)); err != nil {
 		return fmt.Errorf("write requirements template: %w", err)
 	}
@@ -537,6 +540,7 @@ func validateDemandID(id string) error {
 func validateAppendableArtifactName(name string) error {
 	switch name {
 	case IntakeFile,
+		ContextFile,
 		RequirementsFile,
 		PlanFile,
 		ProgressFile,

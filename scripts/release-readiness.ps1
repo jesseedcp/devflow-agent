@@ -183,7 +183,38 @@ try {
             Remove-Job $serverJob -Force
         }
     }
-    Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
+    Invoke-Step "manual evidence smoke" {
+        $evidenceRoot = Join-Path $readinessRoot 'manual-evidence-smoke'
+        New-Item -ItemType Directory -Force $evidenceRoot | Out-Null
+        $demandDir = Join-Path $evidenceRoot '.devflow\demands\manual-evidence-coupon'
+        New-Item -ItemType Directory -Force $demandDir | Out-Null
+        $now = (Get-Date).ToUniversalTime().ToString('o')
+        @{
+            id = 'manual-evidence-coupon'
+            title = 'Manual evidence coupon'
+            description = 'Inactive users are blocked'
+            source = 'release-readiness'
+            state = 'verification'
+            created_at = $now
+            updated_at = $now
+        } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $demandDir 'demand.json')
+        "# Verification: Manual evidence coupon`n" | Set-Content -Encoding UTF8 (Join-Path $demandDir 'verification.md')
+        '{"time":"2026-07-01T00:00:00Z","type":"verification.recorded","message":"verification pass","data":{"status":"PASS","command":"go test ./internal/version","evidence_file":"verification.md"}}' | Set-Content -Encoding UTF8 (Join-Path $demandDir 'events.jsonl')
+        .\dist\devflow-windows-amd64.exe evidence add --root $evidenceRoot --demand manual-evidence-coupon --type api --criterion "Inactive users are blocked" --summary "POST /coupon/claim returned COUPON_USER_INACTIVE." --by readiness
+
+        $evidenceList = .\dist\devflow-windows-amd64.exe evidence list --root $evidenceRoot --demand manual-evidence-coupon 2>&1
+        $evidenceList | Tee-Object -FilePath (Join-Path $evidenceRoot 'evidence-list-output.txt') | Out-Host
+        if (($evidenceList -join [Environment]::NewLine) -notmatch 'PASS api Inactive users are blocked') {
+            throw "manual evidence missing from evidence list"
+        }
+
+        $statusOutput = .\dist\devflow-windows-amd64.exe status --root $evidenceRoot --demand manual-evidence-coupon 2>&1
+        $statusOutput | Tee-Object -FilePath (Join-Path $evidenceRoot 'status-output.txt') | Out-Host
+        if (($statusOutput -join [Environment]::NewLine) -notmatch 'pass=1 fail=0 blocked=0') {
+            throw "manual evidence counts missing from status"
+        }
+    }
+        Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./... -count=1 -timeout 5m" }
     Invoke-Step "git diff check" { git diff --check }
 

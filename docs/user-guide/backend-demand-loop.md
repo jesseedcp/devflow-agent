@@ -230,6 +230,20 @@ devflow run --demand add-coupon-eligibility-check --stage closeout
 devflow confirm --demand add-coupon-eligibility-check --stage closeout --by dd --summary "closeout accepted"
 ```
 
+Record external or manual acceptance evidence while the demand is in `verification`:
+
+```powershell
+devflow evidence add --demand add-coupon-eligibility-check `
+  --type api `
+  --criterion "Inactive users are blocked" `
+  --summary "POST /coupon/claim returned COUPON_USER_INACTIVE." `
+  --link "https://example.test/log/123" `
+  --by dd
+
+devflow evidence list --demand add-coupon-eligibility-check
+```
+
+Manual evidence is local and reviewable. It can reference API calls, logs, monitor links, QA notes, or other acceptance proof, but Devflow does not fetch those external systems in Wave 24. Manual evidence does not auto-confirm verification.
 
 ### Stable knowledge review
 

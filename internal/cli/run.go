@@ -22,6 +22,10 @@ var newMergeRequestAdapter = func() adapters.MergeRequestAdapter {
 	return adapters.GitLabReviewAdapter{}
 }
 
+var newGitHubMergeRequestAdapter = func() adapters.MergeRequestAdapter {
+	return adapters.GitHubPullRequestAdapter{}
+}
+
 var newReviewAdapter = func() adapters.ReviewAdapter {
 	return adapters.GitLabReviewAdapter{}
 }
@@ -50,7 +54,8 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	var root, runnerRoot, qualityRoot, demandID, stage, configPath, permissionMode, gitlabProject, gitlabMR, gitlabBaseURL string
-	var createMR bool
+	var createMR, createChangeRequest bool
+	var changeRequestProvider string
 	var createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile string
 	var githubRepo, githubPR, githubBaseURL string
 	var reviewProvider string
@@ -73,6 +78,8 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&reviewProvider, "review-provider", "", "review provider for mr-review (gitlab or github)")
 	fs.BoolVar(&githubCI, "github-ci", false, "enable GitHub CI gate during mr-review (implied for GitLab review when GitHub flags are set)")
 	fs.BoolVar(&createMR, "create-mr", false, "create or reuse a GitLab merge request after implementation")
+	fs.BoolVar(&createChangeRequest, "create-change-request", false, "create or reuse a change request after implementation (provider-neutral)")
+	fs.StringVar(&changeRequestProvider, "change-request-provider", "", "change request provider for create-change-request (gitlab or github)")
 	fs.StringVar(&createMRSourceBranch, "create-mr-source-branch", "", "source branch for create-mr")
 	fs.StringVar(&createMRTargetBranch, "create-mr-target-branch", "", "target branch for create-mr")
 	fs.StringVar(&createMRTitle, "create-mr-title", "", "title for create-mr")
@@ -147,7 +154,7 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 		}
 	}
 
-	if err := configureMergeRequest(parsedStage, createMR, gitlabProject, createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile, gitlabBaseURL, &opts); err != nil {
+	if err := configureChangeRequest(parsedStage, createMR, createChangeRequest, changeRequestProvider, gitlabProject, githubRepo, createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile, gitlabBaseURL, githubBaseURL, &opts); err != nil {
 		return err
 	}
 	engine := demandflow.NewEngine(root)
@@ -264,11 +271,17 @@ func configureReview(provider, gitlabProject, gitlabMR, gitlabBaseURL, githubRep
 	}
 	return nil
 }
-func configureMergeRequest(stage demandflow.Stage, enabled bool, project, sourceBranch, targetBranch, title, description, descriptionFile, baseURL string, opts *demandflow.Options) error {
+func configureChangeRequest(stage demandflow.Stage, createMR, createChangeRequest bool, provider, project, githubRepo, sourceBranch, targetBranch, title, description, descriptionFile, gitlabBaseURL, githubBaseURL string, opts *demandflow.Options) error {
 	if stage != demandflow.StageImplementation {
 		return nil
 	}
-	requested := enabled ||
+	project = strings.TrimSpace(project)
+	githubRepo = strings.TrimSpace(githubRepo)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+
+	requested := createMR ||
+		createChangeRequest ||
+		provider != "" ||
 		strings.TrimSpace(sourceBranch) != "" ||
 		strings.TrimSpace(targetBranch) != "" ||
 		strings.TrimSpace(title) != "" ||
@@ -278,10 +291,21 @@ func configureMergeRequest(stage demandflow.Stage, enabled bool, project, source
 		return nil
 	}
 
-	var missing []string
-	if strings.TrimSpace(project) == "" {
-		missing = append(missing, "--gitlab-project")
+	if provider == "" {
+		switch {
+		case githubRepo != "" && project == "":
+			provider = "github"
+		default:
+			provider = "gitlab"
+		}
 	}
+
+	desc, err := mergeRequestDescription(description, descriptionFile)
+	if err != nil {
+		return err
+	}
+
+	var missing []string
 	if strings.TrimSpace(sourceBranch) == "" {
 		missing = append(missing, "--create-mr-source-branch")
 	}
@@ -291,25 +315,48 @@ func configureMergeRequest(stage demandflow.Stage, enabled bool, project, source
 	if strings.TrimSpace(title) == "" {
 		missing = append(missing, "--create-mr-title")
 	}
-	if len(missing) > 0 {
-		return fmt.Errorf("%s required for --create-mr", strings.Join(missing, ", "))
-	}
 
-	desc, err := mergeRequestDescription(description, descriptionFile)
-	if err != nil {
-		return err
-	}
-
-	opts.MergeRequest = demandflow.MergeRequestOptions{
-		Adapter: newMergeRequestAdapter(),
-		Spec: adapters.MergeRequestSpec{
-			Project:      strings.TrimSpace(project),
-			SourceBranch: strings.TrimSpace(sourceBranch),
-			TargetBranch: strings.TrimSpace(targetBranch),
-			Title:        strings.TrimSpace(title),
-			Description:  desc,
-			BaseURL:      strings.TrimSpace(baseURL),
-		},
+	switch provider {
+	case "github":
+		if githubRepo == "" {
+			missing = append([]string{"--github-repo"}, missing...)
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("%s required for create-change-request (github)", strings.Join(missing, ", "))
+		}
+		opts.ChangeRequest = demandflow.ChangeRequestOptions{
+			Adapter: newGitHubMergeRequestAdapter(),
+			Spec: adapters.MergeRequestSpec{
+				Provider:     "github",
+				Repo:         githubRepo,
+				SourceBranch: strings.TrimSpace(sourceBranch),
+				TargetBranch: strings.TrimSpace(targetBranch),
+				Title:        strings.TrimSpace(title),
+				Description:  desc,
+				BaseURL:      strings.TrimSpace(githubBaseURL),
+			},
+		}
+	case "gitlab":
+		if project == "" {
+			missing = append([]string{"--gitlab-project"}, missing...)
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("%s required for --create-mr", strings.Join(missing, ", "))
+		}
+		opts.ChangeRequest = demandflow.ChangeRequestOptions{
+			Adapter: newMergeRequestAdapter(),
+			Spec: adapters.MergeRequestSpec{
+				Provider:     "gitlab",
+				Project:      project,
+				SourceBranch: strings.TrimSpace(sourceBranch),
+				TargetBranch: strings.TrimSpace(targetBranch),
+				Title:        strings.TrimSpace(title),
+				Description:  desc,
+				BaseURL:      strings.TrimSpace(gitlabBaseURL),
+			},
+		}
+	default:
+		return fmt.Errorf("unsupported --change-request-provider %q (want gitlab or github)", provider)
 	}
 	return nil
 }

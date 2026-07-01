@@ -150,7 +150,57 @@ func TestChangeRequestHelpIsListed(t *testing.T) {
 	if err := Run([]string{"help"}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "change-request Create or reuse change requests") {
+	if !strings.Contains(stdout.String(), "change-request Create or reuse GitLab MRs or GitHub PRs") {
 		t.Fatalf("help missing change-request entry:\n%s", stdout.String())
+	}
+}
+
+func TestRunMREnsureGitHubProviderCreates(t *testing.T) {
+	original := newGitHubMergeRequestAdapter
+	defer func() { newGitHubMergeRequestAdapter = original }()
+	fake := &fakeMergeRequestAdapter{result: adapters.MergeRequestResult{
+		IID: 12, WebURL: "https://github.com/owner/repo/pull/12", Title: "PR", State: "open", WasCreated: true,
+	}}
+	newGitHubMergeRequestAdapter = func() adapters.MergeRequestAdapter { return fake }
+
+	var buf bytes.Buffer
+	err := Run([]string{"mr", "ensure", "--provider", "github", "--github-repo", "owner/repo", "--source-branch", "feature/x", "--target-branch", "main", "--title", "PR"}, &buf, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("mr ensure github: %v", err)
+	}
+	if fake.spec.Provider != "github" || fake.spec.Repo != "owner/repo" {
+		t.Fatalf("spec = %#v", fake.spec)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Created pull request !12") {
+		t.Fatalf("unexpected output:\n%s", out)
+	}
+}
+
+func TestRunChangeRequestEnsureGitHubProvider(t *testing.T) {
+	original := newGitHubMergeRequestAdapter
+	defer func() { newGitHubMergeRequestAdapter = original }()
+	fake := &fakeMergeRequestAdapter{result: adapters.MergeRequestResult{
+		IID: 8, WebURL: "https://github.com/owner/repo/pull/8", Title: "PR", State: "open",
+	}}
+	newGitHubMergeRequestAdapter = func() adapters.MergeRequestAdapter { return fake }
+
+	var buf bytes.Buffer
+	err := Run([]string{"change-request", "ensure", "--provider", "github", "--github-repo", "owner/repo", "--source-branch", "feature/x", "--target-branch", "main", "--title", "PR"}, &buf, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("change-request ensure github: %v", err)
+	}
+	if fake.spec.Provider != "github" || fake.spec.Repo != "owner/repo" {
+		t.Fatalf("spec = %#v", fake.spec)
+	}
+	if !strings.Contains(buf.String(), "Reused pull request !8") {
+		t.Fatalf("unexpected output:\n%s", buf.String())
+	}
+}
+
+func TestRunMREnsureGitHubProviderRequiresRepo(t *testing.T) {
+	err := Run([]string{"mr", "ensure", "--provider", "github", "--source-branch", "s", "--target-branch", "t", "--title", "x"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--github-repo is required for provider github") {
+		t.Fatalf("err = %v, want github repo required", err)
 	}
 }

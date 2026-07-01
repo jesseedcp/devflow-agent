@@ -234,52 +234,66 @@ func TestRunUsesRunnerRootForDemandRunner(t *testing.T) {
 	}
 }
 
-func TestConfigureMergeRequestSetsFlags(t *testing.T) {
+func TestConfigureChangeRequestSetsFlags(t *testing.T) {
 	var opts demandflow.Options
-	err := configureMergeRequest(demandflow.StageImplementation, true, "group/project", "feature/x", "main", "My MR", "desc", "", "", &opts)
+	err := configureChangeRequest(demandflow.StageImplementation, true, false, "", "group/project", "", "feature/x", "main", "My MR", "desc", "", "", "", &opts)
 	if err != nil {
-		t.Fatalf("configureMergeRequest: %v", err)
+		t.Fatalf("configureChangeRequest: %v", err)
 	}
-	if opts.MergeRequest.Adapter == nil {
-		t.Fatal("MergeRequest adapter not set")
+	if opts.ChangeRequest.Adapter == nil {
+		t.Fatal("ChangeRequest adapter not set")
 	}
-	if opts.MergeRequest.Spec.Project != "group/project" {
-		t.Fatalf("project = %q, want group/project", opts.MergeRequest.Spec.Project)
+	if opts.ChangeRequest.Spec.Project != "group/project" {
+		t.Fatalf("project = %q, want group/project", opts.ChangeRequest.Spec.Project)
 	}
-	if opts.MergeRequest.Spec.SourceBranch != "feature/x" {
-		t.Fatalf("source = %q, want feature/x", opts.MergeRequest.Spec.SourceBranch)
+	if opts.ChangeRequest.Spec.SourceBranch != "feature/x" {
+		t.Fatalf("source = %q, want feature/x", opts.ChangeRequest.Spec.SourceBranch)
 	}
-	if opts.MergeRequest.Spec.TargetBranch != "main" {
-		t.Fatalf("target = %q, want main", opts.MergeRequest.Spec.TargetBranch)
+	if opts.ChangeRequest.Spec.TargetBranch != "main" {
+		t.Fatalf("target = %q, want main", opts.ChangeRequest.Spec.TargetBranch)
 	}
-	if opts.MergeRequest.Spec.Title != "My MR" {
-		t.Fatalf("title = %q, want My MR", opts.MergeRequest.Spec.Title)
+	if opts.ChangeRequest.Spec.Title != "My MR" {
+		t.Fatalf("title = %q, want My MR", opts.ChangeRequest.Spec.Title)
 	}
 }
 
-func TestConfigureMergeRequestSkipsNonImplementation(t *testing.T) {
+func TestConfigureChangeRequestSetsGitHubProvider(t *testing.T) {
 	var opts demandflow.Options
-	err := configureMergeRequest(demandflow.StageRequirements, true, "group/project", "feature/x", "main", "title", "", "", "", &opts)
+	err := configureChangeRequest(demandflow.StageImplementation, false, true, "github", "", "owner/repo", "feature/x", "main", "My PR", "", "", "", "", &opts)
 	if err != nil {
-		t.Fatalf("configureMergeRequest: %v", err)
+		t.Fatalf("configureChangeRequest: %v", err)
 	}
-	if opts.MergeRequest.Adapter != nil {
+	if opts.ChangeRequest.Adapter == nil {
+		t.Fatal("ChangeRequest adapter not set")
+	}
+	if opts.ChangeRequest.Spec.Provider != "github" || opts.ChangeRequest.Spec.Repo != "owner/repo" {
+		t.Fatalf("spec = %#v, want github owner/repo", opts.ChangeRequest.Spec)
+	}
+}
+
+func TestConfigureChangeRequestSkipsNonImplementation(t *testing.T) {
+	var opts demandflow.Options
+	err := configureChangeRequest(demandflow.StageRequirements, true, false, "", "group/project", "", "feature/x", "main", "title", "", "", "", "", &opts)
+	if err != nil {
+		t.Fatalf("configureChangeRequest: %v", err)
+	}
+	if opts.ChangeRequest.Adapter != nil {
 		t.Fatal("expected nil adapter for non-implementation stage")
 	}
 }
 
-func TestConfigureMergeRequestSkipsMissingFlags(t *testing.T) {
+func TestConfigureChangeRequestSkipsMissingFlags(t *testing.T) {
 	var opts demandflow.Options
-	err := configureMergeRequest(demandflow.StageImplementation, false, "", "", "", "", "", "", "", &opts)
+	err := configureChangeRequest(demandflow.StageImplementation, false, false, "", "", "", "", "", "", "", "", "", "", &opts)
 	if err != nil {
-		t.Fatalf("configureMergeRequest: %v", err)
+		t.Fatalf("configureChangeRequest: %v", err)
 	}
-	if opts.MergeRequest.Adapter != nil {
-		t.Fatal("expected nil adapter when MR sync is not requested")
+	if opts.ChangeRequest.Adapter != nil {
+		t.Fatal("expected nil adapter when change request sync is not requested")
 	}
 }
 
-func TestConfigureMergeRequestRejectsMissingRequiredFlagsWhenEnabled(t *testing.T) {
+func TestConfigureChangeRequestRejectsMissingRequiredFlagsWhenEnabled(t *testing.T) {
 	tests := []struct {
 		name                           string
 		project, source, target, title string
@@ -292,7 +306,7 @@ func TestConfigureMergeRequestRejectsMissingRequiredFlagsWhenEnabled(t *testing.
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var opts demandflow.Options
-			err := configureMergeRequest(demandflow.StageImplementation, true, tc.project, tc.source, tc.target, tc.title, "", "", "", &opts)
+			err := configureChangeRequest(demandflow.StageImplementation, true, false, "", tc.project, "", tc.source, tc.target, tc.title, "", "", "", "", &opts)
 			if err == nil {
 				t.Fatal("expected missing flag error")
 			}
@@ -517,5 +531,55 @@ func TestRunMRReviewGitHubProviderWithCIPendingBlocks(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "state: mr_review -> verification") {
 		t.Fatalf("stdout should not advance to verification: %q", stdout.String())
+	}
+}
+
+func TestRunImplementationCreateChangeRequestGitHubSyncsPR(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Implementation)
+
+	originalRunner := newDemandRunner
+	defer func() { newDemandRunner = originalRunner }()
+	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
+		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
+			demandflow.StageImplementation: {Text: "## 瀹炵幇鎽樿\n\nstubbed implementation body\n"},
+		}}
+	}
+
+	fakeAdapter := &fakeMergeRequestAdapter{result: adapters.MergeRequestResult{
+		IID: 21, WebURL: "https://github.com/owner/repo/pull/21", Title: "Implement coupon", State: "open", WasCreated: true,
+	}}
+	originalGH := newGitHubMergeRequestAdapter
+	defer func() { newGitHubMergeRequestAdapter = originalGH }()
+	newGitHubMergeRequestAdapter = func() adapters.MergeRequestAdapter { return fakeAdapter }
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"run",
+		"--root", root,
+		"--demand", "add-coupon-check",
+		"--stage", "implementation",
+		"--create-change-request",
+		"--change-request-provider", "github",
+		"--github-repo", "owner/repo",
+		"--create-mr-source-branch", "feature/coupon",
+		"--create-mr-target-branch", "main",
+		"--create-mr-title", "Implement coupon",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run implementation: %v", err)
+	}
+	if fakeAdapter.spec.Provider != "github" || fakeAdapter.spec.Repo != "owner/repo" {
+		t.Fatalf("spec = %#v, want github owner/repo", fakeAdapter.spec)
+	}
+	if fakeAdapter.spec.SourceBranch != "feature/coupon" {
+		t.Fatalf("source = %q, want feature/coupon", fakeAdapter.spec.SourceBranch)
+	}
+	progress, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", "add-coupon-check", artifacts.ProgressFile))
+	if err != nil {
+		t.Fatalf("read progress: %v", err)
+	}
+	if !strings.Contains(string(progress), "!21") {
+		t.Fatalf("progress.md missing change-request evidence:\n%s", string(progress))
 	}
 }

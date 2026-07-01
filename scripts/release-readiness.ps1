@@ -232,6 +232,8 @@ try {
     } else {
         Add-Content -LiteralPath $report -Value "## gitlab review gate`nSkipped. Pass -RunGitLabGate with -GitLabProject and -GitLabMR to run.`n"
     }
+
+    Add-Content -LiteralPath $report -Value "## github ci gate`nDefault readiness does not call live GitHub. Run devflow ci-gate --github-repo <owner/repo> --github-pr <number> with GITHUB_TOKEN for a live private check.`n"
 }
 finally {
     Pop-Location

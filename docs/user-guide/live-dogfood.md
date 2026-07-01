@@ -68,3 +68,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release-readiness.ps
 Live dogfood creates or reuses an offline merge request during the implementation stage by default. The merge request evidence (IID, URL, state, action) is recorded in `progress.md` alongside quality results and implementation summaries.
 
 For production GitLab projects, use `devflow mr ensure` or `devflow run --stage implementation --create-mr-*` with a valid `GITLAB_TOKEN`.
+
+
+## Optional GitHub CI Gate
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow ci-gate --github-repo "jesseedcp/devflow-agent" --github-pr "18"
+```

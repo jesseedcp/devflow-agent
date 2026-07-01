@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jesseedcp/devflow-agent/internal/adapters"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 )
@@ -60,5 +61,11 @@ type Options struct {
 	Runner          Runner
 	Review          ReviewOptions
 	MergeRequest    MergeRequestOptions
+	CIGate          CIGateOptions
 	Now             func() time.Time
+}
+
+type CIGateOptions struct {
+	Adapter adapters.CIGateAdapter
+	Ref     adapters.CIRef
 }

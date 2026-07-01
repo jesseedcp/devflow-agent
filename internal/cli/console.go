@@ -143,6 +143,14 @@ func printConsoleQuality(stdout io.Writer, root, demandID string) {
 }
 
 func printRequirementQualityChecks(stdout io.Writer, stage demandflow.StageEvaluation) {
+	var builder strings.Builder
+	renderRequirementQualityChecks(&builder, stage, "    ")
+	if builder.Len() > 0 {
+		fmt.Fprint(stdout, builder.String())
+	}
+}
+
+func renderRequirementQualityChecks(builder *strings.Builder, stage demandflow.StageEvaluation, indent string) {
 	for _, check := range stage.Checks {
 		if !strings.HasPrefix(check.ID, "requirements.") {
 			continue
@@ -150,9 +158,9 @@ func printRequirementQualityChecks(stdout io.Writer, stage demandflow.StageEvalu
 		if check.Status == demandflow.EvaluationPass || check.Status == demandflow.EvaluationNotApplicable {
 			continue
 		}
-		fmt.Fprintf(stdout, "    %-36s %s\n", check.ID, check.Status)
+		fmt.Fprintf(builder, "%s%-36s %s\n", indent, check.ID, check.Status)
 		if strings.TrimSpace(check.Evidence) != "" {
-			fmt.Fprintf(stdout, "      %s\n", check.Evidence)
+			fmt.Fprintf(builder, "%s  %s\n", indent, check.Evidence)
 		}
 	}
 }

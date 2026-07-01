@@ -219,6 +219,22 @@ func (m workbenchModel) renderDetail(builder *strings.Builder) {
 	}
 	fmt.Fprintf(builder, "State: %s\n", summary.Workspace.State)
 	fmt.Fprintf(builder, "Attention: %s\n", summary.Workspace.Attention)
+	builder.WriteString("Quality:\n")
+	evaluation, err := demandflow.EvaluateDemand(m.opts.root, summary.Workspace.Demand.ID)
+	if err != nil {
+		fmt.Fprintf(builder, "  unavailable: %v\n", err)
+	} else {
+		for _, stage := range evaluation.Stages {
+			fmt.Fprintf(builder, "  %-14s %s", stage.Stage, stage.Status)
+			if stage.Blockers > 0 || stage.Warnings > 0 {
+				fmt.Fprintf(builder, " blockers=%d warnings=%d", stage.Blockers, stage.Warnings)
+			}
+			fmt.Fprintln(builder)
+			if stage.Stage == demandflow.StageRequirements {
+				renderRequirementQualityChecks(builder, stage, "    ")
+			}
+		}
+	}
 	builder.WriteString("Next:\n")
 	renderWorkbenchAction(builder, summary.PrimaryAction)
 	builder.WriteString("Run-ready:\n")

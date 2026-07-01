@@ -173,6 +173,39 @@ func TestWorkbenchSnapshotSelectedDemandShowsDetail(t *testing.T) {
 	}
 }
 
+func TestWorkbenchSnapshotPrintsContextAwareRequirementChecks(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "workbench-quality-context", Title: "Workbench quality context", Description: "Evaluate context", Source: "test", State: string(workflow.RequirementsReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.IntakeFile, "# Intake\n\n## 验收标准\n- Inactive users are blocked.\n"); err != nil {
+		t.Fatalf("WriteArtifact intake returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ContextFile, "# Context\n\n## Approved Stable Memory\n\nNo approved stable memory recalled.\n\n## Historical Demand Candidates\n\n- `coupon-old`: Candidate needs confirmation.\n"); err != nil {
+		t.Fatalf("WriteArtifact context returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, "# Requirements\n\n## 业务规则\n\n- User status must be active.\n\n## 验收标准\n\n- Active users can claim coupons.\n\n## 待确认问题\n\n- 待人工补充。\n"); err != nil {
+		t.Fatalf("WriteArtifact requirements returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{
+		"requirements.intake_coverage",
+		"requirements.candidate_guard",
+		"Inactive users are blocked",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("workbench snapshot missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestWorkbenchSnapshotMissingDemandReturnsError(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

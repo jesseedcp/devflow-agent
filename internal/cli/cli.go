@@ -54,6 +54,7 @@ Usage:
   devflow smoke --title <title> --description <text>
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow review-gate --gitlab-project <project> --gitlab-mr <iid>
+  devflow ci-gate --github-repo <owner/repo> --github-pr <number>
   devflow mr ensure --gitlab-project <project> --source-branch <branch> --target-branch <branch> --title <text>
   devflow live-dogfood [--root <path>] [--config <path>] [--with-gitlab]
   devflow workbench
@@ -82,6 +83,7 @@ Commands:
   smoke    Run an explicit local requirements-stage smoke test
   run       Run one backend-demand agent stage
   review-gate Check unresolved GitLab MR comments directly
+  ci-gate   Check GitHub PR CI status directly
   mr        Create or reuse GitLab merge requests
   live-dogfood Run opt-in live provider sandbox dogfood
   workbench Launch the demand workbench TUI
@@ -143,6 +145,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runDemandStage(args[1:], stdout, stderr)
 	case "review-gate":
 		return runReviewGate(args[1:], stdout, stderr)
+	case "ci-gate":
+		return runCIGate(args[1:], stdout, stderr)
 	case "mr":
 		return runMR(args[1:], stdout, stderr)
 	case "live-dogfood":

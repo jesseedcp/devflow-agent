@@ -26,6 +26,10 @@ var newReviewAdapter = func() adapters.ReviewAdapter {
 	return adapters.GitLabReviewAdapter{}
 }
 
+var newCIGateAdapter = func() adapters.CIGateAdapter {
+	return adapters.GitHubCIAdapter{}
+}
+
 type stringSliceFlag []string
 
 func (s *stringSliceFlag) String() string {

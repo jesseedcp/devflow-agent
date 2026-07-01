@@ -259,6 +259,32 @@ func TestConsoleRunNextRunsMRReviewWithGitLabFlags(t *testing.T) {
 	}
 }
 
+func TestConsoleRunNextRunsMRReviewWithGitHubFlags(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-mr-github", Title: "Console MR GitHub", Description: "Review PR", Source: "test", State: string(workflow.MRReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	var gotArgs []string
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	err := Run([]string{"console", "--root", root, "--demand", demand.ID, "--run-next", "--review-provider", "github", "--github-repo", "owner/repo", "--github-pr", "42"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	for _, want := range []string{"--stage", "mr-review", "--review-provider", "github", "--github-repo", "owner/repo", "--github-pr", "42"} {
+		if !containsString(gotArgs, want) {
+			t.Fatalf("runner args = %#v, missing %q", gotArgs, want)
+		}
+	}
+}
 func TestConsoleRunNextRefusesMRReviewWithoutGitLabFlags(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

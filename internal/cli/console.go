@@ -25,6 +25,7 @@ type consoleArgs struct {
 	githubRepo     string
 	githubPR       string
 	githubBaseURL  string
+	reviewProvider string
 	qualityCommand stringSliceFlag
 }
 
@@ -72,6 +73,7 @@ func parseConsoleArgs(args []string, stderr io.Writer) (consoleArgs, error) {
 	fs.StringVar(&opts.githubRepo, "github-repo", "", "GitHub repository in owner/repo form for mr-review CI gate")
 	fs.StringVar(&opts.githubPR, "github-pr", "", "GitHub pull request number for mr-review CI gate")
 	fs.StringVar(&opts.githubBaseURL, "github-base-url", "", "GitHub API base url override")
+	fs.StringVar(&opts.reviewProvider, "review-provider", "", "review provider for mr-review (gitlab or github)")
 	fs.Var(&opts.qualityCommand, "quality-command", "quality command as a quoted program and args (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return consoleArgs{}, err
@@ -214,7 +216,7 @@ func runConsoleNext(opts consoleArgs, stdout io.Writer, stderr io.Writer) error 
 	action := consoleRunnableAction(opts, summary.PrimaryAction)
 	if !action.Runnable {
 		if action.Kind == demandflow.ConsoleActionMRReview {
-			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+			return consoleReviewMissingErr(opts)
 		}
 		fmt.Fprintf(stdout, "next action is not runner-safe: %s\n", action.Label)
 		if action.BlockReason != "" {
@@ -228,11 +230,44 @@ func runConsoleNext(opts consoleArgs, stdout io.Writer, stderr io.Writer) error 
 	return runConsoleStageAction(opts, action, stdout, stderr)
 }
 
+func consoleReviewProvider(opts consoleArgs) string {
+	provider := strings.ToLower(strings.TrimSpace(opts.reviewProvider))
+	if provider != "" {
+		return provider
+	}
+	gitlabPresent := strings.TrimSpace(opts.gitlabProject) != "" || strings.TrimSpace(opts.gitlabMR) != ""
+	githubPresent := strings.TrimSpace(opts.githubRepo) != "" || strings.TrimSpace(opts.githubPR) != ""
+	switch {
+	case gitlabPresent:
+		return "gitlab"
+	case githubPresent:
+		return "github"
+	default:
+		return "gitlab"
+	}
+}
+
+func consoleReviewReady(opts consoleArgs) bool {
+	switch consoleReviewProvider(opts) {
+	case "github":
+		return strings.TrimSpace(opts.githubRepo) != "" && strings.TrimSpace(opts.githubPR) != ""
+	default:
+		return strings.TrimSpace(opts.gitlabProject) != "" && strings.TrimSpace(opts.gitlabMR) != ""
+	}
+}
+
+func consoleReviewMissingErr(opts consoleArgs) error {
+	if consoleReviewProvider(opts) == "github" {
+		return fmt.Errorf("--github-repo and --github-pr are required for mr-review")
+	}
+	return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+}
+
 func consoleRunnableAction(opts consoleArgs, action demandflow.ConsoleAction) demandflow.ConsoleAction {
 	if action.Kind != demandflow.ConsoleActionMRReview {
 		return action
 	}
-	if strings.TrimSpace(opts.gitlabProject) == "" || strings.TrimSpace(opts.gitlabMR) == "" {
+	if !consoleReviewReady(opts) {
 		return action
 	}
 	action.Runnable = true
@@ -279,12 +314,16 @@ func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, st
 		}
 	}
 	if action.Stage == demandflow.StageMRReview {
-		if strings.TrimSpace(opts.gitlabProject) == "" || strings.TrimSpace(opts.gitlabMR) == "" {
-			return fmt.Errorf("--gitlab-project and --gitlab-mr are required for mr-review")
+		if !consoleReviewReady(opts) {
+			return consoleReviewMissingErr(opts)
 		}
-		args = append(args, "--gitlab-project", strings.TrimSpace(opts.gitlabProject), "--gitlab-mr", strings.TrimSpace(opts.gitlabMR))
-		if strings.TrimSpace(opts.gitlabBaseURL) != "" {
-			args = append(args, "--gitlab-base-url", strings.TrimSpace(opts.gitlabBaseURL))
+		provider := consoleReviewProvider(opts)
+		args = append(args, "--review-provider", provider)
+		if strings.TrimSpace(opts.gitlabProject) != "" && strings.TrimSpace(opts.gitlabMR) != "" {
+			args = append(args, "--gitlab-project", strings.TrimSpace(opts.gitlabProject), "--gitlab-mr", strings.TrimSpace(opts.gitlabMR))
+			if strings.TrimSpace(opts.gitlabBaseURL) != "" {
+				args = append(args, "--gitlab-base-url", strings.TrimSpace(opts.gitlabBaseURL))
+			}
 		}
 		if strings.TrimSpace(opts.githubRepo) != "" && strings.TrimSpace(opts.githubPR) != "" {
 			args = append(args, "--github-repo", strings.TrimSpace(opts.githubRepo), "--github-pr", strings.TrimSpace(opts.githubPR))

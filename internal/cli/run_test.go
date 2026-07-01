@@ -439,3 +439,83 @@ func TestRunMRReviewWithGitHubCIAdvancesToVerification(t *testing.T) {
 		t.Fatalf("events.jsonl missing ci_gate.passed:\n%s", string(events))
 	}
 }
+
+func TestRunMRReviewGitHubProviderAdvancesToVerification(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.MRReview)
+
+	adapter := &fakeReviewGateAdapter{}
+	originalGitHub := newGitHubReviewAdapter
+	defer func() { newGitHubReviewAdapter = originalGitHub }()
+	newGitHubReviewAdapter = func() adapters.ReviewAdapter { return adapter }
+
+	var stdout bytes.Buffer
+	err := Run([]string{"run", "--root", root, "--demand", "add-coupon-check", "--stage", "mr-review", "--review-provider", "github", "--github-repo", "owner/repo", "--github-pr", "42"}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if adapter.ref.Provider != "github" || adapter.ref.Repo != "owner/repo" || adapter.ref.PullRequest != "42" {
+		t.Fatalf("ref = %#v", adapter.ref)
+	}
+	if !strings.Contains(stdout.String(), "state: mr_review -> verification") {
+		t.Fatalf("stdout = %q want mr_review -> verification", stdout.String())
+	}
+}
+
+func TestRunMRReviewGitHubProviderBlocksOnComments(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.MRReview)
+
+	adapter := &fakeReviewGateAdapter{comments: []adapters.ReviewComment{{
+		ID:       "THREAD_1:1001",
+		Author:   "reviewer",
+		Body:     "add a regression test",
+		FilePath: "internal/service_test.go",
+		Line:     42,
+		Blocking: true,
+		Category: adapters.CommentTest,
+	}}}
+	originalGitHub := newGitHubReviewAdapter
+	defer func() { newGitHubReviewAdapter = originalGitHub }()
+	newGitHubReviewAdapter = func() adapters.ReviewAdapter { return adapter }
+
+	var stdout bytes.Buffer
+	err := Run([]string{"run", "--root", root, "--demand", "add-coupon-check", "--stage", "mr-review", "--review-provider", "github", "--github-repo", "owner/repo", "--github-pr", "42"}, &stdout, &bytes.Buffer{})
+	if err == nil {
+		t.Fatalf("run: expected blocking error")
+	}
+	if strings.Contains(stdout.String(), "state: mr_review -> verification") {
+		t.Fatalf("stdout should not advance to verification: %q", stdout.String())
+	}
+}
+
+func TestRunMRReviewGitHubProviderWithCIPendingBlocks(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.MRReview)
+
+	adapter := &fakeReviewGateAdapter{}
+	originalGitHub := newGitHubReviewAdapter
+	defer func() { newGitHubReviewAdapter = originalGitHub }()
+	newGitHubReviewAdapter = func() adapters.ReviewAdapter { return adapter }
+
+	originalCI := newCIGateAdapter
+	defer func() { newCIGateAdapter = originalCI }()
+	newCIGateAdapter = func() adapters.CIGateAdapter {
+		return &fakeCIGateAdapter{result: adapters.CIResult{
+			Provider: "github",
+			Repo:     "owner/repo",
+			PR:       "42",
+			Status:   adapters.CIStatusPending,
+			Message:  "github ci pending",
+		}}
+	}
+
+	var stdout bytes.Buffer
+	err := Run([]string{"run", "--root", root, "--demand", "add-coupon-check", "--stage", "mr-review", "--review-provider", "github", "--github-repo", "owner/repo", "--github-pr", "42", "--github-ci"}, &stdout, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "ci gate blocked") {
+		t.Fatalf("err = %v, want ci gate blocked", err)
+	}
+	if strings.Contains(stdout.String(), "state: mr_review -> verification") {
+		t.Fatalf("stdout should not advance to verification: %q", stdout.String())
+	}
+}

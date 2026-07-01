@@ -63,6 +63,24 @@ func TestIntakeFileCreatesReviewReadyDemand(t *testing.T) {
 	if !strings.Contains(string(intakeBody), "Source: `"+prdPath+"`") {
 		t.Fatalf("intake snapshot missing source:\n%s", string(intakeBody))
 	}
+	contextBody, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", demand.ID, artifacts.ContextFile))
+	if err != nil {
+		t.Fatalf("read context: %v", err)
+	}
+	if !strings.Contains(string(contextBody), "# Context: Coupon eligibility") {
+		t.Fatalf("context missing heading:\n%s", string(contextBody))
+	}
+	if !strings.Contains(stdout.String(), "context: ") {
+		t.Fatalf("stdout missing context path:\n%s", stdout.String())
+	}
+
+	events, err := store.ReadEvents(demand.ID)
+	if err != nil {
+		t.Fatalf("ReadEvents returned error: %v", err)
+	}
+	if !cliTestHasEvent(events, "context.recalled") {
+		t.Fatalf("events missing context.recalled: %#v", events)
+	}
 	if !strings.Contains(stdout.String(), "next: devflow evaluate --demand coupon-eligibility --stage requirements --strict") {
 		t.Fatalf("stdout missing next command:\n%s", stdout.String())
 	}
@@ -129,4 +147,12 @@ func TestHelpIncludesIntake(t *testing.T) {
 			t.Fatalf("help missing %q:\n%s", want, stdout.String())
 		}
 	}
+}
+func cliTestHasEvent(events []artifacts.Event, eventType string) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
 }

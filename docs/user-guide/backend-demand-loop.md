@@ -111,9 +111,20 @@ devflow evaluate --demand add-coupon-check --stage requirements --strict
 
 Evaluation is deterministic local checking, not semantic LLM review. It reports missing sections, verification evidence, and closeout memory-candidate signals without mutating demand state.
 
+For requirements, evaluation also checks intake/context alignment:
+
+- `requirements.intake_coverage` warns when concrete intake bullets are missing from `requirements.md`.
+- `requirements.context_presence` warns when `context.md` is missing or not recalled.
+- `requirements.stable_memory_reference` warns when approved memory exists but is not reflected in requirements.
+- `requirements.candidate_guard` warns when historical candidate memory exists but requirements have no useful confirmation question.
+
+These checks are deterministic signals for human review. They do not approve requirements automatically.
+
 ### Workbench TUI
 
 Use `devflow workbench` for an interactive demand list and selected-demand operator view.
+
+Console and workbench snapshot views surface non-passing requirements checks under `Quality`, so the operator can fix intake/context alignment before confirming requirements.
 
 ### Operator dogfood
 

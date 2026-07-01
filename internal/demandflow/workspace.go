@@ -225,6 +225,7 @@ func summarizeStages(state workflow.State, events []artifacts.Event, verificatio
 func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr error, summary WorkspaceSummary) []ArtifactSummary {
 	names := []string{
 		artifacts.IntakeFile,
+		artifacts.ContextFile,
 		artifacts.RequirementsFile,
 		artifacts.PlanFile,
 		artifacts.ProgressFile,
@@ -261,6 +262,13 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 		switch name {
 		case artifacts.IntakeFile:
 			if strings.Contains(strings.ToLower(textResult.text), "## 原始需求材料") && hasNonTemplateArtifactContent(textResult.text) {
+				artifact.Status = "present"
+			} else {
+				artifact.Status = "template"
+			}
+		case artifacts.ContextFile:
+			text := strings.ToLower(textResult.text)
+			if strings.Contains(text, "approved stable memory") || strings.Contains(text, "historical demand candidates") {
 				artifact.Status = "present"
 			} else {
 				artifact.Status = "template"

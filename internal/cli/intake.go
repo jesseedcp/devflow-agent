@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/intake"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
@@ -63,6 +64,10 @@ func runIntake(args []string, stdout io.Writer) error {
 	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, result.RequirementsMarkdown); err != nil {
 		return err
 	}
+	recallResult, err := demandflow.WriteMemoryRecall(root, demand.ID)
+	if err != nil {
+		return err
+	}
 	demand.State = string(workflow.RequirementsReview)
 	if err := store.SaveDemand(demand); err != nil {
 		return err
@@ -82,6 +87,8 @@ func runIntake(args []string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "Created intake demand %s\n", demand.ID)
 	fmt.Fprintf(stdout, "root: %s\n", displayPath(root))
 	fmt.Fprintf(stdout, "intake: %s\n", filepath.Join(demandDir, artifacts.IntakeFile))
+	fmt.Fprintf(stdout, "context: %s\n", recallResult.ContextPath)
+	fmt.Fprintf(stdout, "memory: %d stable, %d candidate\n", recallResult.StableCount, recallResult.CandidateCount)
 	fmt.Fprintf(stdout, "requirements: %s\n", filepath.Join(demandDir, artifacts.RequirementsFile))
 	fmt.Fprintf(stdout, "state: %s\n", workflow.RequirementsReview)
 	fmt.Fprintf(stdout, "next: devflow evaluate --demand %s --stage requirements --strict\n", demand.ID)

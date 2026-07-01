@@ -5,6 +5,18 @@ import "fmt"
 func Intake(title, source string) string {
 	return fmt.Sprintf("# Intake: %s\n\nSource: `%s`\n\n## 原始需求材料\n", title, source)
 }
+func Context(title string) string {
+	return fmt.Sprintf(`# Context: %s
+
+## Reusable Memory
+
+No reusable memory recalled yet.
+
+## Historical Demand Candidates
+
+No historical candidate memory recalled yet.
+`, title)
+}
 func Requirements(title, description string) string {
 	return fmt.Sprintf(`# Requirements: %s
 

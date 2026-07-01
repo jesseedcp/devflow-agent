@@ -32,6 +32,7 @@ Usage:
   devflow version
   devflow start --title <title> --description <text>
   devflow intake --file <path>
+  devflow recall --demand <id>
   devflow init --provider <openai-compat|openai|anthropic>
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
   devflow verify --demand <id> --command <program and args>
@@ -61,6 +62,7 @@ Commands:
   version   Show build version and platform metadata
   start     Create a new demand workspace
   intake   Create a demand workspace from a local PRD file
+  recall   Rebuild reusable memory context for a demand
   init      Create a no-secret .devflow/config.yaml
   confirm   Record a human confirmation and advance the workflow gate
   verify    Record local verification evidence without advancing workflow
@@ -103,6 +105,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runStart(args[1:], stdout)
 	case "intake":
 		return runIntake(args[1:], stdout)
+	case "recall":
+		return runRecall(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout)
 	case "confirm":

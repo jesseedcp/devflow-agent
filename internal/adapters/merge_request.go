@@ -2,9 +2,11 @@ package adapters
 
 import "context"
 
-// MergeRequestSpec describes a merge request to find or create.
+// MergeRequestSpec describes a merge request or pull request to find or create.
 type MergeRequestSpec struct {
+	Provider     string
 	Project      string
+	Repo         string
 	SourceBranch string
 	TargetBranch string
 	Title        string

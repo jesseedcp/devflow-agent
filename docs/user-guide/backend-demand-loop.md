@@ -24,8 +24,16 @@ For a PRD or rough需求文档, prefer intake:
 devflow intake --file docs/examples/demands/coupon-eligibility.md
 ```
 
+For an accessible HTTP(S) PRD page, use URL intake:
+
+```powershell
+devflow intake --url https://example.com/product/coupon-eligibility-prd
+```
+
 `intake` creates a demand workspace, stores the original material in `intake.md`, renders review-ready `requirements.md`, and stops at `requirements_review`. It does not confirm the requirements.
 `intake` also writes `context.md`. This file is the reusable-memory snapshot for the demand. It lists approved stable memory separately from historical demand candidates, because candidate memory is useful context but not approved truth.
+
+URL intake fetches public or otherwise directly accessible HTTP(S) pages and normalizes static HTML into text. It does not bypass login, enterprise permissions, WeChat anti-scraping, or JavaScript-only rendering. For those sources, export the PRD to a local file and use `--file`.
 
 Rebuild the context snapshot after promoting or rejecting memory:
 

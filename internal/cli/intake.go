@@ -18,25 +18,21 @@ func runIntake(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("intake", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var root, filePath, title, demandID string
+	var root, filePath, rawURL, title, demandID string
 	fs.StringVar(&root, "root", ".", "root directory")
 	fs.StringVar(&filePath, "file", "", "local PRD or requirements markdown file")
+	fs.StringVar(&rawURL, "url", "", "HTTP(S) PRD or requirements URL")
 	fs.StringVar(&title, "title", "", "override demand title")
 	fs.StringVar(&demandID, "demand", "", "override demand id")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	filePath = strings.TrimSpace(filePath)
-	if filePath == "" {
-		return fmt.Errorf("--file is required")
-	}
-
-	body, err := os.ReadFile(filePath)
+	source, err := loadIntakeSource(filePath, rawURL)
 	if err != nil {
-		return fmt.Errorf("read intake file: %w", err)
+		return err
 	}
-	result := intake.ParseMarkdown(intake.Source{Path: filePath, Text: string(body)})
+	result := source.result
 	if strings.TrimSpace(title) != "" {
 		result.Title = strings.TrimSpace(title)
 		result.RequirementsMarkdown = intake.RenderRequirements(result)
@@ -52,7 +48,7 @@ func runIntake(args []string, stdout io.Writer) error {
 		ID:          demandID,
 		Title:       result.Title,
 		Description: intakeDescription(result),
-		Source:      "intake:file:" + filePath,
+		Source:      "intake:" + source.kind + ":" + source.label,
 		State:       string(workflow.Created),
 	}
 	if err := store.CreateDemand(demand); err != nil {
@@ -74,9 +70,9 @@ func runIntake(args []string, stdout io.Writer) error {
 	}
 	if err := store.AppendEvent(demand.ID, artifacts.Event{
 		Type:    "intake.created",
-		Message: "local PRD intake created requirements draft",
+		Message: source.kind + " PRD intake created requirements draft",
 		Data: map[string]string{
-			"file":      filePath,
+			source.kind: source.label,
 			"readiness": string(result.Readiness),
 		},
 	}); err != nil {
@@ -86,6 +82,7 @@ func runIntake(args []string, stdout io.Writer) error {
 	demandDir := store.DemandDir(demand.ID)
 	fmt.Fprintf(stdout, "Created intake demand %s\n", demand.ID)
 	fmt.Fprintf(stdout, "root: %s\n", displayPath(root))
+	fmt.Fprintf(stdout, "%s: %s\n", source.kind, source.label)
 	fmt.Fprintf(stdout, "intake: %s\n", filepath.Join(demandDir, artifacts.IntakeFile))
 	fmt.Fprintf(stdout, "context: %s\n", recallResult.ContextPath)
 	fmt.Fprintf(stdout, "memory: %d stable, %d candidate\n", recallResult.StableCount, recallResult.CandidateCount)
@@ -94,6 +91,32 @@ func runIntake(args []string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "next: devflow evaluate --demand %s --stage requirements --strict\n", demand.ID)
 	fmt.Fprintf(stdout, "then: devflow confirm --demand %s --stage requirements --by dd --summary \"requirements accepted\"\n", demand.ID)
 	return nil
+}
+
+type intakeSource struct {
+	kind   string
+	label  string
+	result intake.Result
+}
+
+func loadIntakeSource(filePath, rawURL string) (intakeSource, error) {
+	filePath = strings.TrimSpace(filePath)
+	rawURL = strings.TrimSpace(rawURL)
+	if (filePath == "") == (rawURL == "") {
+		return intakeSource{}, fmt.Errorf("exactly one of --file or --url is required")
+	}
+	if filePath != "" {
+		body, err := os.ReadFile(filePath)
+		if err != nil {
+			return intakeSource{}, fmt.Errorf("read intake file: %w", err)
+		}
+		return intakeSource{kind: "file", label: filePath, result: intake.ParseMarkdown(intake.Source{Path: filePath, Text: string(body)})}, nil
+	}
+	result, err := intake.FetchURL(rawURL)
+	if err != nil {
+		return intakeSource{}, err
+	}
+	return intakeSource{kind: "url", label: rawURL, result: result}, nil
 }
 
 func intakeDescription(result intake.Result) string {

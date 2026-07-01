@@ -1,6 +1,8 @@
 package intake
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -86,5 +88,73 @@ func TestRenderIntakeSnapshotRecordsSourceAndRawText(t *testing.T) {
 		if !strings.Contains(snapshot, want) {
 			t.Fatalf("snapshot missing %q:\n%s", want, snapshot)
 		}
+	}
+}
+
+func TestParseHTMLExtractsTitleAndRequirementSections(t *testing.T) {
+	result := ParseHTML(Source{
+		URL: "https://example.test/prd",
+		Text: `<!doctype html>
+<html>
+<head><title>Coupon URL PRD</title><script>ignoreMe()</script></head>
+<body>
+	<h1>Coupon URL PRD</h1>
+	<h2>目标</h2>
+	<ul><li>Active members can claim URL coupons.</li></ul>
+	<h2>业务规则</h2>
+	<p>User status must be active.</p>
+	<h2>验收标准</h2>
+	<ol><li>Inactive users are blocked.</li></ol>
+</body>
+</html>`,
+	})
+
+	if result.Title != "Coupon URL PRD" {
+		t.Fatalf("Title = %q, want Coupon URL PRD", result.Title)
+	}
+	if result.SourcePath != "https://example.test/prd" {
+		t.Fatalf("SourcePath = %q, want URL", result.SourcePath)
+	}
+	for _, want := range []string{
+		"Active members can claim URL coupons.",
+		"User status must be active.",
+		"Inactive users are blocked.",
+	} {
+		if !strings.Contains(result.RequirementsMarkdown, want) {
+			t.Fatalf("requirements missing %q:\n%s", want, result.RequirementsMarkdown)
+		}
+	}
+	if strings.Contains(result.RawText, "ignoreMe") {
+		t.Fatalf("raw text should omit script content:\n%s", result.RawText)
+	}
+}
+
+func TestFetchURLReadsHTMLAsParsedIntake(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<html><head><title>Refund URL PRD</title></head><body><h1>Refund URL PRD</h1><h2>目标</h2><p>Refunds require an approved order.</p></body></html>`))
+	}))
+	defer server.Close()
+
+	result, err := FetchURL(server.URL)
+	if err != nil {
+		t.Fatalf("FetchURL returned error: %v", err)
+	}
+
+	if result.Title != "Refund URL PRD" {
+		t.Fatalf("Title = %q, want Refund URL PRD", result.Title)
+	}
+	if result.SourcePath != server.URL {
+		t.Fatalf("SourcePath = %q, want %q", result.SourcePath, server.URL)
+	}
+	if !strings.Contains(result.RequirementsMarkdown, "Refunds require an approved order.") {
+		t.Fatalf("requirements missing fetched body:\n%s", result.RequirementsMarkdown)
+	}
+}
+
+func TestFetchURLRejectsNonHTTPURL(t *testing.T) {
+	_, err := FetchURL("file:///tmp/prd.html")
+	if err == nil || !strings.Contains(err.Error(), "http or https") {
+		t.Fatalf("err = %v, want http/https rejection", err)
 	}
 }

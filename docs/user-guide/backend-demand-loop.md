@@ -202,6 +202,19 @@ GitLab merge requests (MRs) and GitHub pull requests (PRs) are both *change requ
 - The workflow stage name `mr-review` is unchanged in v0.1 for compatibility.
 - GitLab MR and GitHub PR are providers behind the same change-request path.
 
+For GitHub pull request creation:
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow change-request ensure --provider github --github-repo "jesseedcp/devflow-agent" --source-branch "feature/coupon" --target-branch "main" --title "Implement coupon eligibility"
+```
+
+During implementation you can create or reuse a GitHub PR with the provider-neutral flags:
+
+```powershell
+devflow run --demand add-coupon-eligibility-check --stage implementation --create-change-request --change-request-provider github --github-repo "jesseedcp/devflow-agent" --create-mr-source-branch "feature/coupon" --create-mr-target-branch "main" --create-mr-title "Implement coupon eligibility"
+```
+
 ## 7. Run MR Review Collaboration
 
 ```powershell

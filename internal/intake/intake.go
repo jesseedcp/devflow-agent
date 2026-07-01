@@ -15,6 +15,7 @@ const (
 
 type Source struct {
 	Path string
+	URL  string
 	Text string
 }
 
@@ -48,7 +49,7 @@ func ParseMarkdown(src Source) Result {
 	sections := parseSections(raw)
 	out := Result{
 		Title:      title,
-		SourcePath: strings.TrimSpace(src.Path),
+		SourcePath: sourcePath(src),
 		RawText:    strings.TrimSpace(raw),
 		Readiness:  ReadinessNeedsReview,
 	}
@@ -66,6 +67,13 @@ func ParseMarkdown(src Source) Result {
 	}
 	out.RequirementsMarkdown = RenderRequirements(out)
 	return out
+}
+
+func sourcePath(src Source) string {
+	if strings.TrimSpace(src.Path) != "" {
+		return strings.TrimSpace(src.Path)
+	}
+	return strings.TrimSpace(src.URL)
 }
 
 func RenderRequirements(result Result) string {

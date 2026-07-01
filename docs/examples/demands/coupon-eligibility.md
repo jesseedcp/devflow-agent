@@ -1,27 +1,22 @@
-# Demand: Coupon Eligibility Check
-
-## Business Context
+# Coupon eligibility
 
 The coupon service should prevent ineligible users from claiming a coupon. The first v0.1 dogfood demand is intentionally small enough for the backend-demand loop to process in one sitting.
 
-## Requirement Input
+## 目标
 
-Only active members can claim coupons. A user is eligible when all of these conditions are true:
+- Active members can claim coupons when the coupon is available.
+- Inactive members are blocked with a clear business reason.
 
-- The user exists.
-- The user status is `active`.
-- The coupon exists.
-- The coupon is not expired.
-- The user has not claimed the same coupon before.
+## 业务规则
 
-The API should return a clear rejection reason when any condition fails.
+- User status must be active before a coupon claim succeeds.
+- The coupon must be inside the valid claim window.
 
-## Acceptance Criteria
+## 验收标准
 
-- Eligible active members can claim an unexpired coupon once.
-- Inactive users are rejected.
-- Missing users are rejected.
-- Missing coupons are rejected.
-- Expired coupons are rejected.
-- Duplicate claims are rejected.
-- Tests cover each rejection reason.
+- Given an active member and an available coupon, the claim succeeds.
+- Given an inactive member, the claim fails and records the eligibility reason.
+
+## 待确认
+
+- Confirm the exact business error code for inactive members.

@@ -16,10 +16,28 @@ $env:OPENAI_API_KEY = '<your-key>'
 
 Do not commit `.devflow/config.local.yaml` or files containing API keys.
 
-## 2. Create A Demand
+## 2. Create A Demand From A Local PRD
+
+For a PRD or rough需求文档, prefer intake:
+
+```powershell
+devflow intake --file docs/examples/demands/coupon-eligibility.md
+```
+
+`intake` creates a demand workspace, stores the original material in `intake.md`, renders review-ready `requirements.md`, and stops at `requirements_review`. It does not confirm the requirements.
+
+After intake, inspect deterministic quality signals:
+
+```powershell
+devflow evaluate --demand coupon-eligibility --stage requirements --strict
+devflow console --demand coupon-eligibility
+```
+
+If you do not have a PRD file yet, create a manual demand:
 
 ```powershell
 devflow start --title "Add coupon eligibility check" --description "Only active members can claim coupons"
+devflow run --demand add-coupon-eligibility-check --stage requirements
 ```
 
 ## 3. Check Status

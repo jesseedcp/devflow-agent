@@ -99,6 +99,7 @@ func TestInspectWorkspaceTemplateAndMissingArtifacts(t *testing.T) {
 	assertStageStatus(t, summary, "requirements", "needs_confirmation")
 	assertArtifactStatus(t, summary, artifacts.RequirementsFile, "template")
 	assertArtifactStatus(t, summary, artifacts.ProgressFile, "template")
+	assertArtifactStatus(t, summary, artifacts.IntakeFile, "template")
 	if summary.Memory.Status != "none" {
 		t.Fatalf("Memory.Status = %q, want none", summary.Memory.Status)
 	}

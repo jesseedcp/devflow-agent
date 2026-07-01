@@ -71,6 +71,7 @@ func TestInspectStatusLoadsDemandArtifactsAndActions(t *testing.T) {
 	}
 
 	foundRequirements := false
+	foundIntake := false
 	for _, artifact := range report.Artifacts {
 		if artifact.Name == artifacts.RequirementsFile {
 			foundRequirements = true
@@ -78,9 +79,15 @@ func TestInspectStatusLoadsDemandArtifactsAndActions(t *testing.T) {
 				t.Fatalf("requirements artifact = %#v", artifact)
 			}
 		}
+		if artifact.Name == artifacts.IntakeFile {
+			foundIntake = true
+		}
 	}
 	if !foundRequirements {
 		t.Fatalf("requirements artifact missing from %#v", report.Artifacts)
+	}
+	if !foundIntake {
+		t.Fatalf("intake artifact missing from %#v", report.Artifacts)
 	}
 }
 

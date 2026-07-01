@@ -224,6 +224,7 @@ func summarizeStages(state workflow.State, events []artifacts.Event, verificatio
 
 func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr error, summary WorkspaceSummary) []ArtifactSummary {
 	names := []string{
+		artifacts.IntakeFile,
 		artifacts.RequirementsFile,
 		artifacts.PlanFile,
 		artifacts.ProgressFile,
@@ -258,6 +259,12 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 		}
 		artifact.Status = artifactBaseStatus(name, textResult.text, demand)
 		switch name {
+		case artifacts.IntakeFile:
+			if strings.Contains(strings.ToLower(textResult.text), "## 原始需求材料") && hasNonTemplateArtifactContent(textResult.text) {
+				artifact.Status = "present"
+			} else {
+				artifact.Status = "template"
+			}
 		case artifacts.RequirementsFile:
 			if stageStatus(summary, "requirements") == "confirmed" {
 				artifact.Status = "confirmed"
@@ -566,4 +573,15 @@ func readArtifactText(path string) artifactTextResult {
 		return artifactTextResult{err: fmt.Errorf("read artifact: %w", err)}
 	}
 	return artifactTextResult{text: string(data)}
+}
+
+func hasNonTemplateArtifactContent(text string) bool {
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "Source:") || strings.HasPrefix(trimmed, "Readiness:") {
+			continue
+		}
+		return true
+	}
+	return false
 }

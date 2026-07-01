@@ -22,6 +22,9 @@ type consoleArgs struct {
 	gitlabProject  string
 	gitlabMR       string
 	gitlabBaseURL  string
+	githubRepo     string
+	githubPR       string
+	githubBaseURL  string
 	qualityCommand stringSliceFlag
 }
 
@@ -66,6 +69,9 @@ func parseConsoleArgs(args []string, stderr io.Writer) (consoleArgs, error) {
 	fs.StringVar(&opts.gitlabProject, "gitlab-project", "", "gitlab project path for mr-review")
 	fs.StringVar(&opts.gitlabMR, "gitlab-mr", "", "gitlab merge request iid for mr-review")
 	fs.StringVar(&opts.gitlabBaseURL, "gitlab-base-url", "", "gitlab base url override")
+	fs.StringVar(&opts.githubRepo, "github-repo", "", "GitHub repository in owner/repo form for mr-review CI gate")
+	fs.StringVar(&opts.githubPR, "github-pr", "", "GitHub pull request number for mr-review CI gate")
+	fs.StringVar(&opts.githubBaseURL, "github-base-url", "", "GitHub API base url override")
 	fs.Var(&opts.qualityCommand, "quality-command", "quality command as a quoted program and args (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return consoleArgs{}, err
@@ -181,6 +187,11 @@ func printConsoleEvidence(stdout io.Writer, workspace demandflow.WorkspaceSummar
 		mr = workspace.MergeRequest.Reference + " " + mr
 	}
 	fmt.Fprintf(stdout, "  %-14s %s\n", "mr", mr)
+	ci := humanStatus(workspace.CIGate.Status)
+	if workspace.CIGate.Repo != "" && workspace.CIGate.PR != "" {
+		ci = workspace.CIGate.Repo + "#" + workspace.CIGate.PR + " " + ci
+	}
+	fmt.Fprintf(stdout, "  %-14s %s\n", "ci", ci)
 }
 
 func printConsoleAction(stdout io.Writer, action demandflow.ConsoleAction) {
@@ -274,6 +285,12 @@ func runConsoleStageAction(opts consoleArgs, action demandflow.ConsoleAction, st
 		args = append(args, "--gitlab-project", strings.TrimSpace(opts.gitlabProject), "--gitlab-mr", strings.TrimSpace(opts.gitlabMR))
 		if strings.TrimSpace(opts.gitlabBaseURL) != "" {
 			args = append(args, "--gitlab-base-url", strings.TrimSpace(opts.gitlabBaseURL))
+		}
+		if strings.TrimSpace(opts.githubRepo) != "" && strings.TrimSpace(opts.githubPR) != "" {
+			args = append(args, "--github-repo", strings.TrimSpace(opts.githubRepo), "--github-pr", strings.TrimSpace(opts.githubPR))
+			if strings.TrimSpace(opts.githubBaseURL) != "" {
+				args = append(args, "--github-base-url", strings.TrimSpace(opts.githubBaseURL))
+			}
 		}
 	}
 	return runConsoleDemandStage(args, stdout, stderr)

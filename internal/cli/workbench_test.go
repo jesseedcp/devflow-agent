@@ -173,6 +173,25 @@ func TestWorkbenchSnapshotSelectedDemandShowsDetail(t *testing.T) {
 	}
 }
 
+func TestWorkbenchSnapshotPrintsCIGateStatus(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "snapshot-ci", Title: "Snapshot ci", Description: "Snapshot", Source: "test", State: string(workflow.MRReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "ci_gate.blocked", Message: "github ci pending", Data: map[string]string{"provider": "github", "repo": "owner/repo", "pr": "42", "status": "pending"}}); err != nil {
+		t.Fatalf("AppendEvent ci returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ci             owner/repo#42 pending") {
+		t.Fatalf("snapshot detail missing ci gate status:\n%s", stdout.String())
+	}
+}
 func TestWorkbenchSnapshotPrintsContextAwareRequirementChecks(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

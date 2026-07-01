@@ -327,3 +327,23 @@ func TestConsoleDetailPrintsManualEvidenceSummary(t *testing.T) {
 		t.Fatalf("console detail missing manual evidence:\n%s", stdout.String())
 	}
 }
+
+func TestConsoleDetailPrintsCIGateStatus(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-ci", Title: "Console ci", Description: "Show ci", Source: "test", State: string(workflow.MRReview)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime(), Type: "ci_gate.blocked", Message: "github ci pending", Data: map[string]string{"provider": "github", "repo": "owner/repo", "pr": "42", "status": "pending"}}); err != nil {
+		t.Fatalf("AppendEvent ci returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console detail returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ci             owner/repo#42 pending") {
+		t.Fatalf("console detail missing ci gate status:\n%s", stdout.String())
+	}
+}

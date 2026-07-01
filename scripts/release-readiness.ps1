@@ -192,7 +192,7 @@ try {
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText((Join-Path $demandDir 'demand.json'), (@{ id = 'manual-evidence-coupon'; title = 'Manual evidence coupon'; description = 'Inactive users are blocked'; source = 'release-readiness'; state = 'verification'; created_at = $now; updated_at = $now } | ConvertTo-Json), $utf8NoBom)
         [System.IO.File]::WriteAllText((Join-Path $demandDir 'verification.md'), "# Verification: Manual evidence coupon`n", $utf8NoBom)
-        [System.IO.File]::WriteAllText((Join-Path $demandDir 'events.jsonl'), '{"time":"2026-07-01T00:00:00Z","type":"verification.recorded","message":"verification pass","data":{"status":"PASS","command":"go test ./internal/version","evidence_file":"verification.md"}}', $utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $demandDir 'events.jsonl'), ('{"time":"2026-07-01T00:00:00Z","type":"verification.recorded","message":"verification pass","data":{"status":"PASS","command":"go test ./internal/version","evidence_file":"verification.md"}}' + "`n"), $utf8NoBom)
         .\dist\devflow-windows-amd64.exe evidence add --root $evidenceRoot --demand manual-evidence-coupon --type api --criterion "Inactive users are blocked" --summary "POST /coupon/claim returned COUPON_USER_INACTIVE." --by readiness
 
         $evidenceList = .\dist\devflow-windows-amd64.exe evidence list --root $evidenceRoot --demand manual-evidence-coupon 2>&1

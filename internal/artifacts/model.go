@@ -4,6 +4,7 @@ import "time"
 
 const (
 	DemandFile           = "demand.json"
+	IntakeFile           = "intake.md"
 	RequirementsFile     = "requirements.md"
 	PlanFile             = "plan.md"
 	ProgressFile         = "progress.md"

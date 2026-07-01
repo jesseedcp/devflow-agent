@@ -53,6 +53,27 @@ try {
     Invoke-Step "go vet" { go vet ./... }
     Invoke-Step "go build" { go build ./cmd/devflow }
     Invoke-Step "windows build" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\build-windows.ps1') -Version $Version -Output (Join-Path $repoRoot 'dist\devflow-windows-amd64.exe') }
+    Invoke-Step "intake smoke" {
+        $intakeRoot = Join-Path $readinessRoot 'intake-smoke'
+        New-Item -ItemType Directory -Force $intakeRoot | Out-Null
+        $prdPath = Join-Path $intakeRoot 'coupon-eligibility.md'
+        @"
+# Coupon eligibility
+
+## 目标
+- Active members can claim coupons.
+
+## 业务规则
+- User status must be active.
+
+## 验收标准
+- Inactive users are blocked.
+"@ | Set-Content -Encoding UTF8 $prdPath
+
+        .\dist\devflow-windows-amd64.exe intake --root $intakeRoot --file $prdPath | Tee-Object -FilePath (Join-Path $intakeRoot 'intake-output.txt') | Out-Host
+        .\dist\devflow-windows-amd64.exe evaluate --root $intakeRoot --demand coupon-eligibility --stage requirements --strict
+        .\dist\devflow-windows-amd64.exe console --root $intakeRoot --demand coupon-eligibility | Tee-Object -FilePath (Join-Path $intakeRoot 'console-output.txt') | Out-Host
+    }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./... -count=1 -timeout 5m" }
     Invoke-Step "git diff check" { git diff --check }

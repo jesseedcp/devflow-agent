@@ -198,3 +198,24 @@ func TestRunStatusAllEmptyWorkspace(t *testing.T) {
 		t.Fatalf("empty status --all output = %q, want No demands found", out.String())
 	}
 }
+
+func TestRunStatusPrintsManualEvidenceSummary(t *testing.T) {
+	root := t.TempDir()
+	store := createDemandAtState(t, root, workflow.Verification)
+	if err := store.AppendEvent("add-coupon-check", artifacts.Event{Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent verification returned error: %v", err)
+	}
+	if err := store.AppendEvent("add-coupon-check", artifacts.Event{Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runStatus([]string{"--root", root, "--demand", "add-coupon-check"}, &out); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+	for _, want := range []string{"Manual evidence:", "pass=1 fail=0 blocked=0", "PASS api Inactive users are blocked"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("status output missing %q:\n%s", want, out.String())
+		}
+	}
+}

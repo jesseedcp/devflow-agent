@@ -59,6 +59,9 @@ func TestDriveStopsAtHumanConfirmation(t *testing.T) {
 	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 1, 0, 0, time.UTC), Type: "verification.recorded", Message: "pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
 		t.Fatalf("AppendEvent returned error: %v", err)
 	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 2, 0, 0, time.UTC), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
 
 	old := runConsoleDemandStage
 	defer func() { runConsoleDemandStage = old }()

@@ -119,3 +119,26 @@ func TestEvaluateCommandPrintsContextAwareRequirementChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateCommandPrintsManualEvidenceChecks(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-cli-evidence", Title: "Eval CLI evidence", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"evaluate", "--root", root, "--demand", demand.ID, "--stage", "verification"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("evaluate returned error: %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{"verification.manual_evidence", "verification.manual_evidence_pass"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("evaluate output missing %q:\n%s", want, got)
+		}
+	}
+}

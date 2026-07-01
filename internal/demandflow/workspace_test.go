@@ -1,6 +1,7 @@
 package demandflow
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,7 @@ func TestInspectWorkspaceSummarizesEvidence(t *testing.T) {
 	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime().Add(2 * time.Minute), Type: "implementation.completed", Message: "implementation completed"})
 	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime().Add(3 * time.Minute), Type: "mr_review.cleared", Message: "review gate cleared", Data: map[string]string{"mr": "!12"}})
 	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime().Add(4 * time.Minute), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./...", "evidence_file": "verification.md"}})
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime().Add(5 * time.Minute), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}})
 
 	memStore := memory.NewStore(root)
 	if _, err := memStore.PromoteCandidate(memory.PromoteOptions{DemandID: demand.ID, CandidateIndex: 1, Name: "tenant-validation", Description: "Tenant validation", By: "tester", Now: fixedWorkspaceTime}); err != nil {
@@ -221,4 +223,43 @@ func assertArtifactStatus(t *testing.T, summary WorkspaceSummary, name, want str
 		}
 	}
 	t.Fatalf("artifact %s missing from %#v", name, summary.Artifacts)
+}
+
+func TestInspectWorkspaceSummarizesManualEvidence(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "workspace-evidence", Title: "Workspace evidence", Description: "Evidence", Source: "test", State: string(workflow.Verification)}
+	createWorkspaceDemand(t, store, demand)
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}})
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime().Add(time.Minute), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}})
+
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectWorkspace returned error: %v", err)
+	}
+	if summary.Evidence.Pass != 1 || summary.Evidence.Fail != 0 || summary.Evidence.Blocked != 0 {
+		t.Fatalf("Evidence = %#v, want one pass", summary.Evidence)
+	}
+	if len(summary.Evidence.Latest) != 1 || summary.Evidence.Latest[0].Criterion != "Inactive users are blocked" {
+		t.Fatalf("Latest evidence = %#v", summary.Evidence.Latest)
+	}
+}
+
+func TestWorkspaceNextActionsPreferEvidenceBeforeVerificationConfirmation(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "workspace-evidence-next", Title: "Workspace evidence next", Description: "Evidence", Source: "test", State: string(workflow.Verification)}
+	createWorkspaceDemand(t, store, demand)
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}})
+
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectWorkspace returned error: %v", err)
+	}
+	if len(summary.Actions) == 0 || summary.Actions[0].Label != "Add acceptance evidence" {
+		t.Fatalf("Actions = %#v, want Add acceptance evidence first", summary.Actions)
+	}
+	if !strings.Contains(summary.Actions[0].Command, "devflow evidence add --demand workspace-evidence-next") {
+		t.Fatalf("first command = %q", summary.Actions[0].Command)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
 func TestEvaluateRequirementsPassesWithRequiredSections(t *testing.T) {
@@ -102,6 +103,9 @@ func TestEvaluateVerificationAcceptsUppercasePassEvidence(t *testing.T) {
 	}
 	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC), Type: "verification.recorded", Message: "pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}}); err != nil {
 		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 1, 0, 0, time.UTC), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
 	}
 
 	eval, err := EvaluateDemand(root, demand.ID, StageVerification)
@@ -335,4 +339,51 @@ func findEvaluationCheck(t *testing.T, stage StageEvaluation, id string) Evaluat
 	}
 	t.Fatalf("check %s missing from %#v", id, stage.Checks)
 	return EvaluationCheck{}
+}
+func TestEvaluateVerificationWarnsWhenManualEvidenceMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-manual-missing", Title: "Eval manual missing", Description: "Eval", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateDemand(root, demand.ID, StageVerification)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "verification.manual_evidence")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("manual evidence status = %s, want warning", check.Status)
+	}
+}
+
+func TestEvaluateVerificationFailsOnFailedManualEvidence(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-manual-fail", Title: "Eval manual fail", Description: "Eval", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "PASS", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent verification returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.evidence_recorded", Message: "manual evidence fail", Data: map[string]string{"status": "fail", "type": "api", "criterion": "Inactive users are blocked", "summary": "Unexpected success"}}); err != nil {
+		t.Fatalf("AppendEvent manual evidence returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateDemand(root, demand.ID, StageVerification)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "verification.manual_evidence_pass")
+	if check.Status != EvaluationFail {
+		t.Fatalf("manual evidence pass status = %s, want fail", check.Status)
+	}
+	if evaluation.Stages[0].Status != EvaluationFail {
+		t.Fatalf("stage status = %s, want fail", evaluation.Stages[0].Status)
+	}
 }

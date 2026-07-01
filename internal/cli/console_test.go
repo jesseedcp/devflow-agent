@@ -46,6 +46,9 @@ func TestConsoleDetailRendersOperatorView(t *testing.T) {
 	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime(), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
 		t.Fatalf("AppendEvent returned error: %v", err)
 	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime().Add(time.Minute), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
 
 	var stdout bytes.Buffer
 	if err := Run([]string{"console", "--root", root, "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
@@ -150,6 +153,9 @@ func TestConsoleRunNextRefusesHumanConfirmation(t *testing.T) {
 	}
 	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 1, 0, 0, time.UTC), Type: "verification.recorded", Message: "pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
 		t.Fatalf("AppendEvent returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: time.Date(2026, 6, 30, 9, 2, 0, 0, time.UTC), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
 	}
 
 	var called bool
@@ -299,5 +305,25 @@ func TestConsoleRunNextUsesBackendDemandDefaults(t *testing.T) {
 		if !containsString(got, want) {
 			t.Fatalf("console args missing %q: %#v", want, got)
 		}
+	}
+}
+
+func TestConsoleDetailPrintsManualEvidenceSummary(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "console-evidence", Title: "Console evidence", Description: "Show evidence", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime(), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "manual", "criterion": "QA accepted", "summary": "QA signed off"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console detail returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "manual         pass=1 fail=0 blocked=0") {
+		t.Fatalf("console detail missing manual evidence:\n%s", stdout.String())
 	}
 }

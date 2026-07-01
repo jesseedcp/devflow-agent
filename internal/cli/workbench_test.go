@@ -240,3 +240,26 @@ func TestWorkbenchDriveUsesBackendDemandDefaults(t *testing.T) {
 		t.Fatalf("quality defaults = %#v", got.qualityCommand)
 	}
 }
+
+func TestWorkbenchSnapshotShowsManualEvidence(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "snapshot-evidence", Title: "Snapshot evidence", Description: "Snapshot", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{"Evidence:", "manual         pass=1 fail=0 blocked=0"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("snapshot detail missing %q:\n%s", want, got)
+		}
+	}
+}

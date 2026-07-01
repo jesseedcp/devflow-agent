@@ -45,3 +45,16 @@ type MergeRequestOptions struct {
 	Adapter adapters.MergeRequestAdapter
 	Spec    adapters.MergeRequestSpec
 }
+
+// ChangeRequestOptions is a provider-neutral alias for MergeRequestOptions.
+type ChangeRequestOptions = MergeRequestOptions
+
+// resolveChangeRequestOptions returns the change-request sync options in effect.
+// The provider-neutral ChangeRequest field wins when it carries an adapter,
+// otherwise the legacy MergeRequest field is used for backward compatibility.
+func resolveChangeRequestOptions(opts Options) MergeRequestOptions {
+	if opts.ChangeRequest.Adapter != nil {
+		return opts.ChangeRequest
+	}
+	return opts.MergeRequest
+}

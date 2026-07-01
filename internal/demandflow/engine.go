@@ -55,6 +55,7 @@ func (e Engine) RunDetailed(ctx context.Context, opts Options) (RunResult, error
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
+	opts.MergeRequest = resolveChangeRequestOptions(opts)
 
 	var result RunResult
 	err := e.Store.WithDemandLock(opts.DemandID, func() error {

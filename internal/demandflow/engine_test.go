@@ -606,3 +606,74 @@ func TestEngineImplementationSyncMergeRequestFailureBlocksPlatform(t *testing.T)
 		t.Fatalf("state = %q want blocked_need_platform", demand.State)
 	}
 }
+
+func TestEngineImplementationSyncChangeRequestOptionPasses(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 瀹炵幇鎽樿\n\nimplemented\n"},
+	}}
+
+	fakeAdapter := fakeMergeRequestSyncAdapter{
+		result: adapters.MergeRequestResult{
+			IID: 77, WebURL: "https://github.com/o/r/pull/77", Title: "CR", State: "open", WasCreated: true,
+		},
+	}
+
+	if err := engine.Run(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+		ChangeRequest: ChangeRequestOptions{
+			Adapter: fakeAdapter,
+			Spec:    adapters.ChangeRequestSpec{Project: "p", SourceBranch: "s", TargetBranch: "t", Title: "CR"},
+		},
+	}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	body := readArtifact(t, engine, artifacts.ProgressFile)
+	if !strings.Contains(body, "!77") {
+		t.Fatalf("progress.md missing change-request evidence:\n%s", body)
+	}
+}
+
+func TestEngineChangeRequestOptionOverridesMergeRequest(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 瀹炵幇鎽樿\n\nimplemented\n"},
+	}}
+
+	if err := engine.Run(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test"}}},
+		Now:             fixedNow,
+		MergeRequest: MergeRequestOptions{
+			Adapter: fakeMergeRequestSyncAdapter{result: adapters.MergeRequestResult{IID: 11, WebURL: "https://gitlab.com/p/-/11", Title: "old", State: "opened"}},
+			Spec:    adapters.MergeRequestSpec{Project: "p", SourceBranch: "s", TargetBranch: "t", Title: "old"},
+		},
+		ChangeRequest: ChangeRequestOptions{
+			Adapter: fakeMergeRequestSyncAdapter{result: adapters.MergeRequestResult{IID: 99, WebURL: "https://github.com/o/r/pull/99", Title: "new", State: "open", WasCreated: true}},
+			Spec:    adapters.ChangeRequestSpec{Project: "p", SourceBranch: "s", TargetBranch: "t", Title: "new"},
+		},
+	}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	body := readArtifact(t, engine, artifacts.ProgressFile)
+	if !strings.Contains(body, "!99") {
+		t.Fatalf("progress.md should use change-request adapter (!99):\n%s", body)
+	}
+	if strings.Contains(body, "!11") {
+		t.Fatalf("progress.md should not use merge-request adapter (!11):\n%s", body)
+	}
+}

@@ -44,6 +44,8 @@ func renderWorkbenchSnapshot(opts workbenchOptions) (string, error) {
 	fmt.Fprintln(&builder, "\nSummary")
 	fmt.Fprintf(&builder, "State: %s\n", detail.Workspace.State)
 	fmt.Fprintf(&builder, "Attention: %s\n", detail.Workspace.Attention)
+	fmt.Fprintln(&builder, "Evidence:")
+	fmt.Fprintf(&builder, "  %-14s pass=%d fail=%d blocked=%d\n", "manual", detail.Workspace.Evidence.Pass, detail.Workspace.Evidence.Fail, detail.Workspace.Evidence.Blocked)
 	fmt.Fprintln(&builder, "Quality:")
 	evaluation, err := demandflow.EvaluateDemand(opts.root, detail.Workspace.Demand.ID)
 	if err != nil {

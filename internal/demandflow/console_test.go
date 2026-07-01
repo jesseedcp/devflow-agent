@@ -44,6 +44,9 @@ func TestInspectConsoleVerificationPassRequiresHumanConfirmation(t *testing.T) {
 	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleTime(), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
 		t.Fatalf("AppendEvent returned error: %v", err)
 	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
 
 	console, err := InspectConsole(root, demand.ID)
 	if err != nil {

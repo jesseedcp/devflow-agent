@@ -155,3 +155,33 @@ func renderManualEvidence(record EvidenceRecord) string {
 func recordDemandID(value string) string {
 	return strings.TrimSpace(value)
 }
+
+func summarizeManualEvidence(events []artifacts.Event) EvidenceSummary {
+	var summary EvidenceSummary
+	for _, event := range events {
+		if event.Type != "verification.evidence_recorded" {
+			continue
+		}
+		record := EvidenceRecord{
+			Type:      event.Data["type"],
+			Criterion: event.Data["criterion"],
+			Status:    normalizeEvidenceStatus(event.Data["status"]),
+			Summary:   event.Data["summary"],
+			Link:      event.Data["link"],
+			By:        event.Data["by"],
+		}
+		switch record.Status {
+		case "pass":
+			summary.Pass++
+		case "fail":
+			summary.Fail++
+		case "blocked":
+			summary.Blocked++
+		}
+		summary.Latest = append(summary.Latest, record)
+	}
+	if len(summary.Latest) > 3 {
+		summary.Latest = summary.Latest[len(summary.Latest)-3:]
+	}
+	return summary
+}

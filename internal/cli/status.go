@@ -152,6 +152,15 @@ func printWorkspaceDetail(stdout io.Writer, summary demandflow.WorkspaceSummary)
 		fmt.Fprintln(stdout, "  latest: none")
 	}
 
+	fmt.Fprintln(stdout, "\nManual evidence:")
+	fmt.Fprintf(stdout, "  pass=%d fail=%d blocked=%d\n", summary.Evidence.Pass, summary.Evidence.Fail, summary.Evidence.Blocked)
+	for _, record := range summary.Evidence.Latest {
+		fmt.Fprintf(stdout, "  %s %s %s\n", strings.ToUpper(record.Status), record.Type, record.Criterion)
+		if strings.TrimSpace(record.Summary) != "" {
+			fmt.Fprintf(stdout, "    %s\n", record.Summary)
+		}
+	}
+
 	fmt.Fprintln(stdout, "\nMemory:")
 	if summary.Memory.Error != "" && summary.Memory.Status == "none" {
 		fmt.Fprintln(stdout, "  candidates: none")

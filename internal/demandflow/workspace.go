@@ -22,6 +22,7 @@ type WorkspaceSummary struct {
 	Stages       []StageSummary
 	Artifacts    []ArtifactSummary
 	Verification VerificationSummary
+	Evidence     EvidenceSummary
 	MergeRequest MergeRequestSummary
 	Memory       MemorySummary
 	Actions      []NextAction
@@ -48,6 +49,13 @@ type VerificationSummary struct {
 	FailureKind  string
 	EvidenceFile string
 	Message      string
+}
+
+type EvidenceSummary struct {
+	Pass    int
+	Fail    int
+	Blocked int
+	Latest  []EvidenceRecord
 }
 
 type MergeRequestSummary struct {
@@ -81,6 +89,7 @@ func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	}
 	progressText := readArtifactText(filepath.Join(demandDir, artifacts.ProgressFile)).text
 	summary.Verification = summarizeVerification(events)
+	summary.Evidence = summarizeManualEvidence(events)
 	summary.MergeRequest = summarizeMergeRequest(events, progressText)
 	summary.Memory = summarizeMemory(root, demandID)
 	summary.Stages = summarizeStages(summary.State, events, summary.Verification, summary.MergeRequest)
@@ -138,6 +147,12 @@ func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 	if summary.State == workflow.Verification {
 		switch summary.Verification.Status {
 		case "pass":
+			if summary.Evidence.Pass == 0 && summary.Evidence.Fail == 0 && summary.Evidence.Blocked == 0 {
+				return []NextAction{
+					{Label: "Add acceptance evidence", Command: "devflow evidence add --demand " + idArg + " --type manual --criterion <criterion> --summary <summary> --by <name>", Reason: "Technical verification passed; add business acceptance evidence before confirmation."},
+					{Label: "Confirm verification", Command: "devflow confirm --demand " + idArg + " --stage verification --by <name> --summary <summary>", Reason: "PASS evidence is present and needs human confirmation."},
+				}
+			}
 			return []NextAction{{Label: "Confirm verification", Command: "devflow confirm --demand " + idArg + " --stage verification --by <name> --summary <summary>", Reason: "PASS evidence is present and needs human confirmation."}}
 		case "fail":
 			return []NextAction{{Label: "Retry implementation", Command: "devflow run --demand " + idArg + " --stage implementation --permission-mode acceptEdits --quality-command \"go test ./...\"", Reason: "Verification evidence failed; fix implementation before confirmation."}}

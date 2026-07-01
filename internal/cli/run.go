@@ -48,6 +48,7 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	var root, runnerRoot, qualityRoot, demandID, stage, configPath, permissionMode, gitlabProject, gitlabMR, gitlabBaseURL string
 	var createMR bool
 	var createMRSourceBranch, createMRTargetBranch, createMRTitle, createMRDescription, createMRDescriptionFile string
+	var githubRepo, githubPR, githubBaseURL string
 	var qualityCommands stringSliceFlag
 
 	fs.StringVar(&root, "root", ".", "root directory")
@@ -60,6 +61,9 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&gitlabProject, "gitlab-project", "", "gitlab project path for mr-review or create-mr")
 	fs.StringVar(&gitlabMR, "gitlab-mr", "", "gitlab merge request iid for mr-review")
 	fs.StringVar(&gitlabBaseURL, "gitlab-base-url", "", "gitlab base url override")
+	fs.StringVar(&githubRepo, "github-repo", "", "GitHub repository in owner/repo form for mr-review CI gate")
+	fs.StringVar(&githubPR, "github-pr", "", "GitHub pull request number for mr-review CI gate")
+	fs.StringVar(&githubBaseURL, "github-base-url", "", "GitHub API base url override")
 	fs.BoolVar(&createMR, "create-mr", false, "create or reuse a GitLab merge request after implementation")
 	fs.StringVar(&createMRSourceBranch, "create-mr-source-branch", "", "source branch for create-mr")
 	fs.StringVar(&createMRTargetBranch, "create-mr-target-branch", "", "target branch for create-mr")
@@ -140,6 +144,23 @@ func runDemandStage(args []string, stdout io.Writer, stderr io.Writer) error {
 				MergeRequest: gitlabMR,
 				BaseURL:      gitlabBaseURL,
 			},
+		}
+
+		githubRepo = strings.TrimSpace(githubRepo)
+		githubPR = strings.TrimSpace(githubPR)
+		if githubRepo != "" || githubPR != "" {
+			if githubRepo == "" || githubPR == "" {
+				return fmt.Errorf("--github-repo and --github-pr must be provided together for mr-review CI gate")
+			}
+			opts.CIGate = demandflow.CIGateOptions{
+				Adapter: newCIGateAdapter(),
+				Ref: adapters.CIRef{
+					Provider: "github",
+					Repo:     githubRepo,
+					PR:       githubPR,
+					BaseURL:  strings.TrimSpace(githubBaseURL),
+				},
+			}
 		}
 	}
 

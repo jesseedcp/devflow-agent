@@ -277,6 +277,37 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 		}
 	}
 
+	if opts.CIGate.Adapter != nil {
+		ciResult, ciErr := opts.CIGate.Adapter.Check(ctx, opts.CIGate.Ref)
+		if ciErr != nil {
+			return fmt.Errorf("check ci gate: %w", ciErr)
+		}
+		if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderCIGateEvidence(ciResult)); err != nil {
+			return err
+		}
+		eventType := "ci_gate.passed"
+		if ciResult.Status != adapters.CIStatusPassed {
+			eventType = "ci_gate.blocked"
+		}
+		if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+			Time:    opts.Now(),
+			Type:    eventType,
+			Message: ciResult.Message,
+			Data: map[string]string{
+				"provider": ciResult.Provider,
+				"repo":     ciResult.Repo,
+				"pr":       ciResult.PR,
+				"head_sha": ciResult.HeadSHA,
+				"status":   string(ciResult.Status),
+			},
+		}); err != nil {
+			return err
+		}
+		if ciResult.Status != adapters.CIStatusPassed {
+			result.Message = "ci gate blocked: " + string(ciResult.Status)
+			return fmt.Errorf("ci gate blocked: %s", ciResult.Status)
+		}
+	}
 	if opts.MergeRequest.Adapter != nil {
 		if err := e.syncMergeRequest(ctx, opts, &demand); err != nil {
 			return err
@@ -460,6 +491,37 @@ func (e Engine) runMRReview(ctx context.Context, opts Options, result *RunResult
 		return errors.New(actionPlan.Message)
 	}
 
+	if opts.CIGate.Adapter != nil {
+		ciResult, ciErr := opts.CIGate.Adapter.Check(ctx, opts.CIGate.Ref)
+		if ciErr != nil {
+			return fmt.Errorf("check ci gate: %w", ciErr)
+		}
+		if err := e.Store.AppendToArtifact(opts.DemandID, artifacts.ProgressFile, renderCIGateEvidence(ciResult)); err != nil {
+			return err
+		}
+		eventType := "ci_gate.passed"
+		if ciResult.Status != adapters.CIStatusPassed {
+			eventType = "ci_gate.blocked"
+		}
+		if err := e.Store.AppendEvent(opts.DemandID, artifacts.Event{
+			Time:    opts.Now(),
+			Type:    eventType,
+			Message: ciResult.Message,
+			Data: map[string]string{
+				"provider": ciResult.Provider,
+				"repo":     ciResult.Repo,
+				"pr":       ciResult.PR,
+				"head_sha": ciResult.HeadSHA,
+				"status":   string(ciResult.Status),
+			},
+		}); err != nil {
+			return err
+		}
+		if ciResult.Status != adapters.CIStatusPassed {
+			result.Message = "ci gate blocked: " + string(ciResult.Status)
+			return fmt.Errorf("ci gate blocked: %s", ciResult.Status)
+		}
+	}
 	if opts.MergeRequest.Adapter != nil {
 		if err := e.syncMergeRequest(ctx, opts, &demand); err != nil {
 			return err

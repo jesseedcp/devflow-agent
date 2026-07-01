@@ -77,13 +77,109 @@ func evaluateStage(root, demandID string, stage Stage) (StageEvaluation, error) 
 
 func evaluateRequirements(root, demandID string) StageEvaluation {
 	text := readEvaluationArtifact(root, demandID, artifacts.RequirementsFile)
+	intakeText := readEvaluationArtifact(root, demandID, artifacts.IntakeFile)
+	contextText := readEvaluationArtifact(root, demandID, artifacts.ContextFile)
 	checks := []EvaluationCheck{
 		requiredContentCheck("requirements.exists", "requirements.md has content", text, "blocker"),
 		requiredSectionCheck("requirements.acceptance", "acceptance criteria section has content", text, []string{"验收标准", "acceptance criteria"}, "blocker"),
 		requiredSectionCheck("requirements.rules", "business rules section has content", text, []string{"业务规则", "business rules"}, "warning"),
 		requiredSectionCheck("requirements.risks", "risks section has content", text, []string{"风险与歧义", "risks"}, "warning"),
+		intakeCoverageCheck(intakeText, text),
+		contextPresenceCheck(intakeText, contextText),
+		stableMemoryReferenceCheck(contextText, text),
+		candidateMemoryGuardCheck(contextText, text),
 	}
 	return buildStageEvaluation(StageRequirements, checks)
+}
+
+func intakeCoverageCheck(intakeText, requirementsText string) EvaluationCheck {
+	bullets := requirementRelevantBullets(intakeText, []string{"目标", "业务规则", "验收", "acceptance", "rule", "goal"})
+	if len(bullets) == 0 {
+		return EvaluationCheck{
+			ID:       "requirements.intake_coverage",
+			Label:    "requirements cover concrete intake bullets",
+			Status:   EvaluationNotApplicable,
+			Severity: "warning",
+			Evidence: "no concrete intake bullets found",
+		}
+	}
+	var missing []string
+	for _, bullet := range bullets {
+		if !normalizedContains(requirementsText, bullet) {
+			missing = append(missing, bullet)
+		}
+	}
+	if len(missing) == 0 {
+		return statusCheck("requirements.intake_coverage", "requirements cover concrete intake bullets", true, "warning", fmt.Sprintf("%d intake bullets covered", len(bullets)))
+	}
+	return EvaluationCheck{
+		ID:       "requirements.intake_coverage",
+		Label:    "requirements cover concrete intake bullets",
+		Status:   EvaluationWarning,
+		Severity: "warning",
+		Evidence: strings.Join(limitStrings(missing, 3), " | "),
+	}
+}
+
+func contextPresenceCheck(intakeText, contextText string) EvaluationCheck {
+	if len(requirementRelevantBullets(intakeText, []string{"目标", "业务规则", "验收", "acceptance", "rule", "goal"})) == 0 {
+		return EvaluationCheck{
+			ID:       "requirements.context_presence",
+			Label:    "context.md exists with recall sections",
+			Status:   EvaluationNotApplicable,
+			Severity: "warning",
+			Evidence: "no intake context expected",
+		}
+	}
+	trimmed := strings.TrimSpace(contextText)
+	if trimmed == "" {
+		return statusCheck("requirements.context_presence", "context.md exists with recall sections", false, "warning", "context.md empty or missing")
+	}
+	lower := strings.ToLower(trimmed)
+	ok := strings.Contains(lower, "approved stable memory") && strings.Contains(lower, "historical demand candidates")
+	return statusCheck("requirements.context_presence", "context.md exists with recall sections", ok, "warning", evidenceSnippet(contextText))
+}
+
+func stableMemoryReferenceCheck(contextText, requirementsText string) EvaluationCheck {
+	stable := removeNoMemoryBullets(contextSectionBullets(contextText, "approved stable memory"))
+	if len(stable) == 0 {
+		return EvaluationCheck{
+			ID:       "requirements.stable_memory_reference",
+			Label:    "requirements reference approved stable memory when present",
+			Status:   EvaluationNotApplicable,
+			Severity: "warning",
+			Evidence: "no approved stable memory recalled",
+		}
+	}
+	for _, bullet := range stable {
+		snippet := memorySnippetText(bullet)
+		if snippet != "" && normalizedContains(requirementsText, snippet) {
+			return statusCheck("requirements.stable_memory_reference", "requirements reference approved stable memory when present", true, "warning", snippet)
+		}
+	}
+	return EvaluationCheck{
+		ID:       "requirements.stable_memory_reference",
+		Label:    "requirements reference approved stable memory when present",
+		Status:   EvaluationWarning,
+		Severity: "warning",
+		Evidence: strings.Join(limitStrings(stable, 3), " | "),
+	}
+}
+
+func candidateMemoryGuardCheck(contextText, requirementsText string) EvaluationCheck {
+	candidates := removeNoMemoryBullets(contextSectionBullets(contextText, "historical demand candidates"))
+	if len(candidates) == 0 {
+		return EvaluationCheck{
+			ID:       "requirements.candidate_guard",
+			Label:    "candidate memory is routed to confirmation questions",
+			Status:   EvaluationNotApplicable,
+			Severity: "warning",
+			Evidence: "no historical candidate memory recalled",
+		}
+	}
+	questions := sectionAfterHeading(requirementsText, "待确认问题")
+	ok := hasUsefulQuestion(questions)
+	return statusCheck("requirements.candidate_guard", "candidate memory is routed to confirmation questions", ok, "warning", evidenceSnippet(questions))
 }
 
 func evaluatePlan(root, demandID string) StageEvaluation {
@@ -250,6 +346,106 @@ func evidenceSnippet(text string) string {
 		return fmt.Sprintf("%s...", trimmed[:120])
 	}
 	return trimmed
+}
+
+func requirementRelevantBullets(text string, headings []string) []string {
+	var out []string
+	for _, heading := range headings {
+		section := sectionAfterHeading(text, heading)
+		out = append(out, topLevelBullets(section)...)
+	}
+	return uniqueNonTemplateBullets(out)
+}
+
+func contextSectionBullets(text, heading string) []string {
+	return uniqueNonTemplateBullets(topLevelBullets(sectionAfterHeading(text, heading)))
+}
+
+func topLevelBullets(text string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "- ") {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func uniqueNonTemplateBullets(values []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, value := range values {
+		trimmed := strings.Join(strings.Fields(value), " ")
+		lower := strings.ToLower(trimmed)
+		if trimmed == "" || strings.Contains(lower, "todo") || strings.Contains(lower, "待人工补充") || strings.Contains(lower, "待补充") || strings.Contains(lower, "placeholder") || strings.Contains(lower, "no approved stable memory") || strings.Contains(lower, "no historical candidate memory") {
+			continue
+		}
+		if seen[lower] {
+			continue
+		}
+		seen[lower] = true
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func removeNoMemoryBullets(values []string) []string {
+	var out []string
+	for _, value := range values {
+		lower := strings.ToLower(value)
+		if strings.Contains(lower, "no approved stable memory") || strings.Contains(lower, "no historical candidate memory") {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func memorySnippetText(value string) string {
+	if idx := strings.Index(value, ":"); idx >= 0 && idx+1 < len(value) {
+		return strings.TrimSpace(value[idx+1:])
+	}
+	return strings.Trim(value, "` ")
+}
+
+func normalizedContains(text, needle string) bool {
+	textNorm := normalizeComparableText(text)
+	needleNorm := normalizeComparableText(needle)
+	if needleNorm == "" {
+		return true
+	}
+	return strings.Contains(textNorm, needleNorm)
+}
+
+func normalizeComparableText(value string) string {
+	value = strings.ToLower(value)
+	replacer := strings.NewReplacer("`", " ", ".", " ", ",", " ", ":", " ", ";", " ", "，", " ", "。", " ", "：", " ", "；", " ", "-", " ")
+	value = replacer.Replace(value)
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func hasUsefulQuestion(text string) bool {
+	for _, bullet := range uniqueNonTemplateBullets(topLevelBullets(text)) {
+		if strings.TrimSpace(bullet) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func limitStrings(values []string, limit int) []string {
+	if len(values) <= limit {
+		return values
+	}
+	return values[:limit]
 }
 
 func hasNonTemplateBullet(text string) bool {

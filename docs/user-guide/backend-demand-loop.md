@@ -237,6 +237,18 @@ devflow run --demand add-coupon-eligibility-check --stage mr-review --gitlab-pro
 ```
 
 Wave 25 keeps GitLab review comments and GitHub CI as separate gates. If GitHub CI is pending or failing, the demand remains in `mr_review` and `verification` is not drafted.
+
+### GitHub PR Review Gate
+
+For GitHub-hosted pull requests, gate on unresolved PR review threads instead of GitLab discussions:
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow review-gate --github-repo "jesseedcp/devflow-agent" --github-pr "19"
+devflow run --demand add-coupon-eligibility-check --stage mr-review --review-provider github --github-repo "jesseedcp/devflow-agent" --github-pr "19"
+```
+
+Use `--review-provider github` to select GitHub review threads; GitLab remains the default when GitLab flags are present. Add `--github-ci` to also enforce the GitHub CI gate during a GitHub review.
 ## 8. Run Verification And Closeout
 
 ```powershell

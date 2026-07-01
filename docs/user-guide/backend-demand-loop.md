@@ -25,6 +25,13 @@ devflow intake --file docs/examples/demands/coupon-eligibility.md
 ```
 
 `intake` creates a demand workspace, stores the original material in `intake.md`, renders review-ready `requirements.md`, and stops at `requirements_review`. It does not confirm the requirements.
+`intake` also writes `context.md`. This file is the reusable-memory snapshot for the demand. It lists approved stable memory separately from historical demand candidates, because candidate memory is useful context but not approved truth.
+
+Rebuild the context snapshot after promoting or rejecting memory:
+
+```powershell
+devflow recall --demand coupon-eligibility
+```
 
 After intake, inspect deterministic quality signals:
 

@@ -71,6 +71,11 @@ try {
 "@ | Set-Content -Encoding UTF8 $prdPath
 
         .\dist\devflow-windows-amd64.exe intake --root $intakeRoot --file $prdPath | Tee-Object -FilePath (Join-Path $intakeRoot 'intake-output.txt') | Out-Host
+        .\dist\devflow-windows-amd64.exe recall --root $intakeRoot --demand coupon-eligibility | Tee-Object -FilePath (Join-Path $intakeRoot 'recall-output.txt') | Out-Host
+        $contextPath = Join-Path $intakeRoot '.devflow\demands\coupon-eligibility\context.md'
+        if (-not (Test-Path $contextPath)) {
+            throw "context.md was not created by intake recall"
+        }
         .\dist\devflow-windows-amd64.exe evaluate --root $intakeRoot --demand coupon-eligibility --stage requirements --strict
         .\dist\devflow-windows-amd64.exe console --root $intakeRoot --demand coupon-eligibility | Tee-Object -FilePath (Join-Path $intakeRoot 'console-output.txt') | Out-Host
     }

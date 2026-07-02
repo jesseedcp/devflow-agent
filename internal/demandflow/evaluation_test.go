@@ -383,6 +383,55 @@ func findEvaluationCheck(t *testing.T, stage StageEvaluation, id string) Evaluat
 	t.Fatalf("check %s missing from %#v", id, stage.Checks)
 	return EvaluationCheck{}
 }
+
+func TestEvaluatePlanWarnsWhenPlanContextMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "plan-context-missing", Title: "Plan Context Missing", Description: "Evaluate plan context", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, "# Plan\n\n## Implementation Steps\n\n- Update coupon logic.\n\n## Test Strategy\n\n- Run tests.\n\n## Risks\n\n- Unknown.\n"); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StagePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "plan.context_grounding")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("plan.context_grounding = %s, want warning", check.Status)
+	}
+}
+
+func TestEvaluatePlanPassesWithPlanContextAndChangeScope(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "plan-context-pass", Title: "Plan Context Pass", Description: "Evaluate plan context", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanContextFile, "# Plan Context\n\n## Codemap Context\n\n- `internal/coupon/service.go:7` method `CheckEligibility`\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ChangeScopeFile, "# Change Scope\n\n## Source Files\n\n- `internal/coupon/service.go`\n\n## Test Files\n\n- `internal/coupon/service_test.go`\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, "# Plan\n\n## Implementation Steps\n\n- Update `internal/coupon/service.go`.\n\n## Test Strategy\n\n- Add `internal/coupon/service_test.go`.\n\n## Risks\n\n- Keep behavior compatible.\n"); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StagePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"plan.context_grounding", "plan.change_scope"} {
+		check := findEvaluationCheck(t, evaluation.Stages[0], id)
+		if check.Status != EvaluationPass {
+			t.Fatalf("%s = %s, want pass evidence=%s", id, check.Status, check.Evidence)
+		}
+	}
+}
+
 func TestEvaluateVerificationWarnsWhenManualEvidenceMissing(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

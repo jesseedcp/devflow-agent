@@ -77,6 +77,12 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("create dogfood demand: %w", err)
 	}
 
+	if strings.TrimSpace(scenario.Codemap) != "" {
+		if err := store.WriteArtifact(scenario.DemandID, artifacts.CodemapFile, scenario.Codemap); err != nil {
+			return Result{}, fmt.Errorf("write dogfood codemap: %w", err)
+		}
+	}
+
 	engine := demandflow.NewEngine(root)
 	runner := &demandflow.StaticRunner{Responses: scenario.Responses}
 	result := Result{Root: root, QualityRoot: qualityRoot, DemandID: scenario.DemandID}

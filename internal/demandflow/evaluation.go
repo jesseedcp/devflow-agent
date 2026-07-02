@@ -185,14 +185,48 @@ func candidateMemoryGuardCheck(contextText, requirementsText string) EvaluationC
 func evaluatePlan(root, demandID string) StageEvaluation {
 	text := readEvaluationArtifact(root, demandID, artifacts.PlanFile)
 	codemapText := readEvaluationArtifact(root, demandID, artifacts.CodemapFile)
+	planContextText := readEvaluationArtifact(root, demandID, artifacts.PlanContextFile)
+	changeScopeText := readEvaluationArtifact(root, demandID, artifacts.ChangeScopeFile)
 	checks := []EvaluationCheck{
 		requiredContentCheck("plan.exists", "plan.md has content", text, "blocker"),
 		requiredSectionCheck("plan.steps", "implementation steps section has content", text, []string{"实施步骤", "implementation steps", "steps"}, "blocker"),
 		requiredSectionCheck("plan.tests", "test strategy section has content", text, []string{"测试", "test strategy", "verification"}, "warning"),
 		requiredSectionCheck("plan.risks", "risks section has content", text, []string{"风险", "risks"}, "warning"),
 		codemapReferenceCheck(codemapText, text),
+		planContextGroundingCheck(planContextText),
+		planChangeScopeCheck(changeScopeText, text),
 	}
 	return buildStageEvaluation(StagePlan, checks)
+}
+
+func planContextGroundingCheck(planContextText string) EvaluationCheck {
+	trimmed := strings.TrimSpace(planContextText)
+	lower := strings.ToLower(trimmed)
+	ok := strings.Contains(lower, "codemap context") && strings.Contains(trimmed, ".go")
+	return statusCheck("plan.context_grounding", "plan context includes codemap facts", ok, "warning", evidenceSnippet(trimmed))
+}
+
+func planChangeScopeCheck(changeScopeText, planText string) EvaluationCheck {
+	files := codeFilesFromCodemap(changeScopeText)
+	if len(files) == 0 {
+		return EvaluationCheck{
+			ID:       "plan.change_scope",
+			Label:    "plan declares source and test change scope",
+			Status:   EvaluationWarning,
+			Severity: "warning",
+			Evidence: "change-scope.md has no source/test files",
+		}
+	}
+	var referenced []string
+	for _, file := range files {
+		if strings.Contains(planText, file) {
+			referenced = append(referenced, file)
+		}
+	}
+	if len(referenced) == 0 {
+		return EvaluationCheck{ID: "plan.change_scope", Label: "plan declares source and test change scope", Status: EvaluationWarning, Severity: "warning", Evidence: strings.Join(limitStrings(files, 3), " | ")}
+	}
+	return statusCheck("plan.change_scope", "plan declares source and test change scope", true, "warning", strings.Join(limitStrings(referenced, 3), " | "))
 }
 
 func codemapReferenceCheck(codemapText, planText string) EvaluationCheck {

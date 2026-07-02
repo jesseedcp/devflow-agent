@@ -279,20 +279,33 @@ devflow run --demand add-coupon-eligibility-check --stage closeout
 devflow confirm --demand add-coupon-eligibility-check --stage closeout --by dd --summary "closeout accepted"
 ```
 
-Record external or manual acceptance evidence while the demand is in `verification`:
+Record acceptance evidence while the demand is in `verification`:
 
 ```powershell
-devflow evidence add --demand add-coupon-eligibility-check `
+devflow evidence fetch --demand add-coupon-eligibility-check `
   --type api `
   --criterion "Inactive users are blocked" `
-  --summary "POST /coupon/claim returned COUPON_USER_INACTIVE." `
+  --method POST `
+  --url "https://api.example.test/coupon/claim" `
+  --expect-status 403 `
+  --expect-contains COUPON_USER_INACTIVE
+
+devflow evidence fetch --demand add-coupon-eligibility-check `
+  --type link `
+  --criterion "QA report is reachable" `
+  --url "https://example.test/report/123"
+
+devflow evidence add --demand add-coupon-eligibility-check `
+  --type manual `
+  --criterion "QA accepted inactive-user blocking" `
+  --summary "QA signed off the inactive-user scenario." `
   --link "https://example.test/log/123" `
   --by dd
 
 devflow evidence list --demand add-coupon-eligibility-check
 ```
 
-Manual evidence is local and reviewable. It can reference API calls, logs, monitor links, QA notes, or other acceptance proof, but Devflow does not fetch those external systems in Wave 24. Manual evidence does not auto-confirm verification.
+Acceptance evidence is local and reviewable. v0.3 can fetch HTTP/API and link reachability evidence, redacts common secrets before writing `verification.md` or `events.jsonl`, and keeps `evidence add` for manual records. Evidence does not auto-confirm verification.
 
 ### Stable knowledge review
 

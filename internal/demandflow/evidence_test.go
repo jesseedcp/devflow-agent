@@ -10,6 +10,54 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
+func TestAddEvidenceAppendsAcceptanceEvidenceAndEvent(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "evidence-generic", Title: "Evidence generic", Description: "Verify external behavior", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.VerificationFile, "# Verification: Evidence generic\n\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+
+	record, err := AddEvidence(AddEvidenceOptions{
+		Root:      root,
+		DemandID:  demand.ID,
+		Type:      "api",
+		Criterion: "Inactive users are blocked",
+		Status:    "pass",
+		Summary:   "POST /coupon/claim returned COUPON_USER_INACTIVE.",
+		By:        "readiness",
+	})
+	if err != nil {
+		t.Fatalf("AddEvidence returned error: %v", err)
+	}
+	if record.Status != "pass" || record.Type != "api" {
+		t.Fatalf("record = %#v", record)
+	}
+	body, err := os.ReadFile(filepath.Join(store.DemandDir(demand.ID), artifacts.VerificationFile))
+	if err != nil {
+		t.Fatalf("read verification: %v", err)
+	}
+	for _, want := range []string{"## Acceptance Evidence", "[PASS] api - Inactive users are blocked", "COUPON_USER_INACTIVE"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("verification.md missing %q:\n%s", want, string(body))
+		}
+	}
+	events, err := store.ReadEvents(demand.ID)
+	if err != nil {
+		t.Fatalf("ReadEvents returned error: %v", err)
+	}
+	event := findEvidenceTestEvent(events, "verification.evidence_recorded")
+	if event == nil {
+		t.Fatalf("events missing verification.evidence_recorded: %#v", events)
+	}
+	if event.Data["source"] != "manual" {
+		t.Fatalf("source = %q, want manual", event.Data["source"])
+	}
+}
+
 func TestAddManualEvidenceAppendsVerificationAndEvent(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)
@@ -44,7 +92,7 @@ func TestAddManualEvidenceAppendsVerificationAndEvent(t *testing.T) {
 	}
 	text := string(body)
 	for _, want := range []string{
-		"## Manual Acceptance Evidence",
+		"## Acceptance Evidence",
 		"[PASS] api - Inactive users are blocked",
 		"POST /coupon/claim returned COUPON_USER_INACTIVE.",
 		"Link: https://example.test/log/123",
@@ -65,6 +113,46 @@ func TestAddManualEvidenceAppendsVerificationAndEvent(t *testing.T) {
 	}
 	if event.Data["status"] != "pass" || event.Data["criterion"] != "Inactive users are blocked" || event.Data["evidence_file"] != artifacts.VerificationFile {
 		t.Fatalf("event data = %#v", event.Data)
+	}
+}
+
+func TestAddEvidenceRedactsSecretsInArtifactsAndEvents(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "evidence-redaction", Title: "Evidence redaction", Description: "Redact evidence", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	_, err := AddEvidence(AddEvidenceOptions{
+		Root:           root,
+		DemandID:       demand.ID,
+		Type:           "api",
+		Criterion:      "Inactive users are blocked",
+		Status:         "pass",
+		Summary:        `Authorization: Bearer secret-token {"password":"pw"}`,
+		Link:           "https://api.example.test/coupon?token=abc",
+		Source:         "fetch",
+		Method:         "POST",
+		URL:            "https://api.example.test/coupon?token=abc",
+		ExpectedStatus: "403",
+		ActualStatus:   "403",
+	})
+	if err != nil {
+		t.Fatalf("AddEvidence returned error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(store.DemandDir(demand.ID), artifacts.VerificationFile))
+	if err != nil {
+		t.Fatalf("read verification: %v", err)
+	}
+	events, err := os.ReadFile(filepath.Join(store.DemandDir(demand.ID), "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read events: %v", err)
+	}
+	combined := string(body) + "\n" + string(events)
+	for _, forbidden := range []string{"secret-token", "token=abc", `"password":"pw"`} {
+		if strings.Contains(combined, forbidden) {
+			t.Fatalf("evidence leaked %q:\n%s", forbidden, combined)
+		}
 	}
 }
 

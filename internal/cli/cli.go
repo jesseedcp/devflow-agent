@@ -53,6 +53,7 @@ Usage:
   devflow console [--demand <id>] [--run-next]
   devflow drive --demand <id> [--dry-run]
   devflow evidence add --demand <id> --type <api|log|monitor|manual|link> --criterion <text> --summary <text>
+  devflow evidence fetch --demand <id> --type <api|link> --criterion <text> --url <url>
   devflow evidence list --demand <id>
   devflow evaluate --demand <id> [--stage <stage>] [--strict]
   devflow doctor [--require-gitlab]
@@ -85,7 +86,7 @@ Commands:
   next      Print the next recommended command for a demand
   console  Show the operator demand console
   drive     Run runner-safe stages until the next manual gate
-  evidence  Record and list manual verification evidence
+  evidence  Record, fetch, and list acceptance evidence
   evaluate  Run deterministic stage quality checks
   doctor   Diagnose config, environment, git, and GitLab readiness
   dogfood  Run a deterministic full backend-demand loop

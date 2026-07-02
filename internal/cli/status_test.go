@@ -120,7 +120,7 @@ func TestRunStatusPrintsWorkspaceSummary(t *testing.T) {
 		"latest: PASS go test ./...",
 		"Memory:",
 		"Next:",
-		"devflow confirm --demand cli-workspace --stage verification",
+		"devflow evidence fetch --demand cli-workspace",
 	}
 	for _, want := range wantParts {
 		if !strings.Contains(got, want) {
@@ -213,7 +213,7 @@ func TestRunStatusPrintsManualEvidenceSummary(t *testing.T) {
 	if err := runStatus([]string{"--root", root, "--demand", "add-coupon-check"}, &out); err != nil {
 		t.Fatalf("runStatus returned error: %v", err)
 	}
-	for _, want := range []string{"Manual evidence:", "pass=1 fail=0 blocked=0", "PASS api Inactive users are blocked"} {
+	for _, want := range []string{"Acceptance evidence:", "pass=1 fail=0 blocked=0", "PASS api Inactive users are blocked"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("status output missing %q:\n%s", want, out.String())
 		}

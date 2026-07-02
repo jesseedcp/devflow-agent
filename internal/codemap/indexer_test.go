@@ -53,3 +53,45 @@ func assertFact(t *testing.T, idx Index, kind, name string) {
 	}
 	t.Fatalf("missing fact kind=%s name=%s in %#v", kind, name, idx.Facts)
 }
+
+func TestIndexGoFactsSkipsGeneratedAndVendorDirs(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "internal", "coupon", "service.go"), `package coupon
+func CheckEligibility() bool { return true }
+`)
+	writeFile(t, filepath.Join(root, "vendor", "example.com", "coupon", "vendor.go"), `package coupon
+func VendorCoupon() {}
+`)
+	writeFile(t, filepath.Join(root, ".devflow", "codemap", "generated.go"), `package generated
+func GeneratedCoupon() {}
+`)
+	writeFile(t, filepath.Join(root, "tmp", "scratch.go"), `package tmp
+func ScratchCoupon() {}
+`)
+	writeFile(t, filepath.Join(root, "temp", "scratch.go"), `package temp
+func TempCoupon() {}
+`)
+	writeFile(t, filepath.Join(root, ".cache", "scratch.go"), `package cache
+func CacheCoupon() {}
+`)
+
+	idx, err := IndexGoFacts(root)
+	if err != nil {
+		t.Fatalf("IndexGoFacts returned error: %v", err)
+	}
+	assertFact(t, idx, "func", "CheckEligibility")
+	assertNoFact(t, idx, "VendorCoupon")
+	assertNoFact(t, idx, "GeneratedCoupon")
+	assertNoFact(t, idx, "ScratchCoupon")
+	assertNoFact(t, idx, "TempCoupon")
+	assertNoFact(t, idx, "CacheCoupon")
+}
+
+func assertNoFact(t *testing.T, idx Index, name string) {
+	t.Helper()
+	for _, fact := range idx.Facts {
+		if fact.Name == name {
+			t.Fatalf("unexpected fact name=%s in %#v", name, idx.Facts)
+		}
+	}
+}

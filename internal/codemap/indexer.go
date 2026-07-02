@@ -18,8 +18,7 @@ func IndexGoFacts(root string) (Index, error) {
 			return err
 		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", ".devflow", "dist", "node_modules", ".worktrees":
+			if shouldSkipDir(entry.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -35,6 +34,15 @@ func IndexGoFacts(root string) (Index, error) {
 		return nil
 	})
 	return idx, err
+}
+
+func shouldSkipDir(name string) bool {
+	switch name {
+	case ".git", ".devflow", ".worktrees", "dist", "node_modules", "vendor", "tmp", "temp", ".cache":
+		return true
+	default:
+		return false
+	}
 }
 
 func indexGoFile(root, path string) ([]CodeFact, error) {

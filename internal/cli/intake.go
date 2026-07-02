@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +12,9 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/intake"
+	"github.com/jesseedcp/devflow-agent/internal/platform"
+	platformfeishu "github.com/jesseedcp/devflow-agent/internal/platform/feishu"
+	platformgithub "github.com/jesseedcp/devflow-agent/internal/platform/github"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
@@ -19,16 +23,43 @@ func runIntake(args []string, stdout io.Writer) error {
 	fs.SetOutput(io.Discard)
 
 	var root, filePath, rawURL, title, demandID string
+	var githubIssue, githubRepo, githubBaseURL, githubToken string
+	var feishuDoc, feishuBitable, feishuTable, feishuRecord, feishuBaseURL, feishuAppID, feishuAppSecret string
 	fs.StringVar(&root, "root", ".", "root directory")
 	fs.StringVar(&filePath, "file", "", "local PRD or requirements markdown file")
 	fs.StringVar(&rawURL, "url", "", "HTTP(S) PRD or requirements URL")
 	fs.StringVar(&title, "title", "", "override demand title")
 	fs.StringVar(&demandID, "demand", "", "override demand id")
+	fs.StringVar(&githubIssue, "github-issue", "", "GitHub Issue reference in owner/repo#number form or issue number with --github-repo")
+	fs.StringVar(&githubRepo, "github-repo", "", "GitHub repository in owner/repo form for issue intake")
+	fs.StringVar(&githubBaseURL, "github-base-url", "", "GitHub API base URL override")
+	fs.StringVar(&githubToken, "github-token", "", "GitHub token override")
+	fs.StringVar(&feishuDoc, "feishu-doc", "", "Feishu doc URL or token")
+	fs.StringVar(&feishuBitable, "feishu-bitable", "", "Feishu Bitable app token")
+	fs.StringVar(&feishuTable, "table", "", "Feishu Bitable table id")
+	fs.StringVar(&feishuRecord, "record", "", "Feishu Bitable record id")
+	fs.StringVar(&feishuBaseURL, "feishu-base-url", "", "Feishu OpenAPI base URL override")
+	fs.StringVar(&feishuAppID, "feishu-app-id", "", "Feishu app id override")
+	fs.StringVar(&feishuAppSecret, "feishu-app-secret", "", "Feishu app secret override")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	source, err := loadIntakeSource(filePath, rawURL)
+	source, err := loadIntakeSource(intakeLoadOptions{
+		FilePath:        filePath,
+		RawURL:          rawURL,
+		GitHubIssue:     githubIssue,
+		GitHubRepo:      githubRepo,
+		GitHubBaseURL:   githubBaseURL,
+		GitHubToken:     githubToken,
+		FeishuDoc:       feishuDoc,
+		FeishuBitable:   feishuBitable,
+		FeishuTable:     feishuTable,
+		FeishuRecord:    feishuRecord,
+		FeishuBaseURL:   feishuBaseURL,
+		FeishuAppID:     feishuAppID,
+		FeishuAppSecret: feishuAppSecret,
+	})
 	if err != nil {
 		return err
 	}
@@ -60,6 +91,11 @@ func runIntake(args []string, stdout io.Writer) error {
 	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, result.RequirementsMarkdown); err != nil {
 		return err
 	}
+	if source.snapshot != nil {
+		if err := store.WriteArtifact(demand.ID, artifacts.IntakeFile, platform.RenderIntakeSnapshot(*source.snapshot)); err != nil {
+			return err
+		}
+	}
 	recallResult, err := demandflow.WriteMemoryRecall(root, demand.ID)
 	if err != nil {
 		return err
@@ -78,6 +114,20 @@ func runIntake(args []string, stdout io.Writer) error {
 	}); err != nil {
 		return err
 	}
+	if source.snapshot != nil {
+		if err := store.AppendEvent(demand.ID, artifacts.Event{
+			Type:    "platform.intake_fetched",
+			Message: "platform intake fetched",
+			Data: map[string]string{
+				"provider":    string(source.snapshot.Provider),
+				"kind":        string(source.snapshot.Kind),
+				"external_id": source.snapshot.ExternalID,
+				"url":         source.snapshot.URL,
+			},
+		}); err != nil {
+			return err
+		}
+	}
 
 	demandDir := store.DemandDir(demand.ID)
 	fmt.Fprintf(stdout, "Created intake demand %s\n", demand.ID)
@@ -94,29 +144,180 @@ func runIntake(args []string, stdout io.Writer) error {
 }
 
 type intakeSource struct {
-	kind   string
-	label  string
-	result intake.Result
+	kind     string
+	label    string
+	result   intake.Result
+	snapshot *platform.IntakeSnapshot
 }
 
-func loadIntakeSource(filePath, rawURL string) (intakeSource, error) {
-	filePath = strings.TrimSpace(filePath)
-	rawURL = strings.TrimSpace(rawURL)
-	if (filePath == "") == (rawURL == "") {
-		return intakeSource{}, fmt.Errorf("exactly one of --file or --url is required")
+type intakeLoadOptions struct {
+	FilePath        string
+	RawURL          string
+	GitHubIssue     string
+	GitHubRepo      string
+	GitHubBaseURL   string
+	GitHubToken     string
+	FeishuDoc       string
+	FeishuBitable   string
+	FeishuTable     string
+	FeishuRecord    string
+	FeishuBaseURL   string
+	FeishuAppID     string
+	FeishuAppSecret string
+}
+
+func loadIntakeSource(opts intakeLoadOptions) (intakeSource, error) {
+	sources := 0
+	if strings.TrimSpace(opts.FilePath) != "" {
+		sources++
 	}
-	if filePath != "" {
-		body, err := os.ReadFile(filePath)
+	if strings.TrimSpace(opts.RawURL) != "" {
+		sources++
+	}
+	if strings.TrimSpace(opts.GitHubIssue) != "" {
+		sources++
+	}
+	if strings.TrimSpace(opts.FeishuDoc) != "" {
+		sources++
+	}
+	if strings.TrimSpace(opts.FeishuBitable) != "" {
+		sources++
+	}
+	if sources != 1 {
+		return intakeSource{}, fmt.Errorf("exactly one intake source is required")
+	}
+	if strings.TrimSpace(opts.FilePath) != "" {
+		body, err := os.ReadFile(strings.TrimSpace(opts.FilePath))
 		if err != nil {
 			return intakeSource{}, fmt.Errorf("read intake file: %w", err)
 		}
-		return intakeSource{kind: "file", label: filePath, result: intake.ParseMarkdown(intake.Source{Path: filePath, Text: string(body)})}, nil
+		return intakeSource{kind: "file", label: strings.TrimSpace(opts.FilePath), result: intake.ParseMarkdown(intake.Source{Path: strings.TrimSpace(opts.FilePath), Text: string(body)})}, nil
 	}
-	result, err := intake.FetchURL(rawURL)
+	if strings.TrimSpace(opts.RawURL) != "" {
+		result, err := intake.FetchURL(strings.TrimSpace(opts.RawURL))
+		if err != nil {
+			return intakeSource{}, err
+		}
+		return intakeSource{kind: "url", label: strings.TrimSpace(opts.RawURL), result: result}, nil
+	}
+	if strings.TrimSpace(opts.GitHubIssue) != "" {
+		return loadGitHubIssueIntake(opts)
+	}
+	if strings.TrimSpace(opts.FeishuDoc) != "" {
+		return loadFeishuDocIntake(opts)
+	}
+	return loadFeishuBitableIntake(opts)
+}
+
+func loadGitHubIssueIntake(opts intakeLoadOptions) (intakeSource, error) {
+	repo, issue, err := parseGitHubIssueRef(opts.GitHubRepo, opts.GitHubIssue)
 	if err != nil {
 		return intakeSource{}, err
 	}
-	return intakeSource{kind: "url", label: rawURL, result: result}, nil
+	snapshot, err := (platformgithub.IssueAdapter{}).FetchIntake(context.Background(), platform.IntakeRef{
+		Provider: platform.ProviderGitHub,
+		Kind:     platform.SourceGitHubIssue,
+		Repo:     repo,
+		Issue:    issue,
+		Token:    strings.TrimSpace(opts.GitHubToken),
+		BaseURL:  strings.TrimSpace(opts.GitHubBaseURL),
+	})
+	if err != nil {
+		return intakeSource{}, err
+	}
+	markdown := platform.RenderIntakeSnapshot(snapshot)
+	result := intake.ParseMarkdown(intake.Source{Path: snapshot.ExternalID, Text: markdown})
+	if strings.TrimSpace(snapshot.Title) != "" {
+		result.Title = snapshot.Title
+		result.RequirementsMarkdown = intake.RenderRequirements(result)
+	}
+	return intakeSource{
+		kind:     string(platform.SourceGitHubIssue),
+		label:    snapshot.ExternalID,
+		result:   result,
+		snapshot: &snapshot,
+	}, nil
+}
+
+func parseGitHubIssueRef(repo, ref string) (string, string, error) {
+	ref = strings.TrimSpace(ref)
+	repo = strings.TrimSpace(repo)
+	if strings.Contains(ref, "#") {
+		parts := strings.SplitN(ref, "#", 2)
+		repo = strings.TrimSpace(parts[0])
+		ref = strings.TrimSpace(parts[1])
+	}
+	if repo == "" || ref == "" {
+		return "", "", fmt.Errorf("--github-issue requires owner/repo#number or --github-repo with issue number")
+	}
+	return repo, ref, nil
+}
+
+func loadFeishuDocIntake(opts intakeLoadOptions) (intakeSource, error) {
+	docRef := strings.TrimSpace(opts.FeishuDoc)
+	adapter := platformfeishu.DocAdapter{
+		BaseURL: strings.TrimSpace(opts.FeishuBaseURL),
+		TokenClient: &platformfeishu.TenantTokenClient{
+			BaseURL:   strings.TrimSpace(opts.FeishuBaseURL),
+			AppID:     strings.TrimSpace(opts.FeishuAppID),
+			AppSecret: strings.TrimSpace(opts.FeishuAppSecret),
+		},
+	}
+	snapshot, err := adapter.FetchIntake(context.Background(), platform.IntakeRef{
+		Provider: platform.ProviderFeishu,
+		Kind:     platform.SourceFeishuDoc,
+		Token:    docRef,
+		URL:      docRef,
+	})
+	if err != nil {
+		return intakeSource{}, err
+	}
+	markdown := platform.RenderIntakeSnapshot(snapshot)
+	result := intake.ParseMarkdown(intake.Source{Path: snapshot.ExternalID, Text: markdown})
+	if strings.TrimSpace(snapshot.Title) != "" {
+		result.Title = snapshot.Title
+		result.RequirementsMarkdown = intake.RenderRequirements(result)
+	}
+	return intakeSource{kind: string(platform.SourceFeishuDoc), label: snapshot.ExternalID, result: result, snapshot: &snapshot}, nil
+}
+
+func loadFeishuBitableIntake(opts intakeLoadOptions) (intakeSource, error) {
+	adapter := platformfeishu.BitableAdapter{
+		BaseURL: strings.TrimSpace(opts.FeishuBaseURL),
+		TokenClient: &platformfeishu.TenantTokenClient{
+			BaseURL:   strings.TrimSpace(opts.FeishuBaseURL),
+			AppID:     strings.TrimSpace(opts.FeishuAppID),
+			AppSecret: strings.TrimSpace(opts.FeishuAppSecret),
+		},
+	}
+	record, err := adapter.FetchDemand(context.Background(), platform.IntakeRef{
+		AppToken: strings.TrimSpace(opts.FeishuBitable),
+		TableID:  strings.TrimSpace(opts.FeishuTable),
+		RecordID: strings.TrimSpace(opts.FeishuRecord),
+	})
+	if err != nil {
+		return intakeSource{}, err
+	}
+	body := strings.TrimSpace(record.Description)
+	if body == "" {
+		body = record.Title
+	}
+	snapshot := platform.IntakeSnapshot{
+		Provider:   platform.ProviderFeishu,
+		Kind:       platform.SourceFeishuRecord,
+		ExternalID: record.ID,
+		Title:      record.Title,
+		Body:       body,
+		Metadata: map[string]string{
+			"status":   record.Status,
+			"priority": record.Priority,
+			"owner":    record.Owner,
+		},
+	}
+	result := intake.ParseMarkdown(intake.Source{Path: record.ID, Text: platform.RenderIntakeSnapshot(snapshot)})
+	result.Title = record.Title
+	result.RequirementsMarkdown = intake.RenderRequirements(result)
+	return intakeSource{kind: string(platform.SourceFeishuRecord), label: record.ID, result: result, snapshot: &snapshot}, nil
 }
 
 func intakeDescription(result intake.Result) string {

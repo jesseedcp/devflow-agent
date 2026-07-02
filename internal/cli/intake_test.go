@@ -193,7 +193,7 @@ func TestIntakeFileRejectsMissingFile(t *testing.T) {
 
 func TestIntakeRejectsMissingSource(t *testing.T) {
 	err := Run([]string{"intake", "--root", t.TempDir()}, &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "exactly one of --file or --url is required") {
+	if err == nil || !strings.Contains(err.Error(), "exactly one intake source is required") {
 		t.Fatalf("err = %v, want missing source error", err)
 	}
 }
@@ -206,7 +206,7 @@ func TestIntakeRejectsMultipleSources(t *testing.T) {
 	}
 
 	err := Run([]string{"intake", "--root", root, "--file", prdPath, "--url", "https://example.test/prd"}, &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "exactly one of --file or --url is required") {
+	if err == nil || !strings.Contains(err.Error(), "exactly one intake source is required") {
 		t.Fatalf("err = %v, want mutual exclusion error", err)
 	}
 }
@@ -231,7 +231,7 @@ func TestHelpIncludesIntake(t *testing.T) {
 	if err := Run([]string{"help"}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("help returned error: %v", err)
 	}
-	for _, want := range []string{"devflow intake --file <path>", "devflow intake --url <url>", "intake   Create a demand workspace from a PRD file or URL"} {
+	for _, want := range []string{"devflow intake --file <path>", "devflow intake --url <url>", "devflow intake --github-issue <owner/repo#number>", "devflow intake --feishu-doc <doc-url-or-token>", "intake   Create a demand workspace from a PRD file, URL, GitHub Issue, Feishu Doc, or Feishu Bitable record"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("help missing %q:\n%s", want, stdout.String())
 		}
@@ -244,4 +244,159 @@ func cliTestHasEvent(events []artifacts.Event, eventType string) bool {
 		}
 	}
 	return false
+}
+
+func TestIntakeGitHubIssueCreatesReviewReadyDemand(t *testing.T) {
+	root := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/owner/repo/issues/123":
+			_, _ = w.Write([]byte(`{"number":123,"title":"Coupon issue","body":"Users need coupon eligibility.","html_url":"https://github.com/owner/repo/issues/123","state":"open","user":{"login":"alice"},"labels":[{"name":"backend"}]}`))
+		case "/repos/owner/repo/issues/123/comments":
+			_, _ = w.Write([]byte(`[{"id":10,"body":"Remember inactive users.","html_url":"https://github.com/owner/repo/issues/123#issuecomment-10","created_at":"2026-07-02T02:03:04Z","user":{"login":"bob"}}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"intake",
+		"--root", root,
+		"--github-issue", "owner/repo#123",
+		"--github-base-url", server.URL,
+		"--github-token", "token",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("intake returned error: %v\n%s", err, stdout.String())
+	}
+
+	store := artifacts.NewStore(root)
+	demand, err := store.LoadDemand("coupon-issue")
+	if err != nil {
+		t.Fatalf("LoadDemand returned error: %v", err)
+	}
+	if demand.Source != "intake:github_issue:owner/repo#123" {
+		t.Fatalf("source = %q", demand.Source)
+	}
+	intakeBody, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", demand.ID, artifacts.IntakeFile))
+	if err != nil {
+		t.Fatalf("read intake: %v", err)
+	}
+	for _, want := range []string{"Source: `github_issue`", "External ID: `owner/repo#123`", "Remember inactive users."} {
+		if !strings.Contains(string(intakeBody), want) {
+			t.Fatalf("intake missing %q:\n%s", want, string(intakeBody))
+		}
+	}
+	events, err := store.ReadEvents(demand.ID)
+	if err != nil {
+		t.Fatalf("ReadEvents returned error: %v", err)
+	}
+	if !cliTestHasEvent(events, "platform.intake_fetched") {
+		t.Fatalf("events missing platform.intake_fetched: %#v", events)
+	}
+}
+
+func TestIntakeFeishuDocCreatesReviewReadyDemand(t *testing.T) {
+	root := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = w.Write([]byte(`{"code":0,"tenant_access_token":"tenant-token","expire":7200}`))
+		case "/open-apis/docx/v1/documents/doc_token":
+			_, _ = w.Write([]byte(`{"code":0,"data":{"document":{"title":"Coupon PRD"}}}`))
+		case "/open-apis/docx/v1/documents/doc_token/blocks/doc_token/children":
+			_, _ = w.Write([]byte(`{"code":0,"data":{"items":[{"block_id":"b1","block_type":3,"heading1":{"elements":[{"text_run":{"content":"Goals"}}]}},{"block_id":"b2","block_type":2,"text":{"elements":[{"text_run":{"content":"Active users can claim coupons."}}]}}]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"intake",
+		"--root", root,
+		"--feishu-doc", "doc_token",
+		"--feishu-base-url", server.URL,
+		"--feishu-app-id", "cli_test",
+		"--feishu-app-secret", "secret",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("intake returned error: %v\n%s", err, stdout.String())
+	}
+
+	store := artifacts.NewStore(root)
+	demand, err := store.LoadDemand("coupon-prd")
+	if err != nil {
+		t.Fatalf("LoadDemand returned error: %v", err)
+	}
+	if demand.Source != "intake:feishu_doc:doc_token" {
+		t.Fatalf("source = %q", demand.Source)
+	}
+	intakeBody, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", demand.ID, artifacts.IntakeFile))
+	if err != nil {
+		t.Fatalf("read intake: %v", err)
+	}
+	for _, want := range []string{"Source: `feishu_doc`", "External ID: `doc_token`", "Active users can claim coupons."} {
+		if !strings.Contains(string(intakeBody), want) {
+			t.Fatalf("intake missing %q:\n%s", want, string(intakeBody))
+		}
+	}
+	events, err := store.ReadEvents(demand.ID)
+	if err != nil {
+		t.Fatalf("ReadEvents returned error: %v", err)
+	}
+	if !cliTestHasEvent(events, "platform.intake_fetched") {
+		t.Fatalf("events missing platform.intake_fetched: %#v", events)
+	}
+}
+
+func TestIntakeFeishuBitableRecordCreatesDemand(t *testing.T) {
+	root := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = w.Write([]byte(`{"code":0,"tenant_access_token":"tenant-token","expire":7200}`))
+		case "/open-apis/bitable/v1/apps/app_token/tables/tbl/records/search":
+			_, _ = w.Write([]byte(`{"code":0,"data":{"items":[{"record_id":"rec1","fields":{"需求标题":"Coupon","需求描述":"Coupon eligibility","状态":"待澄清","优先级":"P1","负责人":"dd"}}]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"intake",
+		"--root", root,
+		"--feishu-bitable", "app_token",
+		"--table", "tbl",
+		"--record", "rec1",
+		"--feishu-base-url", server.URL,
+		"--feishu-app-id", "cli_test",
+		"--feishu-app-secret", "secret",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("intake returned error: %v\n%s", err, stdout.String())
+	}
+
+	store := artifacts.NewStore(root)
+	demand, err := store.LoadDemand("coupon")
+	if err != nil {
+		t.Fatalf("LoadDemand returned error: %v", err)
+	}
+	if demand.Source != "intake:feishu_bitable_record:rec1" {
+		t.Fatalf("source = %q", demand.Source)
+	}
+	intakeBody, err := os.ReadFile(filepath.Join(root, ".devflow", "demands", demand.ID, artifacts.IntakeFile))
+	if err != nil {
+		t.Fatalf("read intake: %v", err)
+	}
+	for _, want := range []string{"Source: `feishu_bitable_record`", "External ID: `rec1`", "Coupon eligibility"} {
+		if !strings.Contains(string(intakeBody), want) {
+			t.Fatalf("intake missing %q:\n%s", want, string(intakeBody))
+		}
+	}
 }

@@ -31,6 +31,9 @@ func TestCreateDemandWorkspace(t *testing.T) {
 		DemandFile,
 		IntakeFile,
 		ContextFile,
+		CodemapFile,
+		PlanContextFile,
+		ChangeScopeFile,
 		RequirementsFile,
 		PlanFile,
 		ProgressFile,
@@ -64,6 +67,25 @@ func TestCreateDemandWritesCodemapFile(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "# Codemap Context") {
 		t.Fatalf("codemap template = %q", string(data))
+	}
+}
+
+func TestCreateDemandWritesPlanContextAndChangeScopeFiles(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("plan-grounding")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	for _, name := range []string{PlanContextFile, ChangeScopeFile} {
+		path := filepath.Join(root, ".devflow", "demands", demand.ID, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if !strings.Contains(string(data), "#") {
+			t.Fatalf("%s template missing heading: %q", name, string(data))
+		}
 	}
 }
 

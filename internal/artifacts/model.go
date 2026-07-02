@@ -7,6 +7,8 @@ const (
 	IntakeFile           = "intake.md"
 	ContextFile          = "context.md"
 	CodemapFile          = "codemap.md"
+	PlanContextFile      = "plan-context.md"
+	ChangeScopeFile      = "change-scope.md"
 	RequirementsFile     = "requirements.md"
 	PlanFile             = "plan.md"
 	ProgressFile         = "progress.md"

@@ -53,9 +53,23 @@ func TestRunOperatorCompletesAndWritesEvidence(t *testing.T) {
 		}
 	}
 	demandDir := filepath.Join(root, ".devflow", "demands", result.DemandID)
-	for _, name := range []string{artifacts.RequirementsFile, artifacts.PlanFile, artifacts.VerificationFile, artifacts.CloseoutFile, "operator-dogfood-report.md"} {
+	for _, name := range []string{artifacts.RequirementsFile, artifacts.PlanFile, artifacts.PlanContextFile, artifacts.ChangeScopeFile, artifacts.VerificationFile, artifacts.CloseoutFile, "operator-dogfood-report.md"} {
 		if _, err := os.Stat(filepath.Join(demandDir, name)); err != nil {
 			t.Fatalf("artifact %s missing: %v", name, err)
 		}
+	}
+	planContext, err := os.ReadFile(filepath.Join(demandDir, artifacts.PlanContextFile))
+	if err != nil {
+		t.Fatalf("read plan context: %v", err)
+	}
+	if !strings.Contains(string(planContext), "Codemap Context") || !strings.Contains(string(planContext), "internal/coupon/service.go") {
+		t.Fatalf("plan-context.md missing codemap grounding:\n%s", string(planContext))
+	}
+	changeScope, err := os.ReadFile(filepath.Join(demandDir, artifacts.ChangeScopeFile))
+	if err != nil {
+		t.Fatalf("read change scope: %v", err)
+	}
+	if !strings.Contains(string(changeScope), "internal/coupon/service.go") || !strings.Contains(string(changeScope), "internal/coupon/service_test.go") {
+		t.Fatalf("change-scope.md missing declared files:\n%s", string(changeScope))
 	}
 }

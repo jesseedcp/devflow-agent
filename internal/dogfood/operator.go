@@ -134,6 +134,9 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	if err := confirm("requirements", "operator dogfood requirements accepted"); err != nil {
 		return result, err
 	}
+	if err := writeOperatorPlanGrounding(store, scenario); err != nil {
+		return result, err
+	}
 	if err := runStage("plan", demandflow.StagePlan, nil); err != nil {
 		return result, err
 	}
@@ -207,6 +210,49 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	}
 	result.ReportPath = reportPath
 	return result, nil
+}
+
+func writeOperatorPlanGrounding(store artifacts.Store, scenario Scenario) error {
+	demandDir := store.DemandDir(scenario.DemandID)
+	requirements, err := os.ReadFile(filepath.Join(demandDir, artifacts.RequirementsFile))
+	if err != nil {
+		return fmt.Errorf("read operator dogfood requirements: %w", err)
+	}
+	contextText, err := os.ReadFile(filepath.Join(demandDir, artifacts.ContextFile))
+	if err != nil {
+		return fmt.Errorf("read operator dogfood context: %w", err)
+	}
+	codemap := strings.TrimSpace(scenario.Codemap)
+	if codemap == "" {
+		data, err := os.ReadFile(filepath.Join(demandDir, artifacts.CodemapFile))
+		if err != nil {
+			return fmt.Errorf("read operator dogfood codemap: %w", err)
+		}
+		codemap = strings.TrimSpace(string(data))
+	}
+	planContext := renderOperatorPlanContext(scenario.Title, string(requirements), string(contextText), codemap)
+	if err := store.WriteArtifact(scenario.DemandID, artifacts.PlanContextFile, planContext); err != nil {
+		return fmt.Errorf("write operator dogfood plan context: %w", err)
+	}
+	if strings.TrimSpace(scenario.ChangeScope) != "" {
+		if err := store.WriteArtifact(scenario.DemandID, artifacts.ChangeScopeFile, scenario.ChangeScope); err != nil {
+			return fmt.Errorf("write operator dogfood change scope: %w", err)
+		}
+	}
+	return nil
+}
+
+func renderOperatorPlanContext(title, requirements, contextText, codemap string) string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "# Plan Context: %s\n\n", title)
+	builder.WriteString("## Requirements\n\n")
+	builder.WriteString(strings.TrimSpace(requirements))
+	builder.WriteString("\n\n## Memory Context\n\n")
+	builder.WriteString(strings.TrimSpace(contextText))
+	builder.WriteString("\n\n## Codemap Context\n\n")
+	builder.WriteString(strings.TrimSpace(codemap))
+	builder.WriteString("\n")
+	return builder.String()
 }
 
 func operatorRoot(root string) (string, error) {

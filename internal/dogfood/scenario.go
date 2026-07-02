@@ -8,6 +8,7 @@ type Scenario struct {
 	Title       string
 	Description string
 	Codemap     string
+	ChangeScope string
 	Responses   map[demandflow.Stage]demandflow.RunnerResponse
 }
 
@@ -18,6 +19,7 @@ func CouponEligibilityScenario() Scenario {
 		Title:       "Dogfood coupon eligibility",
 		Description: "Only active members can claim coupons once",
 		Codemap:     "# Codemap Context: Dogfood coupon eligibility\n\n- `internal/coupon/service.go:7` method `Eligible` score=3\n- `internal/coupon/service_test.go:5` test `TestEligibleRejectsInactiveUser` score=2\n",
+		ChangeScope: "# Change Scope: Dogfood coupon eligibility\n\n## Source Files\n\n- `internal/coupon/service.go`\n\n## Test Files\n\n- `internal/coupon/service_test.go`\n\n## Out Of Scope\n\n",
 		Responses: map[demandflow.Stage]demandflow.RunnerResponse{
 			demandflow.StageRequirements: {
 				Text: "# Requirements: Dogfood coupon eligibility\n\n## Business Rules\n\n- Active members can claim an unexpired coupon once.\n- Inactive users are rejected with a clear reason.\n- Missing coupons are rejected with a clear reason.\n- Expired coupons are rejected with a clear reason.\n- Duplicate claims are rejected with a clear reason.\n\n## Acceptance Criteria\n\n- Active members can claim one valid coupon successfully.\n- Inactive, missing, expired, and duplicate claims return distinct rejection reasons.\n\n## Risks\n\n- Coupon expiration and duplicate-claim checks must use the same clock source.\n",

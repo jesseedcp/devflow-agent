@@ -74,6 +74,49 @@ func TestEvaluatePlanWarnsWithoutTestStrategy(t *testing.T) {
 	}
 }
 
+func TestEvaluatePlanWarnsWhenCodemapContextMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "codemap-plan", Title: "Codemap Plan", Description: "Evaluate codemap plan", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, "# Plan\n\n## Implementation Steps\n\n- Update coupon logic.\n\n## Test Strategy\n\n- Run tests.\n\n## Risks\n\n- Missing impacted files.\n"); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StagePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "plan.codemap_reference")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("plan.codemap_reference = %s, want warning", check.Status)
+	}
+}
+
+func TestEvaluatePlanPassesWhenPlanReferencesCodemapFiles(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "codemap-plan-pass", Title: "Codemap Plan Pass", Description: "Evaluate codemap plan", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CodemapFile, "# Codemap Context\n\n- `internal/coupon/service.go:7` method `CheckEligibility` score=3\n- `internal/coupon/service_test.go:5` test `TestCheckEligibilityInactiveUser` score=2\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, "# Plan\n\n## Implementation Steps\n\n- Update `internal/coupon/service.go`.\n\n## Test Strategy\n\n- Add `internal/coupon/service_test.go` coverage.\n\n## Risks\n\n- Keep inactive users blocked.\n"); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StagePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "plan.codemap_reference")
+	if check.Status != EvaluationPass {
+		t.Fatalf("plan.codemap_reference = %s, want pass evidence=%s", check.Status, check.Evidence)
+	}
+}
+
 func TestEvaluateVerificationFailsWithoutPassEvidence(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

@@ -48,6 +48,25 @@ func TestCreateDemandWorkspace(t *testing.T) {
 	}
 }
 
+func TestCreateDemandWritesCodemapFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("codemap-coupon")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	path := filepath.Join(root, ".devflow", "demands", demand.ID, CodemapFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read codemap.md: %v", err)
+	}
+	if !strings.Contains(string(data), "# Codemap Context") {
+		t.Fatalf("codemap template = %q", string(data))
+	}
+}
+
 func TestCreateDemandRejectsInvalidIDs(t *testing.T) {
 	t.Parallel()
 

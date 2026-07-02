@@ -108,6 +108,15 @@ devflow drive --demand add-coupon-check --dry-run
 
 Drive never confirms stages, promotes memory, rejects memory, or merges MRs. It stops with an explicit reason when the next step needs a human.
 
+
+### Codemap Context
+
+`devflow codemap index` builds a local Go code-fact index under `.devflow/codemap/`.
+`devflow codemap search <query>` searches functions, methods, types, tests, and route-like strings.
+`devflow codemap refresh --demand <id> --query <text>` writes demand-level `codemap.md`.
+
+Codemap is intentionally separate from `context.md`: `context.md` is memory recall, while `codemap.md` is code evidence for planning.
+
 ### Deterministic stage evaluation
 
 Use `devflow evaluate` to inspect structural quality signals before confirming stage outputs.

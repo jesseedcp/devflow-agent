@@ -72,6 +72,12 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 		return OperatorResult{}, fmt.Errorf("create operator dogfood demand: %w", err)
 	}
 
+	if strings.TrimSpace(scenario.Codemap) != "" {
+		if err := store.WriteArtifact(scenario.DemandID, artifacts.CodemapFile, scenario.Codemap); err != nil {
+			return OperatorResult{}, fmt.Errorf("write operator dogfood codemap: %w", err)
+		}
+	}
+
 	engine := demandflow.NewEngine(root)
 	runner := &demandflow.StaticRunner{Responses: scenario.Responses}
 	result := OperatorResult{Root: root, QualityRoot: qualityRoot, DemandID: scenario.DemandID}

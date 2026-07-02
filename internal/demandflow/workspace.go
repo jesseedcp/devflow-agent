@@ -255,6 +255,7 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 	names := []string{
 		artifacts.IntakeFile,
 		artifacts.ContextFile,
+		artifacts.CodemapFile,
 		artifacts.RequirementsFile,
 		artifacts.PlanFile,
 		artifacts.ProgressFile,
@@ -350,6 +351,8 @@ func templateForArtifact(name string, demand artifacts.Demand) string {
 		return templates.Plan(demand.Title)
 	case artifacts.ProgressFile:
 		return "# Progress\n\n"
+	case artifacts.CodemapFile:
+		return "# Codemap Context: " + demand.Title + "\n\n"
 	case artifacts.VerificationFile:
 		return templates.Verification(demand.Title)
 	case artifacts.CloseoutFile:

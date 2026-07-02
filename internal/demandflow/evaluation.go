@@ -184,13 +184,62 @@ func candidateMemoryGuardCheck(contextText, requirementsText string) EvaluationC
 
 func evaluatePlan(root, demandID string) StageEvaluation {
 	text := readEvaluationArtifact(root, demandID, artifacts.PlanFile)
+	codemapText := readEvaluationArtifact(root, demandID, artifacts.CodemapFile)
 	checks := []EvaluationCheck{
 		requiredContentCheck("plan.exists", "plan.md has content", text, "blocker"),
 		requiredSectionCheck("plan.steps", "implementation steps section has content", text, []string{"实施步骤", "implementation steps", "steps"}, "blocker"),
 		requiredSectionCheck("plan.tests", "test strategy section has content", text, []string{"测试", "test strategy", "verification"}, "warning"),
 		requiredSectionCheck("plan.risks", "risks section has content", text, []string{"风险", "risks"}, "warning"),
+		codemapReferenceCheck(codemapText, text),
 	}
 	return buildStageEvaluation(StagePlan, checks)
+}
+
+func codemapReferenceCheck(codemapText, planText string) EvaluationCheck {
+	files := codeFilesFromCodemap(codemapText)
+	if len(files) == 0 {
+		return EvaluationCheck{
+			ID:       "plan.codemap_reference",
+			Label:    "plan references likely impacted files from codemap",
+			Status:   EvaluationWarning,
+			Severity: "warning",
+			Evidence: "codemap.md has no likely impacted files",
+		}
+	}
+	var referenced []string
+	for _, file := range files {
+		if strings.Contains(planText, file) {
+			referenced = append(referenced, file)
+		}
+	}
+	if len(referenced) == 0 {
+		return EvaluationCheck{
+			ID:       "plan.codemap_reference",
+			Label:    "plan references likely impacted files from codemap",
+			Status:   EvaluationWarning,
+			Severity: "warning",
+			Evidence: strings.Join(limitStrings(files, 3), " | "),
+		}
+	}
+	return statusCheck("plan.codemap_reference", "plan references likely impacted files from codemap", true, "warning", strings.Join(limitStrings(referenced, 3), " | "))
+}
+
+func codeFilesFromCodemap(text string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		for _, field := range strings.Fields(line) {
+			field = strings.Trim(field, "`:,()[]")
+			if strings.HasSuffix(field, ".go") || strings.Contains(field, ".go:") {
+				file := strings.Split(field, ":")[0]
+				if strings.HasSuffix(file, ".go") && !seen[file] {
+					seen[file] = true
+					out = append(out, file)
+				}
+			}
+		}
+	}
+	return out
 }
 
 func evaluateVerification(root, demandID string) (StageEvaluation, error) {

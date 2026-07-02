@@ -422,6 +422,62 @@ try {
             throw "acceptance evidence counts missing from status"
         }
     }
+    Invoke-Step "codemap smoke" {
+        $codemapRoot = Join-Path $readinessRoot 'codemap-smoke'
+        New-Item -ItemType Directory -Force (Join-Path $codemapRoot 'internal\coupon') | Out-Null
+        @"
+package coupon
+
+type Service struct{}
+
+func (s Service) CheckEligibility(userID string) bool {
+    route := "/coupon/claim"
+    _ = route
+    return userID != "inactive"
+}
+"@ | Set-Content -Encoding UTF8 (Join-Path $codemapRoot 'internal\coupon\service.go')
+        @"
+package coupon
+
+import "testing"
+
+func TestCheckEligibilityInactiveUser(t *testing.T) {}
+"@ | Set-Content -Encoding UTF8 (Join-Path $codemapRoot 'internal\coupon\service_test.go')
+
+        .\dist\devflow-windows-amd64.exe start --root $codemapRoot --title "Coupon Eligibility" --description "Inactive users are blocked"
+        .\dist\devflow-windows-amd64.exe codemap index --root $codemapRoot
+        $searchOutput = .\dist\devflow-windows-amd64.exe codemap search --root $codemapRoot coupon eligibility inactive 2>&1
+        $searchOutput | Out-Host
+        $searchText = $searchOutput -join [Environment]::NewLine
+        if ($searchText -notmatch 'internal/coupon/service.go') { throw "codemap search missing service.go" }
+        if ($searchText -notmatch 'internal/coupon/service_test.go') { throw "codemap search missing service_test.go" }
+
+        .\dist\devflow-windows-amd64.exe codemap refresh --root $codemapRoot --demand coupon-eligibility --query "coupon eligibility inactive"
+        $codemapPath = Join-Path $codemapRoot '.devflow\demands\coupon-eligibility\codemap.md'
+        if (-not (Test-Path $codemapPath)) { throw "codemap.md missing" }
+        $codemapText = Get-Content -Raw -LiteralPath $codemapPath
+        if ($codemapText -notmatch 'internal/coupon/service.go') { throw "codemap.md missing service.go" }
+
+        $planPath = Join-Path $codemapRoot '.devflow\demands\coupon-eligibility\plan.md'
+        @"
+# Plan
+
+## Implementation Steps
+
+- Update `internal/coupon/service.go`.
+
+## Test Strategy
+
+- Add `internal/coupon/service_test.go` coverage.
+
+## Risks
+
+- Keep inactive users blocked.
+"@ | Set-Content -Encoding UTF8 $planPath
+        $evaluationOutput = .\dist\devflow-windows-amd64.exe evaluate --root $codemapRoot --demand coupon-eligibility --stage plan 2>&1
+        $evaluationOutput | Out-Host
+        if (($evaluationOutput -join [Environment]::NewLine) -notmatch 'plan.codemap_reference') { throw "plan.codemap_reference missing" }
+    }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }
     Invoke-Step "git diff check" {

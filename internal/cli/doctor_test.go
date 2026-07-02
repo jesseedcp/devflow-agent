@@ -114,3 +114,53 @@ func TestDoctorReportsBackendDemandDefaults(t *testing.T) {
 		t.Fatalf("doctor output missing backend-demand defaults:\n%s", stdout.String())
 	}
 }
+
+func TestDoctorPlatformGitHubReportsMissingToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--platform", "github"}, &stdout, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("doctor returned nil error, want failure")
+	}
+	if !strings.Contains(stdout.String(), "[FAIL] github token: GITHUB_TOKEN is not set") {
+		t.Fatalf("stdout missing github token failure:\n%s", stdout.String())
+	}
+}
+
+func TestDoctorPlatformFeishuReportsMissingSecrets(t *testing.T) {
+	t.Setenv("FEISHU_APP_ID", "")
+	t.Setenv("FEISHU_APP_SECRET", "")
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--platform", "feishu"}, &stdout, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("doctor returned nil error, want failure")
+	}
+	for _, want := range []string{
+		"[FAIL] feishu app id: FEISHU_APP_ID is not set",
+		"[FAIL] feishu app secret: FEISHU_APP_SECRET is not set",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestDoctorPlatformAllSkipsDefaultConfigRequirement(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "github-token")
+	t.Setenv("FEISHU_APP_ID", "cli_test")
+	t.Setenv("FEISHU_APP_SECRET", "secret")
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--platform", "all"}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("doctor returned error: %v\n%s", err, stdout.String())
+	}
+	for _, want := range []string{
+		"[OK] github token: GITHUB_TOKEN is set",
+		"[OK] feishu app id: FEISHU_APP_ID is set",
+		"[OK] feishu app secret: FEISHU_APP_SECRET is set",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+}

@@ -1,0 +1,35 @@
+providers:
+  - name: local-openai-compatible
+    protocol: openai-compat
+    base_url: http://127.0.0.1:8080/v1
+    model: local-model
+
+platforms:
+  github:
+    default_repo: jesseedcp/devflow-agent
+    base_url: https://api.github.com
+  feishu:
+    app_id: cli_xxx
+    base_url: https://open.feishu.cn
+    bitable:
+      default_app_token: appxxxx
+      default_table_id: tblxxxx
+      fields:
+        title: 需求标题
+        description: 需求描述
+        status: 状态
+        priority: 优先级
+        owner: 负责人
+        devflow_demand_id: Devflow Demand ID
+        devflow_state: Devflow 状态
+        verification: 验收摘要
+        closeout: 交付总结
+      status_map:
+        created: 待澄清
+        requirements_review: 待确认需求
+        plan_review: 待确认方案
+        implementation: 开发中
+        mr_review: 评审中
+        verification: 验收中
+        closeout: 待结项
+        completed: 已完成

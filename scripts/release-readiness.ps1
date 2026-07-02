@@ -183,6 +183,128 @@ try {
             Remove-Job $serverJob -Force
         }
     }
+    Invoke-Step "github issue fake intake smoke" {
+        $githubRoot = Join-Path $readinessRoot 'github-issue-intake-smoke'
+        New-Item -ItemType Directory -Force $githubRoot | Out-Null
+        $port = Get-Random -Minimum 20000 -Maximum 50000
+        $prefix = "http://127.0.0.1:$port/"
+        $serverJob = Start-Job -ScriptBlock {
+            param($Prefix)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($Prefix)
+            $listener.Start()
+            try {
+                for ($i = 0; $i -lt 2; $i++) {
+                    $context = $listener.GetContext()
+                    $path = $context.Request.Url.AbsolutePath
+                    if ($path -eq "/repos/owner/repo/issues/123") {
+                        $body = '{"number":123,"title":"Coupon issue","body":"Users need coupon eligibility.","html_url":"https://github.com/owner/repo/issues/123","state":"open","user":{"login":"alice"},"labels":[{"name":"backend"}]}'
+                    } else {
+                        $body = '[{"id":10,"body":"Remember inactive users.","html_url":"https://github.com/owner/repo/issues/123#issuecomment-10","created_at":"2026-07-02T02:03:04Z","user":{"login":"bob"}}]'
+                    }
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                    $context.Response.StatusCode = 200
+                    $context.Response.ContentType = 'application/json; charset=utf-8'
+                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $context.Response.OutputStream.Close()
+                }
+            } finally {
+                $listener.Stop()
+                $listener.Close()
+            }
+        } -ArgumentList $prefix
+        try {
+            Start-Sleep -Milliseconds 500
+            .\dist\devflow-windows-amd64.exe intake --root $githubRoot --github-issue owner/repo#123 --github-base-url $prefix.TrimEnd('/') --github-token fake
+            $intakePath = Join-Path $githubRoot '.devflow\demands\coupon-issue\intake.md'
+            if (-not (Test-Path $intakePath)) { throw "GitHub issue intake did not create intake.md" }
+        } finally {
+            if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
+            Remove-Job $serverJob -Force
+        }
+    }
+    Invoke-Step "feishu doc fake intake smoke" {
+        $feishuDocRoot = Join-Path $readinessRoot 'feishu-doc-intake-smoke'
+        New-Item -ItemType Directory -Force $feishuDocRoot | Out-Null
+        $port = Get-Random -Minimum 20000 -Maximum 50000
+        $prefix = "http://127.0.0.1:$port/"
+        $serverJob = Start-Job -ScriptBlock {
+            param($Prefix)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($Prefix)
+            $listener.Start()
+            try {
+                for ($i = 0; $i -lt 3; $i++) {
+                    $context = $listener.GetContext()
+                    $path = $context.Request.Url.AbsolutePath
+                    if ($path -eq "/open-apis/auth/v3/tenant_access_token/internal") {
+                        $body = '{"code":0,"tenant_access_token":"tenant-token","expire":7200}'
+                    } elseif ($path -eq "/open-apis/docx/v1/documents/doc_token") {
+                        $body = '{"code":0,"data":{"document":{"title":"Coupon PRD"}}}'
+                    } else {
+                        $body = '{"code":0,"data":{"items":[{"block_id":"b1","block_type":3,"heading1":{"elements":[{"text_run":{"content":"Goals"}}]}},{"block_id":"b2","block_type":2,"text":{"elements":[{"text_run":{"content":"Active users can claim coupons."}}]}}]}}'
+                    }
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                    $context.Response.StatusCode = 200
+                    $context.Response.ContentType = 'application/json; charset=utf-8'
+                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $context.Response.OutputStream.Close()
+                }
+            } finally {
+                $listener.Stop()
+                $listener.Close()
+            }
+        } -ArgumentList $prefix
+        try {
+            Start-Sleep -Milliseconds 500
+            .\dist\devflow-windows-amd64.exe intake --root $feishuDocRoot --feishu-doc doc_token --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake
+            $intakePath = Join-Path $feishuDocRoot '.devflow\demands\coupon-prd\intake.md'
+            if (-not (Test-Path $intakePath)) { throw "Feishu doc intake did not create intake.md" }
+        } finally {
+            if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
+            Remove-Job $serverJob -Force
+        }
+    }
+    Invoke-Step "feishu bitable fake pool smoke" {
+        $feishuPoolRoot = Join-Path $readinessRoot 'feishu-bitable-pool-smoke'
+        New-Item -ItemType Directory -Force $feishuPoolRoot | Out-Null
+        $port = Get-Random -Minimum 20000 -Maximum 50000
+        $prefix = "http://127.0.0.1:$port/"
+        $serverJob = Start-Job -ScriptBlock {
+            param($Prefix)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($Prefix)
+            $listener.Start()
+            try {
+                for ($i = 0; $i -lt 2; $i++) {
+                    $context = $listener.GetContext()
+                    $path = $context.Request.Url.AbsolutePath
+                    if ($path -eq "/open-apis/auth/v3/tenant_access_token/internal") {
+                        $body = '{"code":0,"tenant_access_token":"tenant-token","expire":7200}'
+                    } else {
+                        $body = '{"code":0,"data":{"items":[{"record_id":"rec1","fields":{"需求标题":"Coupon","需求描述":"Coupon eligibility","状态":"待澄清"}}]}}'
+                    }
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                    $context.Response.StatusCode = 200
+                    $context.Response.ContentType = 'application/json; charset=utf-8'
+                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $context.Response.OutputStream.Close()
+                }
+            } finally {
+                $listener.Stop()
+                $listener.Close()
+            }
+        } -ArgumentList $prefix
+        try {
+            Start-Sleep -Milliseconds 500
+            $poolOutput = .\dist\devflow-windows-amd64.exe pool list --feishu-bitable app_token --table tbl --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake 2>&1
+            $poolOutput | Out-Host
+            if (($poolOutput -join [Environment]::NewLine) -notmatch 'rec1') { throw "Feishu bitable pool output missing rec1" }
+        } finally {
+            if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
+            Remove-Job $serverJob -Force
+        }
+    }
     Invoke-Step "manual evidence smoke" {
         $evidenceRoot = Join-Path $readinessRoot 'manual-evidence-smoke'
         New-Item -ItemType Directory -Force $evidenceRoot | Out-Null

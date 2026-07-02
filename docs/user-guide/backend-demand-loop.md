@@ -324,3 +324,42 @@ devflow doctor
 ```
 
 The doctor command reports whether config, git, and GitLab token setup are ready without printing secret values.
+
+## 10. Platform Intake
+
+GitHub Issue intake:
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow intake --github-issue owner/repo#123
+```
+
+Feishu Doc intake:
+
+```powershell
+$env:FEISHU_APP_ID = "<app id>"
+$env:FEISHU_APP_SECRET = "<app secret>"
+devflow intake --feishu-doc <doc-url-or-token>
+```
+
+Feishu Bitable pool:
+
+```powershell
+devflow pool list --feishu-bitable <app-token> --table <table-id>
+devflow intake --feishu-bitable <app-token> --table <table-id> --record <record-id>
+```
+
+Platform sync:
+
+```powershell
+devflow sync --github-issue owner/repo#123 --demand <id>
+devflow sync --feishu-bitable <app-token> --table <table-id> --record <record-id> --demand <id>
+```
+
+Platform doctor:
+
+```powershell
+devflow doctor --platform all
+```
+
+Doctor reports each platform credential as `set` or `not set` without printing secret values.

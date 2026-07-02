@@ -48,48 +48,39 @@ function Invoke-Step {
 }
 
 
-function Wait-LocalServerJob {
+function New-LocalServerReadyFile {
+    param(
+        [string]$Name
+    )
+    $safeName = ($Name -replace '[^a-zA-Z0-9_-]', '-')
+    return Join-Path $readinessRoot ("$safeName.ready")
+}
+
+function Wait-LocalServerReadyFile {
     param(
         [System.Management.Automation.Job]$Job,
-        [int]$Milliseconds = 3000
+        [string]$ReadyFile,
+        [int]$Milliseconds = 10000
     )
     $deadline = (Get-Date).AddMilliseconds($Milliseconds)
     while ((Get-Date) -lt $deadline) {
-        if ($Job.State -eq 'Running') {
-            Start-Sleep -Milliseconds 1500
+        if (Test-Path -LiteralPath $ReadyFile) {
             return
         }
         if ($Job.State -eq 'Failed') {
             Receive-Job $Job
-            throw "local server job failed to start"
+            throw "local server job failed before readiness file was written"
+        }
+        if ($Job.State -eq 'Completed' -and -not (Test-Path -LiteralPath $ReadyFile)) {
+            Receive-Job $Job
+            throw "local server job completed before readiness file was written"
         }
         Start-Sleep -Milliseconds 100
     }
-    if ($Job.State -ne 'Running') {
-        throw "local server job did not start; state=$($Job.State)"
+    if ($Job.State -eq 'Failed') {
+        Receive-Job $Job
     }
-}
-
-function Wait-HttpReady {
-    param(
-        [string]$URL,
-        [int]$Attempts = 80
-    )
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-            try {
-                Invoke-WebRequest -UseBasicParsing -Uri $URL -Method Post -TimeoutSec 2 | Out-Null
-                return
-            } catch {
-                Start-Sleep -Milliseconds 500
-            }
-        }
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    throw "local HTTP server not ready: $URL"
+    throw "local server did not become ready: $ReadyFile state=$($Job.State)"
 }
 
 Push-Location $repoRoot
@@ -179,11 +170,13 @@ try {
 </body>
 </html>
 "@
+        $readyFile = New-LocalServerReadyFile 'url-intake'
         $serverJob = Start-Job -ScriptBlock {
-            param($Prefix, $Body)
+            param($Prefix, $Body, $ReadyFile)
             $listener = [System.Net.HttpListener]::new()
             $listener.Prefixes.Add($Prefix)
             $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyFile, 'ready')
             try {
                 $context = $listener.GetContext()
                 $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
@@ -197,9 +190,9 @@ try {
                 $listener.Stop()
                 $listener.Close()
             }
-        } -ArgumentList $prefix, $html
+        } -ArgumentList $prefix, $html, $readyFile
         try {
-            Wait-LocalServerJob -Job $serverJob
+            Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
             $url = $prefix + 'prd'
             $urlOutput = .\dist\devflow-windows-amd64.exe intake --root $urlRoot --url $url 2>&1
             $urlOutput | Tee-Object -FilePath (Join-Path $urlRoot 'url-intake-output.txt') | Out-Host
@@ -233,11 +226,13 @@ try {
         New-Item -ItemType Directory -Force $githubRoot | Out-Null
         $port = Get-Random -Minimum 20000 -Maximum 50000
         $prefix = "http://127.0.0.1:$port/"
+        $readyFile = New-LocalServerReadyFile 'github-issue-intake'
         $serverJob = Start-Job -ScriptBlock {
-            param($Prefix)
+            param($Prefix, $ReadyFile)
             $listener = [System.Net.HttpListener]::new()
             $listener.Prefixes.Add($Prefix)
             $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyFile, 'ready')
             try {
                 for ($i = 0; $i -lt 2; $i++) {
                     $context = $listener.GetContext()
@@ -257,9 +252,9 @@ try {
                 $listener.Stop()
                 $listener.Close()
             }
-        } -ArgumentList $prefix
+        } -ArgumentList $prefix, $readyFile
         try {
-            Wait-LocalServerJob -Job $serverJob
+            Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
             .\dist\devflow-windows-amd64.exe intake --root $githubRoot --github-issue owner/repo#123 --github-base-url $prefix.TrimEnd('/') --github-token fake
             $intakePath = Join-Path $githubRoot '.devflow\demands\coupon-issue\intake.md'
             if (-not (Test-Path $intakePath)) { throw "GitHub issue intake did not create intake.md" }
@@ -273,11 +268,13 @@ try {
         New-Item -ItemType Directory -Force $feishuDocRoot | Out-Null
         $port = Get-Random -Minimum 20000 -Maximum 50000
         $prefix = "http://127.0.0.1:$port/"
+        $readyFile = New-LocalServerReadyFile 'feishu-doc-intake'
         $serverJob = Start-Job -ScriptBlock {
-            param($Prefix)
+            param($Prefix, $ReadyFile)
             $listener = [System.Net.HttpListener]::new()
             $listener.Prefixes.Add($Prefix)
             $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyFile, 'ready')
             try {
                 for ($i = 0; $i -lt 3; $i++) {
                     $context = $listener.GetContext()
@@ -299,9 +296,9 @@ try {
                 $listener.Stop()
                 $listener.Close()
             }
-        } -ArgumentList $prefix
+        } -ArgumentList $prefix, $readyFile
         try {
-            Wait-LocalServerJob -Job $serverJob
+            Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
             .\dist\devflow-windows-amd64.exe intake --root $feishuDocRoot --feishu-doc doc_token --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake
             $intakePath = Join-Path $feishuDocRoot '.devflow\demands\coupon-prd\intake.md'
             if (-not (Test-Path $intakePath)) { throw "Feishu doc intake did not create intake.md" }
@@ -315,39 +312,35 @@ try {
         New-Item -ItemType Directory -Force $feishuPoolRoot | Out-Null
         $port = Get-Random -Minimum 20000 -Maximum 50000
         $prefix = "http://127.0.0.1:$port/"
+        $readyFile = New-LocalServerReadyFile 'feishu-bitable-pool'
         $serverJob = Start-Job -ScriptBlock {
-            param($Port)
-            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), $Port)
+            param($Prefix, $ReadyFile)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($Prefix)
             $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyFile, 'ready')
             try {
                 for ($i = 0; $i -lt 10; $i++) {
-                    $client = $listener.AcceptTcpClient()
-                    try {
-                        $stream = $client.GetStream()
-                        $buffer = New-Object byte[] 8192
-                        $read = $stream.Read($buffer, 0, $buffer.Length)
-                        $request = [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read)
-                        if ($request -match 'POST /open-apis/auth/v3/tenant_access_token/internal') {
-                            $body = '{"code":0,"tenant_access_token":"tenant-token","expire":7200}'
-                        } else {
-                            $body = '{"code":0,"data":{"items":[{"record_id":"rec1","fields":{"\u9700\u6c42\u6807\u9898":"Coupon","\u9700\u6c42\u63cf\u8ff0":"Coupon eligibility","\u72b6\u6001":"\u5f85\u6f84\u6e05"}}]}}'
-                        }
-                        $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
-                        $header = "HTTP/1.1 200 OK`r`nContent-Type: application/json; charset=utf-8`r`nContent-Length: $($bodyBytes.Length)`r`nConnection: close`r`n`r`n"
-                        $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($header)
-                        $stream.Write($headerBytes, 0, $headerBytes.Length)
-                        $stream.Write($bodyBytes, 0, $bodyBytes.Length)
-                    } finally {
-                        $client.Close()
+                    $context = $listener.GetContext()
+                    $path = $context.Request.Url.AbsolutePath
+                    if ($path -eq "/open-apis/auth/v3/tenant_access_token/internal") {
+                        $body = '{"code":0,"tenant_access_token":"tenant-token","expire":7200}'
+                    } else {
+                        $body = '{"code":0,"data":{"items":[{"record_id":"rec1","fields":{"\u9700\u6c42\u6807\u9898":"Coupon","\u9700\u6c42\u63cf\u8ff0":"Coupon eligibility","\u72b6\u6001":"\u5f85\u6f84\u6e05"}}]}}'
                     }
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                    $context.Response.StatusCode = 200
+                    $context.Response.ContentType = 'application/json; charset=utf-8'
+                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $context.Response.OutputStream.Close()
                 }
             } finally {
                 $listener.Stop()
+                $listener.Close()
             }
-        } -ArgumentList $port
+        } -ArgumentList $prefix, $readyFile
         try {
-            Wait-LocalServerJob -Job $serverJob
-            Wait-HttpReady -URL ($prefix + 'open-apis/auth/v3/tenant_access_token/internal')
+            Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
             $poolOutput = @()
             $poolExit = 1
             for ($attempt = 1; $attempt -le 5; $attempt++) {
@@ -384,11 +377,13 @@ try {
 
         $port = Get-Random -Minimum 20000 -Maximum 50000
         $prefix = "http://127.0.0.1:$port/"
+        $readyFile = New-LocalServerReadyFile 'api-evidence-fetch'
         $serverJob = Start-Job -ScriptBlock {
-            param($prefix)
+            param($prefix, $ReadyFile)
             $listener = [System.Net.HttpListener]::new()
             $listener.Prefixes.Add($prefix)
             $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyFile, 'ready')
             try {
                 $context = $listener.GetContext()
                 $body = '{"code":"COUPON_USER_INACTIVE"}'
@@ -401,9 +396,9 @@ try {
                 $listener.Stop()
                 $listener.Close()
             }
-        } -ArgumentList $prefix
+        } -ArgumentList $prefix, $readyFile
         try {
-            Wait-LocalServerJob -Job $serverJob
+            Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
             .\dist\devflow-windows-amd64.exe evidence fetch --root $evidenceRoot --demand $demandId --type api --criterion "Inactive users are blocked" --method POST --url ($prefix + 'coupon?token=secret-token') --header "Authorization: Bearer secret-token" --body '{"password":"pw"}' --expect-status 403 --expect-contains COUPON_USER_INACTIVE
         } finally {
             if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }

@@ -83,6 +83,35 @@ function Wait-LocalServerReadyFile {
     throw "local server did not become ready: $ReadyFile state=$($Job.State)"
 }
 
+function Invoke-LocalServerCommand {
+    param(
+        [scriptblock]$Command,
+        [int]$Attempts = 5
+    )
+    $output = @()
+    $exit = 1
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $output = & $Command 2>&1
+            $exit = $LASTEXITCODE
+            if ($null -eq $exit) { $exit = 0 }
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($exit -eq 0) {
+            return $output
+        }
+        $text = $output -join [Environment]::NewLine
+        if ($text -notmatch 'connection refused|actively refused|connectex|No connection could be made') {
+            return $output
+        }
+        Start-Sleep -Milliseconds (200 * $attempt)
+    }
+    return $output
+}
+
 Push-Location $repoRoot
 try {
     Invoke-Step "go test" { go test ./... -count=1 -timeout 5m }
@@ -178,13 +207,15 @@ try {
             $listener.Start()
             [System.IO.File]::WriteAllText($ReadyFile, 'ready')
             try {
-                $context = $listener.GetContext()
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
-                $context.Response.StatusCode = 200
-                $context.Response.ContentType = 'text/html; charset=utf-8'
-                $context.Response.ContentLength64 = $bytes.Length
-                $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
-                $context.Response.OutputStream.Close()
+                for ($i = 0; $i -lt 5; $i++) {
+                    $context = $listener.GetContext()
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+                    $context.Response.StatusCode = 200
+                    $context.Response.ContentType = 'text/html; charset=utf-8'
+                    $context.Response.ContentLength64 = $bytes.Length
+                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $context.Response.OutputStream.Close()
+                }
             }
             finally {
                 $listener.Stop()
@@ -193,8 +224,9 @@ try {
         } -ArgumentList $prefix, $html, $readyFile
         try {
             Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
+            Start-Sleep -Milliseconds 500
             $url = $prefix + 'prd'
-            $urlOutput = .\dist\devflow-windows-amd64.exe intake --root $urlRoot --url $url 2>&1
+            $urlOutput = Invoke-LocalServerCommand { .\dist\devflow-windows-amd64.exe intake --root $urlRoot --url $url }
             $urlOutput | Tee-Object -FilePath (Join-Path $urlRoot 'url-intake-output.txt') | Out-Host
             Wait-Job $serverJob -Timeout 10 | Out-Null
             if ($serverJob.State -eq 'Failed') {
@@ -255,7 +287,8 @@ try {
         } -ArgumentList $prefix, $readyFile
         try {
             Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
-            .\dist\devflow-windows-amd64.exe intake --root $githubRoot --github-issue owner/repo#123 --github-base-url $prefix.TrimEnd('/') --github-token fake
+            $githubOutput = Invoke-LocalServerCommand { .\dist\devflow-windows-amd64.exe intake --root $githubRoot --github-issue owner/repo#123 --github-base-url $prefix.TrimEnd('/') --github-token fake }
+            $githubOutput | Out-Host
             $intakePath = Join-Path $githubRoot '.devflow\demands\coupon-issue\intake.md'
             if (-not (Test-Path $intakePath)) { throw "GitHub issue intake did not create intake.md" }
         } finally {
@@ -299,7 +332,8 @@ try {
         } -ArgumentList $prefix, $readyFile
         try {
             Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
-            .\dist\devflow-windows-amd64.exe intake --root $feishuDocRoot --feishu-doc doc_token --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake
+            $feishuDocOutput = Invoke-LocalServerCommand { .\dist\devflow-windows-amd64.exe intake --root $feishuDocRoot --feishu-doc doc_token --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake }
+            $feishuDocOutput | Out-Host
             $intakePath = Join-Path $feishuDocRoot '.devflow\demands\coupon-prd\intake.md'
             if (-not (Test-Path $intakePath)) { throw "Feishu doc intake did not create intake.md" }
         } finally {
@@ -399,7 +433,8 @@ try {
         } -ArgumentList $prefix, $readyFile
         try {
             Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
-            .\dist\devflow-windows-amd64.exe evidence fetch --root $evidenceRoot --demand $demandId --type api --criterion "Inactive users are blocked" --method POST --url ($prefix + 'coupon?token=secret-token') --header "Authorization: Bearer secret-token" --body '{"password":"pw"}' --expect-status 403 --expect-contains COUPON_USER_INACTIVE
+            $evidenceOutput = Invoke-LocalServerCommand { .\dist\devflow-windows-amd64.exe evidence fetch --root $evidenceRoot --demand $demandId --type api --criterion "Inactive users are blocked" --method POST --url ($prefix + 'coupon?token=secret-token') --header "Authorization: Bearer secret-token" --body '{"password":"pw"}' --expect-status 403 --expect-contains COUPON_USER_INACTIVE }
+            $evidenceOutput | Out-Host
         } finally {
             if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
             Remove-Job $serverJob -Force
@@ -477,6 +512,53 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         $evaluationOutput = .\dist\devflow-windows-amd64.exe evaluate --root $codemapRoot --demand coupon-eligibility --stage plan 2>&1
         $evaluationOutput | Out-Host
         if (($evaluationOutput -join [Environment]::NewLine) -notmatch 'plan.codemap_reference') { throw "plan.codemap_reference missing" }
+    }
+    Invoke-Step "plan grounding smoke" {
+        $groundingRoot = Join-Path $readinessRoot 'plan-grounding-smoke'
+        New-Item -ItemType Directory -Force (Join-Path $groundingRoot 'internal\coupon') | Out-Null
+        @"
+package coupon
+
+func CheckEligibility(userID string) bool {
+    return userID != ""
+}
+"@ | Set-Content -Encoding UTF8 (Join-Path $groundingRoot 'internal\coupon\service.go')
+        @"
+package coupon
+
+import "testing"
+
+func TestCheckEligibilityInactiveUser(t *testing.T) {}
+"@ | Set-Content -Encoding UTF8 (Join-Path $groundingRoot 'internal\coupon\service_test.go')
+
+        .\dist\devflow-windows-amd64.exe start --root $groundingRoot --title "Coupon Eligibility" --description "Inactive users are blocked"
+        .\dist\devflow-windows-amd64.exe codemap index --root $groundingRoot
+        .\dist\devflow-windows-amd64.exe codemap refresh --root $groundingRoot --demand coupon-eligibility --query "coupon eligibility inactive"
+        .\dist\devflow-windows-amd64.exe plan-context refresh --root $groundingRoot --demand coupon-eligibility
+        .\dist\devflow-windows-amd64.exe scope declare --root $groundingRoot --demand coupon-eligibility --source internal/coupon/service.go --test internal/coupon/service_test.go
+
+        $planPath = Join-Path $groundingRoot '.devflow\demands\coupon-eligibility\plan.md'
+        @"
+# Plan
+
+## Implementation Steps
+
+- Update `internal/coupon/service.go`.
+
+## Test Strategy
+
+- Add `internal/coupon/service_test.go`.
+
+## Risks
+
+- Keep inactive users blocked.
+"@ | Set-Content -Encoding UTF8 $planPath
+
+        $evaluationOutput = .\dist\devflow-windows-amd64.exe evaluate --root $groundingRoot --demand coupon-eligibility --stage plan 2>&1
+        $evaluationOutput | Out-Host
+        $evaluationText = $evaluationOutput -join [Environment]::NewLine
+        if ($evaluationText -notmatch 'plan.context_grounding') { throw "plan.context_grounding missing" }
+        if ($evaluationText -notmatch 'plan.change_scope') { throw "plan.change_scope missing" }
     }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }

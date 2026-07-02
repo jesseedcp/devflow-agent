@@ -78,6 +78,9 @@ func (s Store) CreateDemand(demand Demand) error {
 	if err := writeTextFile(filepath.Join(tempDir, ContextFile), templates.Context(demand.Title)); err != nil {
 		return fmt.Errorf("write context template: %w", err)
 	}
+	if err := writeTextFile(filepath.Join(tempDir, CodemapFile), "# Codemap Context: "+demand.Title+"\n\n"); err != nil {
+		return fmt.Errorf("write codemap template: %w", err)
+	}
 	if err := writeTextFile(filepath.Join(tempDir, RequirementsFile), templates.Requirements(demand.Title, demand.Description)); err != nil {
 		return fmt.Errorf("write requirements template: %w", err)
 	}
@@ -541,6 +544,7 @@ func validateAppendableArtifactName(name string) error {
 	switch name {
 	case IntakeFile,
 		ContextFile,
+		CodemapFile,
 		RequirementsFile,
 		PlanFile,
 		ProgressFile,

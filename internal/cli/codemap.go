@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/codemap"
 )
 
@@ -18,6 +19,8 @@ func runCodemap(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCodemapIndex(args[1:], stdout, stderr)
 	case "search":
 		return runCodemapSearch(args[1:], stdout, stderr)
+	case "refresh":
+		return runCodemapRefresh(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown codemap command %q", args[0])
 	}
@@ -70,4 +73,37 @@ func runCodemapSearch(args []string, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "no codemap results")
 	}
 	return nil
+}
+
+func runCodemapRefresh(args []string, stdout io.Writer, stderr io.Writer) error {
+	fs := flag.NewFlagSet("codemap refresh", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var root, demandID, query string
+	var limit int
+	fs.StringVar(&root, "root", ".", "root directory")
+	fs.StringVar(&demandID, "demand", "", "demand id")
+	fs.StringVar(&query, "query", "", "search query")
+	fs.IntVar(&limit, "limit", 20, "maximum results")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	root = normalizedRoot(root)
+	demandID = strings.TrimSpace(demandID)
+	if demandID == "" {
+		return fmt.Errorf("--demand is required")
+	}
+	if strings.TrimSpace(query) == "" {
+		query = demandID
+	}
+	index, err := codemap.ReadIndex(root)
+	if err != nil {
+		return err
+	}
+	results := codemap.Search(index, query, limit)
+	store := artifacts.NewStore(root)
+	if err := store.WriteArtifact(demandID, artifacts.CodemapFile, codemap.RenderDemandCodemap(demandID, query, results)); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(stdout, "codemap refreshed for %s: %d results\n", demandID, len(results))
+	return err
 }

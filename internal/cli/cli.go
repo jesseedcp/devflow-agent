@@ -42,6 +42,7 @@ Usage:
   devflow recall --demand <id>
   devflow codemap index
   devflow codemap search <query>
+  devflow codemap refresh --demand <id> --query <text>
   devflow init --provider <openai-compat|openai|anthropic>
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
   devflow verify --demand <id> --command <program and args>

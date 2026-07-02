@@ -40,6 +40,7 @@ Usage:
   devflow sync --github-issue <owner/repo#number> --demand <id>
   devflow sync --feishu-bitable <app-token> --table <table-id> --record <record-id> --demand <id>
   devflow recall --demand <id>
+  devflow plan-context refresh --demand <id>
   devflow codemap index
   devflow codemap search <query>
   devflow codemap refresh --demand <id> --query <text>
@@ -78,6 +79,7 @@ Commands:
   start     Create a new demand workspace
   intake   Create a demand workspace from a PRD file, URL, GitHub Issue, Feishu Doc, or Feishu Bitable record
   recall   Rebuild reusable memory context for a demand
+  plan-context Build demand planning context from requirements, memory, and codemap
   codemap  Index and search local code facts
   pool      List external demand pools (Feishu Bitable)
   sync      Sync demand progress to GitHub Issues or Feishu Bitable
@@ -128,6 +130,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runIntake(args[1:], stdout)
 	case "recall":
 		return runRecall(args[1:], stdout, stderr)
+	case "plan-context":
+		return runPlanContext(args[1:], stdout, stderr)
 	case "codemap":
 		return runCodemap(args[1:], stdout, stderr)
 	case "pool":

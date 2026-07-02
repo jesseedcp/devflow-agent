@@ -33,6 +33,12 @@ Usage:
   devflow start --title <title> --description <text>
   devflow intake --file <path>
   devflow intake --url <url>
+  devflow intake --github-issue <owner/repo#number>
+  devflow intake --feishu-doc <doc-url-or-token>
+  devflow intake --feishu-bitable <app-token> --table <table-id> --record <record-id>
+  devflow pool list --feishu-bitable <app-token> --table <table-id>
+  devflow sync --github-issue <owner/repo#number> --demand <id>
+  devflow sync --feishu-bitable <app-token> --table <table-id> --record <record-id> --demand <id>
   devflow recall --demand <id>
   devflow init --provider <openai-compat|openai|anthropic>
   devflow confirm --demand <id> --stage <requirements|plan|verification|closeout> --by <name> --summary <text>
@@ -66,8 +72,10 @@ Commands:
   help      Show this help text
   version   Show build version and platform metadata
   start     Create a new demand workspace
-  intake   Create a demand workspace from a PRD file or URL
+  intake   Create a demand workspace from a PRD file, URL, GitHub Issue, Feishu Doc, or Feishu Bitable record
   recall   Rebuild reusable memory context for a demand
+  pool      List external demand pools (Feishu Bitable)
+  sync      Sync demand progress to GitHub Issues or Feishu Bitable
   init      Create a no-secret .devflow/config.yaml
   confirm   Record a human confirmation and advance the workflow gate
   verify    Record local verification evidence without advancing workflow
@@ -115,6 +123,10 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runIntake(args[1:], stdout)
 	case "recall":
 		return runRecall(args[1:], stdout, stderr)
+	case "pool":
+		return runPool(args[1:], stdout)
+	case "sync":
+		return runSync(args[1:], stdout)
 	case "init":
 		return runInit(args[1:], stdout)
 	case "confirm":

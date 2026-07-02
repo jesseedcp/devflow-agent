@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/jesseedcp/devflow-agent/internal/platform"
 	"github.com/jesseedcp/devflow-agent/internal/runtime/config"
 )
 
@@ -23,12 +24,20 @@ func runDoctor(args []string, stdout io.Writer) error {
 	fs.SetOutput(io.Discard)
 	var configPath string
 	var requireGitLab bool
+	var platformName string
 	fs.StringVar(&configPath, "config", "", "config path")
 	fs.BoolVar(&requireGitLab, "require-gitlab", false, "require GITLAB_TOKEN for mr-review readiness")
+	fs.StringVar(&platformName, "platform", "", "platform to check: github, feishu, or all")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	checks := runDoctorChecks(context.Background(), configPath, requireGitLab)
+	if strings.TrimSpace(platformName) != "" {
+		return printDoctorChecks(stdout, runPlatformDoctorChecks(platformName))
+	}
+	return printDoctorChecks(stdout, runDoctorChecks(context.Background(), configPath, requireGitLab))
+}
+
+func printDoctorChecks(stdout io.Writer, checks []doctorCheck) error {
 	failed := false
 	for _, check := range checks {
 		mark := "OK"
@@ -42,6 +51,31 @@ func runDoctor(args []string, stdout io.Writer) error {
 		return fmt.Errorf("doctor found failing checks")
 	}
 	return nil
+}
+
+func runPlatformDoctorChecks(platformName string) []doctorCheck {
+	env := map[string]string{
+		"GITHUB_TOKEN":      os.Getenv("GITHUB_TOKEN"),
+		"FEISHU_APP_ID":     os.Getenv("FEISHU_APP_ID"),
+		"FEISHU_APP_SECRET": os.Getenv("FEISHU_APP_SECRET"),
+	}
+	var checks []platform.DoctorCheck
+	switch strings.ToLower(strings.TrimSpace(platformName)) {
+	case "github":
+		checks = platform.CredentialChecks(platform.ProviderGitHub, env)
+	case "feishu":
+		checks = platform.CredentialChecks(platform.ProviderFeishu, env)
+	case "all":
+		checks = append(checks, platform.CredentialChecks(platform.ProviderGitHub, env)...)
+		checks = append(checks, platform.CredentialChecks(platform.ProviderFeishu, env)...)
+	default:
+		checks = []platform.DoctorCheck{{Name: "platform", OK: false, Message: "unsupported platform " + platformName}}
+	}
+	out := make([]doctorCheck, len(checks))
+	for i, check := range checks {
+		out[i] = doctorCheck{Name: check.Name, OK: check.OK, Message: check.Message}
+	}
+	return out
 }
 
 func runDoctorChecks(ctx context.Context, configPath string, requireGitLab bool) []doctorCheck {

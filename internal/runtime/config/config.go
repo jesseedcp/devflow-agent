@@ -92,8 +92,44 @@ type AppConfig struct {
 	Providers      []ProviderConfig    `yaml:"providers"`
 	PermissionMode string              `yaml:"permission_mode"`
 	BackendDemand  BackendDemandConfig `yaml:"backend_demand"`
+	Platforms      PlatformConfig      `yaml:"platforms"`
 	MCPServers     []MCPServerConfig   `yaml:"mcp_servers"`
 	Hooks          []hooks.Hook        `yaml:"hooks"`
+}
+
+type PlatformConfig struct {
+	GitHub GitHubPlatformConfig `yaml:"github"`
+	Feishu FeishuPlatformConfig `yaml:"feishu"`
+}
+
+type GitHubPlatformConfig struct {
+	DefaultRepo string `yaml:"default_repo"`
+	BaseURL     string `yaml:"base_url"`
+}
+
+type FeishuPlatformConfig struct {
+	AppID   string              `yaml:"app_id"`
+	BaseURL string              `yaml:"base_url"`
+	Bitable FeishuBitableConfig `yaml:"bitable"`
+}
+
+type FeishuBitableConfig struct {
+	DefaultAppToken string              `yaml:"default_app_token"`
+	DefaultTableID  string              `yaml:"default_table_id"`
+	Fields          FeishuBitableFields `yaml:"fields"`
+	StatusMap       map[string]string   `yaml:"status_map"`
+}
+
+type FeishuBitableFields struct {
+	Title           string `yaml:"title"`
+	Description     string `yaml:"description"`
+	Status          string `yaml:"status"`
+	Priority        string `yaml:"priority"`
+	Owner           string `yaml:"owner"`
+	DevflowDemandID string `yaml:"devflow_demand_id"`
+	DevflowState    string `yaml:"devflow_state"`
+	Verification    string `yaml:"verification"`
+	Closeout        string `yaml:"closeout"`
 }
 
 type BackendDemandConfig struct {
@@ -209,6 +245,7 @@ func mergeConfig(base, override *AppConfig) *AppConfig {
 	if len(override.Hooks) > 0 {
 		merged.Hooks = append(merged.Hooks, cloneHooks(override.Hooks)...)
 	}
+	merged.Platforms = mergePlatforms(merged.Platforms, override.Platforms)
 	return merged
 }
 
@@ -398,9 +435,82 @@ func cloneAppConfig(cfg *AppConfig) *AppConfig {
 		Providers:      cloneProviderConfigs(cfg.Providers),
 		PermissionMode: cfg.PermissionMode,
 		BackendDemand:  cloneBackendDemandConfig(cfg.BackendDemand),
+		Platforms:      clonePlatformConfig(cfg.Platforms),
 		MCPServers:     cloneMCPServers(cfg.MCPServers),
 		Hooks:          cloneHooks(cfg.Hooks),
 	}
+}
+
+func clonePlatformConfig(in PlatformConfig) PlatformConfig {
+	out := in
+	if in.Feishu.Bitable.StatusMap != nil {
+		out.Feishu.Bitable.StatusMap = cloneStringMap(in.Feishu.Bitable.StatusMap)
+	}
+	return out
+}
+
+func mergePlatforms(base, override PlatformConfig) PlatformConfig {
+	merged := clonePlatformConfig(base)
+	if override.GitHub.DefaultRepo != "" {
+		merged.GitHub.DefaultRepo = override.GitHub.DefaultRepo
+	}
+	if override.GitHub.BaseURL != "" {
+		merged.GitHub.BaseURL = override.GitHub.BaseURL
+	}
+	if override.Feishu.AppID != "" {
+		merged.Feishu.AppID = override.Feishu.AppID
+	}
+	if override.Feishu.BaseURL != "" {
+		merged.Feishu.BaseURL = override.Feishu.BaseURL
+	}
+	if override.Feishu.Bitable.DefaultAppToken != "" {
+		merged.Feishu.Bitable.DefaultAppToken = override.Feishu.Bitable.DefaultAppToken
+	}
+	if override.Feishu.Bitable.DefaultTableID != "" {
+		merged.Feishu.Bitable.DefaultTableID = override.Feishu.Bitable.DefaultTableID
+	}
+	merged.Feishu.Bitable.Fields = mergeFeishuBitableFields(merged.Feishu.Bitable.Fields, override.Feishu.Bitable.Fields)
+	if override.Feishu.Bitable.StatusMap != nil {
+		if merged.Feishu.Bitable.StatusMap == nil {
+			merged.Feishu.Bitable.StatusMap = map[string]string{}
+		}
+		for key, value := range override.Feishu.Bitable.StatusMap {
+			merged.Feishu.Bitable.StatusMap[key] = value
+		}
+	}
+	return merged
+}
+
+func mergeFeishuBitableFields(base, override FeishuBitableFields) FeishuBitableFields {
+	merged := base
+	if override.Title != "" {
+		merged.Title = override.Title
+	}
+	if override.Description != "" {
+		merged.Description = override.Description
+	}
+	if override.Status != "" {
+		merged.Status = override.Status
+	}
+	if override.Priority != "" {
+		merged.Priority = override.Priority
+	}
+	if override.Owner != "" {
+		merged.Owner = override.Owner
+	}
+	if override.DevflowDemandID != "" {
+		merged.DevflowDemandID = override.DevflowDemandID
+	}
+	if override.DevflowState != "" {
+		merged.DevflowState = override.DevflowState
+	}
+	if override.Verification != "" {
+		merged.Verification = override.Verification
+	}
+	if override.Closeout != "" {
+		merged.Closeout = override.Closeout
+	}
+	return merged
 }
 
 func cloneProviderConfigs(in []ProviderConfig) []ProviderConfig {

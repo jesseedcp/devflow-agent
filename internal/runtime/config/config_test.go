@@ -606,3 +606,113 @@ backend_demand:
 		t.Fatalf("DefaultTargetBranch = %q", cfg.BackendDemand.GitLab.DefaultTargetBranch)
 	}
 }
+
+func TestLoadConfigPlatformDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeRawConfig(t, path, `
+providers:
+  - name: test
+    protocol: openai
+    base_url: https://api.example.test
+    model: test-model
+platforms:
+  github:
+    default_repo: jesseedcp/devflow-agent
+    base_url: https://api.github.test
+  feishu:
+    app_id: cli_test
+    base_url: https://open.feishu.test
+    bitable:
+      default_app_token: app_token
+      default_table_id: tbl_table
+      fields:
+        title: 需求标题
+        description: 需求描述
+        status: 状态
+        priority: 优先级
+        owner: 负责人
+        devflow_demand_id: Devflow Demand ID
+        devflow_state: Devflow 状态
+        verification: 验收摘要
+        closeout: 交付总结
+      status_map:
+        completed: 已完成
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+	if cfg.Platforms.GitHub.DefaultRepo != "jesseedcp/devflow-agent" {
+		t.Fatalf("GitHub.DefaultRepo = %q", cfg.Platforms.GitHub.DefaultRepo)
+	}
+	if cfg.Platforms.GitHub.BaseURL != "https://api.github.test" {
+		t.Fatalf("GitHub.BaseURL = %q", cfg.Platforms.GitHub.BaseURL)
+	}
+	if cfg.Platforms.Feishu.AppID != "cli_test" {
+		t.Fatalf("Feishu.AppID = %q", cfg.Platforms.Feishu.AppID)
+	}
+	if cfg.Platforms.Feishu.Bitable.Fields.Title != "需求标题" {
+		t.Fatalf("Bitable.Fields.Title = %q", cfg.Platforms.Feishu.Bitable.Fields.Title)
+	}
+	if cfg.Platforms.Feishu.Bitable.StatusMap["completed"] != "已完成" {
+		t.Fatalf("completed status map = %q", cfg.Platforms.Feishu.Bitable.StatusMap["completed"])
+	}
+}
+
+func TestMergeConfigMergesPlatforms(t *testing.T) {
+	base := &AppConfig{
+		Platforms: PlatformConfig{
+			GitHub: GitHubPlatformConfig{DefaultRepo: "owner/base", BaseURL: "https://api.github.com"},
+			Feishu: FeishuPlatformConfig{
+				AppID: "cli_base",
+				Bitable: FeishuBitableConfig{
+					Fields:    FeishuBitableFields{Title: "Title"},
+					StatusMap: map[string]string{"created": "待澄清"},
+				},
+			},
+		},
+	}
+	override := &AppConfig{
+		Platforms: PlatformConfig{
+			GitHub: GitHubPlatformConfig{DefaultRepo: "owner/override"},
+			Feishu: FeishuPlatformConfig{
+				BaseURL: "https://open.feishu.test",
+				Bitable: FeishuBitableConfig{
+					DefaultTableID: "tbl_override",
+					Fields:         FeishuBitableFields{Status: "状态"},
+					StatusMap:      map[string]string{"completed": "已完成"},
+				},
+			},
+		},
+	}
+
+	merged := mergeConfig(base, override)
+	if merged.Platforms.GitHub.DefaultRepo != "owner/override" {
+		t.Fatalf("GitHub.DefaultRepo = %q", merged.Platforms.GitHub.DefaultRepo)
+	}
+	if merged.Platforms.GitHub.BaseURL != "https://api.github.com" {
+		t.Fatalf("GitHub.BaseURL = %q", merged.Platforms.GitHub.BaseURL)
+	}
+	if merged.Platforms.Feishu.AppID != "cli_base" {
+		t.Fatalf("Feishu.AppID = %q", merged.Platforms.Feishu.AppID)
+	}
+	if merged.Platforms.Feishu.BaseURL != "https://open.feishu.test" {
+		t.Fatalf("Feishu.BaseURL = %q", merged.Platforms.Feishu.BaseURL)
+	}
+	if merged.Platforms.Feishu.Bitable.DefaultTableID != "tbl_override" {
+		t.Fatalf("DefaultTableID = %q", merged.Platforms.Feishu.Bitable.DefaultTableID)
+	}
+	if merged.Platforms.Feishu.Bitable.Fields.Title != "Title" {
+		t.Fatalf("Fields.Title = %q", merged.Platforms.Feishu.Bitable.Fields.Title)
+	}
+	if merged.Platforms.Feishu.Bitable.Fields.Status != "状态" {
+		t.Fatalf("Fields.Status = %q", merged.Platforms.Feishu.Bitable.Fields.Status)
+	}
+	if merged.Platforms.Feishu.Bitable.StatusMap["created"] != "待澄清" {
+		t.Fatalf("created status map = %q", merged.Platforms.Feishu.Bitable.StatusMap["created"])
+	}
+	if merged.Platforms.Feishu.Bitable.StatusMap["completed"] != "已完成" {
+		t.Fatalf("completed status map = %q", merged.Platforms.Feishu.Bitable.StatusMap["completed"])
+	}
+}

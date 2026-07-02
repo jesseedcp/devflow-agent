@@ -116,6 +116,7 @@ Drive never confirms stages, promotes memory, rejects memory, or merges MRs. It 
 `devflow codemap refresh --demand <id> --query <text>` writes demand-level `codemap.md`.
 
 Codemap is intentionally separate from `context.md`: `context.md` is memory recall, while `codemap.md` is code evidence for planning.
+If `devflow codemap search` or `devflow codemap refresh` says the index is missing, run `devflow codemap index` first, then retry the search or refresh command.
 
 ### Deterministic stage evaluation
 

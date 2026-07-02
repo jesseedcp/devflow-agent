@@ -77,3 +77,30 @@ func CheckEligibility() bool {
 		t.Fatalf("codemap.md missing service file:\n%s", string(data))
 	}
 }
+
+func TestCodemapSearchGuidesWhenIndexMissing(t *testing.T) {
+	root := t.TempDir()
+	var stdout bytes.Buffer
+	err := Run([]string{"codemap", "search", "--root", root, "coupon"}, &stdout, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("codemap search returned nil error without index")
+	}
+	if !strings.Contains(err.Error(), "run `devflow codemap index` first") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestCodemapRefreshGuidesWhenIndexMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	if err := store.CreateDemand(artifacts.Demand{ID: "coupon", Title: "Coupon", Source: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"codemap", "refresh", "--root", root, "--demand", "coupon", "--query", "coupon"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("codemap refresh returned nil error without index")
+	}
+	if !strings.Contains(err.Error(), "run `devflow codemap index` first") {
+		t.Fatalf("error = %v", err)
+	}
+}

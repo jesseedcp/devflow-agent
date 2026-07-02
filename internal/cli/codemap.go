@@ -46,6 +46,14 @@ func runCodemapIndex(args []string, stdout io.Writer, stderr io.Writer) error {
 	return err
 }
 
+func readCodemapIndexForCLI(root string) (codemap.Index, error) {
+	index, err := codemap.ReadIndex(root)
+	if err != nil {
+		return codemap.Index{}, fmt.Errorf("%w; run `devflow codemap index` first", err)
+	}
+	return index, nil
+}
+
 func runCodemapSearch(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("codemap search", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -60,7 +68,7 @@ func runCodemapSearch(args []string, stdout io.Writer, stderr io.Writer) error {
 	if strings.TrimSpace(query) == "" {
 		return fmt.Errorf("search query is required")
 	}
-	index, err := codemap.ReadIndex(normalizedRoot(root))
+	index, err := readCodemapIndexForCLI(normalizedRoot(root))
 	if err != nil {
 		return err
 	}
@@ -95,7 +103,7 @@ func runCodemapRefresh(args []string, stdout io.Writer, stderr io.Writer) error 
 	if strings.TrimSpace(query) == "" {
 		query = demandID
 	}
-	index, err := codemap.ReadIndex(root)
+	index, err := readCodemapIndexForCLI(root)
 	if err != nil {
 		return err
 	}

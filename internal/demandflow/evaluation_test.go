@@ -355,7 +355,7 @@ func TestEvaluateVerificationWarnsWhenManualEvidenceMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateDemand returned error: %v", err)
 	}
-	check := findEvaluationCheck(t, evaluation.Stages[0], "verification.manual_evidence")
+	check := findEvaluationCheck(t, evaluation.Stages[0], "verification.acceptance_evidence")
 	if check.Status != EvaluationWarning {
 		t.Fatalf("manual evidence status = %s, want warning", check.Status)
 	}
@@ -379,7 +379,7 @@ func TestEvaluateVerificationFailsOnFailedManualEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateDemand returned error: %v", err)
 	}
-	check := findEvaluationCheck(t, evaluation.Stages[0], "verification.manual_evidence_pass")
+	check := findEvaluationCheck(t, evaluation.Stages[0], "verification.acceptance_evidence_pass")
 	if check.Status != EvaluationFail {
 		t.Fatalf("manual evidence pass status = %s, want fail", check.Status)
 	}

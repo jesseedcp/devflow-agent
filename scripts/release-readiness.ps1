@@ -47,6 +47,51 @@ function Invoke-Step {
     }
 }
 
+
+function Wait-LocalServerJob {
+    param(
+        [System.Management.Automation.Job]$Job,
+        [int]$Milliseconds = 3000
+    )
+    $deadline = (Get-Date).AddMilliseconds($Milliseconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($Job.State -eq 'Running') {
+            Start-Sleep -Milliseconds 1500
+            return
+        }
+        if ($Job.State -eq 'Failed') {
+            Receive-Job $Job
+            throw "local server job failed to start"
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    if ($Job.State -ne 'Running') {
+        throw "local server job did not start; state=$($Job.State)"
+    }
+}
+
+function Wait-HttpReady {
+    param(
+        [string]$URL,
+        [int]$Attempts = 80
+    )
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri $URL -Method Post -TimeoutSec 2 | Out-Null
+                return
+            } catch {
+                Start-Sleep -Milliseconds 500
+            }
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    throw "local HTTP server not ready: $URL"
+}
+
 Push-Location $repoRoot
 try {
     Invoke-Step "go test" { go test ./... -count=1 -timeout 5m }
@@ -154,7 +199,7 @@ try {
             }
         } -ArgumentList $prefix, $html
         try {
-            Start-Sleep -Milliseconds 500
+            Wait-LocalServerJob -Job $serverJob
             $url = $prefix + 'prd'
             $urlOutput = .\dist\devflow-windows-amd64.exe intake --root $urlRoot --url $url 2>&1
             $urlOutput | Tee-Object -FilePath (Join-Path $urlRoot 'url-intake-output.txt') | Out-Host
@@ -214,7 +259,7 @@ try {
             }
         } -ArgumentList $prefix
         try {
-            Start-Sleep -Milliseconds 500
+            Wait-LocalServerJob -Job $serverJob
             .\dist\devflow-windows-amd64.exe intake --root $githubRoot --github-issue owner/repo#123 --github-base-url $prefix.TrimEnd('/') --github-token fake
             $intakePath = Join-Path $githubRoot '.devflow\demands\coupon-issue\intake.md'
             if (-not (Test-Path $intakePath)) { throw "GitHub issue intake did not create intake.md" }
@@ -256,7 +301,7 @@ try {
             }
         } -ArgumentList $prefix
         try {
-            Start-Sleep -Milliseconds 500
+            Wait-LocalServerJob -Job $serverJob
             .\dist\devflow-windows-amd64.exe intake --root $feishuDocRoot --feishu-doc doc_token --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake
             $intakePath = Join-Path $feishuDocRoot '.devflow\demands\coupon-prd\intake.md'
             if (-not (Test-Path $intakePath)) { throw "Feishu doc intake did not create intake.md" }
@@ -271,67 +316,128 @@ try {
         $port = Get-Random -Minimum 20000 -Maximum 50000
         $prefix = "http://127.0.0.1:$port/"
         $serverJob = Start-Job -ScriptBlock {
-            param($Prefix)
-            $listener = [System.Net.HttpListener]::new()
-            $listener.Prefixes.Add($Prefix)
+            param($Port)
+            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), $Port)
             $listener.Start()
             try {
-                for ($i = 0; $i -lt 2; $i++) {
-                    $context = $listener.GetContext()
-                    $path = $context.Request.Url.AbsolutePath
-                    if ($path -eq "/open-apis/auth/v3/tenant_access_token/internal") {
-                        $body = '{"code":0,"tenant_access_token":"tenant-token","expire":7200}'
-                    } else {
-                        $body = '{"code":0,"data":{"items":[{"record_id":"rec1","fields":{"需求标题":"Coupon","需求描述":"Coupon eligibility","状态":"待澄清"}}]}}'
+                for ($i = 0; $i -lt 10; $i++) {
+                    $client = $listener.AcceptTcpClient()
+                    try {
+                        $stream = $client.GetStream()
+                        $buffer = New-Object byte[] 8192
+                        $read = $stream.Read($buffer, 0, $buffer.Length)
+                        $request = [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read)
+                        if ($request -match 'POST /open-apis/auth/v3/tenant_access_token/internal') {
+                            $body = '{"code":0,"tenant_access_token":"tenant-token","expire":7200}'
+                        } else {
+                            $body = '{"code":0,"data":{"items":[{"record_id":"rec1","fields":{"\u9700\u6c42\u6807\u9898":"Coupon","\u9700\u6c42\u63cf\u8ff0":"Coupon eligibility","\u72b6\u6001":"\u5f85\u6f84\u6e05"}}]}}'
+                        }
+                        $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                        $header = "HTTP/1.1 200 OK`r`nContent-Type: application/json; charset=utf-8`r`nContent-Length: $($bodyBytes.Length)`r`nConnection: close`r`n`r`n"
+                        $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($header)
+                        $stream.Write($headerBytes, 0, $headerBytes.Length)
+                        $stream.Write($bodyBytes, 0, $bodyBytes.Length)
+                    } finally {
+                        $client.Close()
                     }
-                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
-                    $context.Response.StatusCode = 200
-                    $context.Response.ContentType = 'application/json; charset=utf-8'
-                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
-                    $context.Response.OutputStream.Close()
                 }
             } finally {
                 $listener.Stop()
-                $listener.Close()
             }
-        } -ArgumentList $prefix
+        } -ArgumentList $port
         try {
-            Start-Sleep -Milliseconds 500
-            $poolOutput = .\dist\devflow-windows-amd64.exe pool list --feishu-bitable app_token --table tbl --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake 2>&1
+            Wait-LocalServerJob -Job $serverJob
+            Wait-HttpReady -URL ($prefix + 'open-apis/auth/v3/tenant_access_token/internal')
+            $poolOutput = @()
+            $poolExit = 1
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+                $previousErrorActionPreference = $ErrorActionPreference
+                $ErrorActionPreference = 'Continue'
+                try {
+                    $poolOutput = .\dist\devflow-windows-amd64.exe pool list --feishu-bitable app_token --table tbl --feishu-base-url $prefix.TrimEnd('/') --feishu-app-id cli_test --feishu-app-secret fake 2>&1
+                    $poolExit = $LASTEXITCODE
+                } finally {
+                    $ErrorActionPreference = $previousErrorActionPreference
+                }
+                if ($poolExit -eq 0) { break }
+                Start-Sleep -Milliseconds 500
+            }
             $poolOutput | Out-Host
+            if ($poolExit -ne 0) { throw "Feishu bitable pool command failed" }
             if (($poolOutput -join [Environment]::NewLine) -notmatch 'rec1') { throw "Feishu bitable pool output missing rec1" }
         } finally {
             if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
             Remove-Job $serverJob -Force
         }
     }
-    Invoke-Step "manual evidence smoke" {
-        $evidenceRoot = Join-Path $readinessRoot 'manual-evidence-smoke'
+    Invoke-Step "api evidence fetch smoke" {
+        $evidenceRoot = Join-Path $readinessRoot 'api-evidence-smoke'
         New-Item -ItemType Directory -Force $evidenceRoot | Out-Null
-        $demandDir = Join-Path $evidenceRoot '.devflow\demands\manual-evidence-coupon'
+        $demandId = 'api-evidence-coupon'
+        $demandDir = Join-Path $evidenceRoot ".devflow\demands\$demandId"
         New-Item -ItemType Directory -Force $demandDir | Out-Null
         $now = (Get-Date).ToUniversalTime().ToString('o')
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText((Join-Path $demandDir 'demand.json'), (@{ id = 'manual-evidence-coupon'; title = 'Manual evidence coupon'; description = 'Inactive users are blocked'; source = 'release-readiness'; state = 'verification'; created_at = $now; updated_at = $now } | ConvertTo-Json), $utf8NoBom)
-        [System.IO.File]::WriteAllText((Join-Path $demandDir 'verification.md'), "# Verification: Manual evidence coupon`n", $utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $demandDir 'demand.json'), (@{ id = $demandId; title = 'API evidence coupon'; description = 'Inactive users are blocked'; source = 'release-readiness'; state = 'verification'; created_at = $now; updated_at = $now } | ConvertTo-Json), $utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $demandDir 'verification.md'), "# Verification: API evidence coupon`n", $utf8NoBom)
         [System.IO.File]::WriteAllText((Join-Path $demandDir 'events.jsonl'), ('{"time":"2026-07-01T00:00:00Z","type":"verification.recorded","message":"verification pass","data":{"status":"PASS","command":"go test ./internal/version","evidence_file":"verification.md"}}' + "`n"), $utf8NoBom)
-        .\dist\devflow-windows-amd64.exe evidence add --root $evidenceRoot --demand manual-evidence-coupon --type api --criterion "Inactive users are blocked" --summary "POST /coupon/claim returned COUPON_USER_INACTIVE." --by readiness
 
-        $evidenceList = .\dist\devflow-windows-amd64.exe evidence list --root $evidenceRoot --demand manual-evidence-coupon 2>&1
+        $port = Get-Random -Minimum 20000 -Maximum 50000
+        $prefix = "http://127.0.0.1:$port/"
+        $serverJob = Start-Job -ScriptBlock {
+            param($prefix)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($prefix)
+            $listener.Start()
+            try {
+                $context = $listener.GetContext()
+                $body = '{"code":"COUPON_USER_INACTIVE"}'
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                $context.Response.StatusCode = 403
+                $context.Response.ContentType = 'application/json; charset=utf-8'
+                $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                $context.Response.OutputStream.Close()
+            } finally {
+                $listener.Stop()
+                $listener.Close()
+            }
+        } -ArgumentList $prefix
+        try {
+            Wait-LocalServerJob -Job $serverJob
+            .\dist\devflow-windows-amd64.exe evidence fetch --root $evidenceRoot --demand $demandId --type api --criterion "Inactive users are blocked" --method POST --url ($prefix + 'coupon?token=secret-token') --header "Authorization: Bearer secret-token" --body '{"password":"pw"}' --expect-status 403 --expect-contains COUPON_USER_INACTIVE
+        } finally {
+            if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
+            Remove-Job $serverJob -Force
+        }
+
+        $verificationText = [System.IO.File]::ReadAllText((Join-Path $demandDir 'verification.md'))
+        $eventsText = [System.IO.File]::ReadAllText((Join-Path $demandDir 'events.jsonl'))
+        if ($verificationText -notmatch '\[PASS\] api - Inactive users are blocked') { throw "API evidence fetch missing PASS evidence" }
+        if (($verificationText + $eventsText) -match 'secret-token|token=secret-token|"password":"pw"') { throw "API evidence fetch leaked a secret" }
+
+        $evidenceList = .\dist\devflow-windows-amd64.exe evidence list --root $evidenceRoot --demand $demandId 2>&1
         $evidenceList | Tee-Object -FilePath (Join-Path $evidenceRoot 'evidence-list-output.txt') | Out-Host
         if (($evidenceList -join [Environment]::NewLine) -notmatch 'PASS api Inactive users are blocked') {
-            throw "manual evidence missing from evidence list"
+            throw "acceptance evidence missing from evidence list"
         }
 
-        $statusOutput = .\dist\devflow-windows-amd64.exe status --root $evidenceRoot --demand manual-evidence-coupon 2>&1
+        $statusOutput = .\dist\devflow-windows-amd64.exe status --root $evidenceRoot --demand $demandId 2>&1
         $statusOutput | Tee-Object -FilePath (Join-Path $evidenceRoot 'status-output.txt') | Out-Host
         if (($statusOutput -join [Environment]::NewLine) -notmatch 'pass=1 fail=0 blocked=0') {
-            throw "manual evidence counts missing from status"
+            throw "acceptance evidence counts missing from status"
         }
     }
-        Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
-    Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./... -count=1 -timeout 5m" }
-    Invoke-Step "git diff check" { git diff --check }
+    Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
+    Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }
+    Invoke-Step "git diff check" {
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            git diff --check
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+    }
 
     if ($RunLiveDogfood) {
         if ($env:DEVFLOW_LIVE_DOGFOOD -ne "1") {

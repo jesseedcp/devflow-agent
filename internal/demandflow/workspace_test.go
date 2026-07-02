@@ -293,10 +293,10 @@ func TestWorkspaceNextActionsPreferEvidenceBeforeVerificationConfirmation(t *tes
 	if err != nil {
 		t.Fatalf("InspectWorkspace returned error: %v", err)
 	}
-	if len(summary.Actions) == 0 || summary.Actions[0].Label != "Add acceptance evidence" {
-		t.Fatalf("Actions = %#v, want Add acceptance evidence first", summary.Actions)
+	if len(summary.Actions) == 0 || summary.Actions[0].Label != "Fetch acceptance evidence" {
+		t.Fatalf("Actions = %#v, want Fetch acceptance evidence first", summary.Actions)
 	}
-	if !strings.Contains(summary.Actions[0].Command, "devflow evidence add --demand workspace-evidence-next") {
+	if !strings.Contains(summary.Actions[0].Command, "devflow evidence fetch --demand workspace-evidence-next") {
 		t.Fatalf("first command = %q", summary.Actions[0].Command)
 	}
 }

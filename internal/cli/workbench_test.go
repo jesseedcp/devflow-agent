@@ -276,7 +276,7 @@ func TestWorkbenchSnapshotShowsManualEvidence(t *testing.T) {
 		t.Fatalf("workbench snapshot returned error: %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"Evidence:", "manual         pass=1 fail=0 blocked=0"} {
+	for _, want := range []string{"Evidence:", "acceptance     pass=1 fail=0 blocked=0"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("snapshot detail missing %q:\n%s", want, got)
 		}

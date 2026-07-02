@@ -220,7 +220,7 @@ func (m workbenchModel) renderDetail(builder *strings.Builder) {
 	fmt.Fprintf(builder, "State: %s\n", summary.Workspace.State)
 	fmt.Fprintf(builder, "Attention: %s\n", summary.Workspace.Attention)
 	builder.WriteString("Evidence:\n")
-	fmt.Fprintf(builder, "  %-14s pass=%d fail=%d blocked=%d\n", "manual", summary.Workspace.Evidence.Pass, summary.Workspace.Evidence.Fail, summary.Workspace.Evidence.Blocked)
+	fmt.Fprintf(builder, "  %-14s pass=%d fail=%d blocked=%d\n", "acceptance", summary.Workspace.Evidence.Pass, summary.Workspace.Evidence.Fail, summary.Workspace.Evidence.Blocked)
 	builder.WriteString("Quality:\n")
 	evaluation, err := demandflow.EvaluateDemand(m.opts.root, summary.Workspace.Demand.ID)
 	if err != nil {

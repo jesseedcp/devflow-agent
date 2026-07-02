@@ -136,7 +136,7 @@ func TestEvaluateCommandPrintsManualEvidenceChecks(t *testing.T) {
 		t.Fatalf("evaluate returned error: %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"verification.manual_evidence", "verification.manual_evidence_pass"} {
+	for _, want := range []string{"verification.acceptance_evidence", "verification.acceptance_evidence_pass"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("evaluate output missing %q:\n%s", want, got)
 		}

@@ -99,7 +99,7 @@ func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	}
 	progressText := readArtifactText(filepath.Join(demandDir, artifacts.ProgressFile)).text
 	summary.Verification = summarizeVerification(events)
-	summary.Evidence = summarizeManualEvidence(events)
+	summary.Evidence = summarizeEvidence(events)
 	summary.MergeRequest = summarizeMergeRequest(events, progressText)
 	summary.CIGate = summarizeCIGate(events)
 	summary.Memory = summarizeMemory(root, demandID)
@@ -160,8 +160,8 @@ func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 		case "pass":
 			if summary.Evidence.Pass == 0 && summary.Evidence.Fail == 0 && summary.Evidence.Blocked == 0 {
 				return []NextAction{
-					{Label: "Add acceptance evidence", Command: "devflow evidence add --demand " + idArg + " --type manual --criterion <criterion> --summary <summary> --by <name>", Reason: "Technical verification passed; add business acceptance evidence before confirmation."},
-					{Label: "Confirm verification", Command: "devflow confirm --demand " + idArg + " --stage verification --by <name> --summary <summary>", Reason: "PASS evidence is present and needs human confirmation."},
+					{Label: "Fetch acceptance evidence", Command: "devflow evidence fetch --demand " + idArg + " --type api --criterion <criterion> --url <url> --expect-status <status>", Reason: "Technical verification passed; fetch or add acceptance evidence before confirmation."},
+					{Label: "Add acceptance evidence", Command: "devflow evidence add --demand " + idArg + " --type manual --criterion <criterion> --summary <summary> --by <name>", Reason: "Record manual acceptance evidence if no automated source is available."},
 				}
 			}
 			return []NextAction{{Label: "Confirm verification", Command: "devflow confirm --demand " + idArg + " --stage verification --by <name> --summary <summary>", Reason: "PASS evidence is present and needs human confirmation."}}

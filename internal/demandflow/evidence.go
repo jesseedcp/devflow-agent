@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	evidenceadapter "github.com/jesseedcp/devflow-agent/internal/evidence"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
@@ -18,22 +19,38 @@ type EvidenceRecord struct {
 	By        string
 }
 
-type AddManualEvidenceOptions struct {
-	Root      string
-	DemandID  string
-	Type      string
-	Criterion string
-	Status    string
-	Summary   string
-	Link      string
-	By        string
-	Now       func() time.Time
+type AddEvidenceOptions struct {
+	Root           string
+	DemandID       string
+	Type           string
+	Criterion      string
+	Status         string
+	Summary        string
+	Link           string
+	By             string
+	Source         string
+	Method         string
+	URL            string
+	ExpectedStatus string
+	ActualStatus   string
+	ExpectContains string
+	Now            func() time.Time
 }
 
+type AddManualEvidenceOptions = AddEvidenceOptions
+
 func AddManualEvidence(opts AddManualEvidenceOptions) (EvidenceRecord, error) {
+	return AddEvidence(opts)
+}
+
+func AddEvidence(opts AddEvidenceOptions) (EvidenceRecord, error) {
 	record, err := normalizeEvidenceRecord(opts)
 	if err != nil {
 		return EvidenceRecord{}, err
+	}
+	source := strings.Join(strings.Fields(opts.Source), " ")
+	if source == "" {
+		source = "manual"
 	}
 	store := artifacts.NewStore(opts.Root)
 	err = store.WithDemandLock(recordDemandID(opts.DemandID), func() error {
@@ -44,7 +61,7 @@ func AddManualEvidence(opts AddManualEvidenceOptions) (EvidenceRecord, error) {
 		if workflow.State(demand.State) != workflow.Verification {
 			return fmt.Errorf("evidence add requires current state %s, got %s", workflow.Verification, demand.State)
 		}
-		if err := store.AppendToArtifact(demand.ID, artifacts.VerificationFile, renderManualEvidence(record)); err != nil {
+		if err := store.AppendToArtifact(demand.ID, artifacts.VerificationFile, renderEvidence(record)); err != nil {
 			return err
 		}
 		now := time.Now().UTC()
@@ -54,15 +71,21 @@ func AddManualEvidence(opts AddManualEvidenceOptions) (EvidenceRecord, error) {
 		return store.AppendEvent(demand.ID, artifacts.Event{
 			Time:    now,
 			Type:    "verification.evidence_recorded",
-			Message: "manual verification evidence recorded",
+			Message: "verification evidence recorded",
 			Data: map[string]string{
-				"type":          record.Type,
-				"criterion":     record.Criterion,
-				"status":        record.Status,
-				"summary":       record.Summary,
-				"link":          record.Link,
-				"by":            record.By,
-				"evidence_file": artifacts.VerificationFile,
+				"type":            record.Type,
+				"criterion":       record.Criterion,
+				"status":          record.Status,
+				"summary":         record.Summary,
+				"link":            record.Link,
+				"by":              record.By,
+				"source":          source,
+				"method":          strings.ToUpper(strings.TrimSpace(opts.Method)),
+				"url":             evidenceadapter.Redact(strings.TrimSpace(opts.URL)),
+				"expected_status": strings.TrimSpace(opts.ExpectedStatus),
+				"actual_status":   strings.TrimSpace(opts.ActualStatus),
+				"expect_contains": evidenceadapter.Redact(strings.TrimSpace(opts.ExpectContains)),
+				"evidence_file":   artifacts.VerificationFile,
 			},
 		})
 	})
@@ -73,6 +96,10 @@ func AddManualEvidence(opts AddManualEvidenceOptions) (EvidenceRecord, error) {
 }
 
 func ListManualEvidence(root, demandID string) ([]EvidenceRecord, error) {
+	return ListEvidence(root, demandID)
+}
+
+func ListEvidence(root, demandID string) ([]EvidenceRecord, error) {
 	store := artifacts.NewStore(root)
 	events, err := store.ReadEvents(strings.TrimSpace(demandID))
 	if err != nil {
@@ -95,14 +122,14 @@ func ListManualEvidence(root, demandID string) ([]EvidenceRecord, error) {
 	return out, nil
 }
 
-func normalizeEvidenceRecord(opts AddManualEvidenceOptions) (EvidenceRecord, error) {
+func normalizeEvidenceRecord(opts AddEvidenceOptions) (EvidenceRecord, error) {
 	record := EvidenceRecord{
 		Type:      normalizeEvidenceType(opts.Type),
-		Criterion: strings.Join(strings.Fields(opts.Criterion), " "),
+		Criterion: evidenceadapter.Redact(strings.Join(strings.Fields(opts.Criterion), " ")),
 		Status:    normalizeEvidenceStatus(opts.Status),
-		Summary:   strings.Join(strings.Fields(opts.Summary), " "),
-		Link:      strings.TrimSpace(opts.Link),
-		By:        strings.Join(strings.Fields(opts.By), " "),
+		Summary:   evidenceadapter.Redact(strings.Join(strings.Fields(opts.Summary), " ")),
+		Link:      evidenceadapter.Redact(strings.TrimSpace(opts.Link)),
+		By:        evidenceadapter.Redact(strings.Join(strings.Fields(opts.By), " ")),
 	}
 	if record.Type == "" {
 		return EvidenceRecord{}, fmt.Errorf("--type must be one of api, log, monitor, manual, link")
@@ -139,8 +166,12 @@ func normalizeEvidenceStatus(value string) string {
 }
 
 func renderManualEvidence(record EvidenceRecord) string {
+	return renderEvidence(record)
+}
+
+func renderEvidence(record EvidenceRecord) string {
 	var builder strings.Builder
-	builder.WriteString("\n## Manual Acceptance Evidence\n\n")
+	builder.WriteString("\n## Acceptance Evidence\n\n")
 	fmt.Fprintf(&builder, "- [%s] %s - %s\n", strings.ToUpper(record.Status), record.Type, record.Criterion)
 	fmt.Fprintf(&builder, "  Summary: %s\n", record.Summary)
 	if record.Link != "" {
@@ -156,7 +187,7 @@ func recordDemandID(value string) string {
 	return strings.TrimSpace(value)
 }
 
-func summarizeManualEvidence(events []artifacts.Event) EvidenceSummary {
+func summarizeEvidence(events []artifacts.Event) EvidenceSummary {
 	var summary EvidenceSummary
 	for _, event := range events {
 		if event.Type != "verification.evidence_recorded" {

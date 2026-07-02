@@ -349,7 +349,7 @@ func TestConsoleDetailPrintsManualEvidenceSummary(t *testing.T) {
 	if err := Run([]string{"console", "--root", root, "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("console detail returned error: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "manual         pass=1 fail=0 blocked=0") {
+	if !strings.Contains(stdout.String(), "acceptance     pass=1 fail=0 blocked=0") {
 		t.Fatalf("console detail missing manual evidence:\n%s", stdout.String())
 	}
 }

@@ -208,36 +208,36 @@ func evaluateVerification(root, demandID string) (StageEvaluation, error) {
 		latestStatus = normalizeVerificationEvaluationStatus(event.Data["status"])
 		latestCommand = strings.TrimSpace(event.Data["command"])
 	}
-	manual := summarizeManualEvidence(events)
+	manual := summarizeEvidence(events)
 	checks := []EvaluationCheck{
 		statusCheck("verification.recorded", "verification evidence is recorded", latestStatus != "", "blocker", latestStatus),
 		statusCheck("verification.pass", "latest verification status is pass", latestStatus == "pass", "blocker", latestStatus),
 		statusCheck("verification.command", "verification command is recorded", latestCommand != "", "warning", latestCommand),
-		manualEvidencePresenceCheck(manual),
-		manualEvidencePassCheck(manual),
+		acceptanceEvidencePresenceCheck(manual),
+		acceptanceEvidencePassCheck(manual),
 	}
 	return buildStageEvaluation(StageVerification, checks), nil
 }
 
-func manualEvidencePresenceCheck(summary EvidenceSummary) EvaluationCheck {
+func acceptanceEvidencePresenceCheck(summary EvidenceSummary) EvaluationCheck {
 	total := summary.Pass + summary.Fail + summary.Blocked
 	if total == 0 {
 		return EvaluationCheck{
-			ID:       "verification.manual_evidence",
-			Label:    "manual acceptance evidence is recorded",
+			ID:       "verification.acceptance_evidence",
+			Label:    "acceptance evidence is recorded",
 			Status:   EvaluationWarning,
 			Severity: "warning",
-			Evidence: "no manual acceptance evidence recorded",
+			Evidence: "no acceptance evidence recorded",
 		}
 	}
-	return statusCheck("verification.manual_evidence", "manual acceptance evidence is recorded", true, "warning", fmt.Sprintf("pass=%d fail=%d blocked=%d", summary.Pass, summary.Fail, summary.Blocked))
+	return statusCheck("verification.acceptance_evidence", "acceptance evidence is recorded", true, "warning", fmt.Sprintf("pass=%d fail=%d blocked=%d", summary.Pass, summary.Fail, summary.Blocked))
 }
 
-func manualEvidencePassCheck(summary EvidenceSummary) EvaluationCheck {
+func acceptanceEvidencePassCheck(summary EvidenceSummary) EvaluationCheck {
 	if summary.Fail > 0 || summary.Blocked > 0 {
 		return EvaluationCheck{
-			ID:       "verification.manual_evidence_pass",
-			Label:    "manual acceptance evidence has no failures or blockers",
+			ID:       "verification.acceptance_evidence_pass",
+			Label:    "acceptance evidence has at least one pass and no failures or blockers",
 			Status:   EvaluationFail,
 			Severity: "blocker",
 			Evidence: fmt.Sprintf("pass=%d fail=%d blocked=%d", summary.Pass, summary.Fail, summary.Blocked),
@@ -245,14 +245,14 @@ func manualEvidencePassCheck(summary EvidenceSummary) EvaluationCheck {
 	}
 	if summary.Pass == 0 {
 		return EvaluationCheck{
-			ID:       "verification.manual_evidence_pass",
-			Label:    "manual acceptance evidence has no failures or blockers",
+			ID:       "verification.acceptance_evidence_pass",
+			Label:    "acceptance evidence has at least one pass and no failures or blockers",
 			Status:   EvaluationNotApplicable,
 			Severity: "blocker",
-			Evidence: "no manual acceptance evidence recorded",
+			Evidence: "no acceptance evidence recorded",
 		}
 	}
-	return statusCheck("verification.manual_evidence_pass", "manual acceptance evidence has no failures or blockers", true, "blocker", fmt.Sprintf("pass=%d fail=%d blocked=%d", summary.Pass, summary.Fail, summary.Blocked))
+	return statusCheck("verification.acceptance_evidence_pass", "acceptance evidence has at least one pass and no failures or blockers", true, "blocker", fmt.Sprintf("pass=%d fail=%d blocked=%d", summary.Pass, summary.Fail, summary.Blocked))
 }
 
 func normalizeVerificationEvaluationStatus(status string) string {

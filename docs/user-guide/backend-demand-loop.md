@@ -132,6 +132,14 @@ devflow scope declare --demand <id> --source internal/foo/service.go --test inte
 `change-scope.md` records which source and test files are expected to change.
 `evaluate --stage plan` warns if the plan does not reference the grounded context or declared files.
 
+If `plan-context refresh` reports a missing codemap, run:
+
+```powershell
+devflow codemap index
+devflow codemap refresh --demand <id> --query "<demand keywords>"
+devflow plan-context refresh --demand <id>
+```
+
 ### Deterministic stage evaluation
 
 Use `devflow evaluate` to inspect structural quality signals before confirming stage outputs.

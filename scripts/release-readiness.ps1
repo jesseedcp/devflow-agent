@@ -560,6 +560,40 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         if ($evaluationText -notmatch 'plan.context_grounding') { throw "plan.context_grounding missing" }
         if ($evaluationText -notmatch 'plan.change_scope') { throw "plan.change_scope missing" }
     }
+    Invoke-Step "implementation review smoke" {
+        $reviewRoot = Join-Path $readinessRoot 'implementation-review-smoke'
+        New-Item -ItemType Directory -Force (Join-Path $reviewRoot 'internal\coupon') | Out-Null
+        @"
+package coupon
+
+func CheckEligibility(userID string) bool {
+    return userID != ""
+}
+"@ | Set-Content -Encoding UTF8 (Join-Path $reviewRoot 'internal\coupon\service.go')
+        @"
+package coupon
+
+import "testing"
+
+func TestCheckEligibilityInactiveUser(t *testing.T) {}
+"@ | Set-Content -Encoding UTF8 (Join-Path $reviewRoot 'internal\coupon\service_test.go')
+
+        .\dist\devflow-windows-amd64.exe start --root $reviewRoot --title "Coupon Eligibility" --description "Inactive users are blocked"
+        .\dist\devflow-windows-amd64.exe scope declare --root $reviewRoot --demand coupon-eligibility --source internal/coupon/service.go --test internal/coupon/service_test.go
+
+        $demandDir = Join-Path $reviewRoot '.devflow\demands\coupon-eligibility'
+        Add-Content -LiteralPath (Join-Path $demandDir 'events.jsonl') -Value '{"type":"verification.recorded","message":"verification pass","data":{"status":"PASS","command":"go test ./internal/coupon"}}'
+        Add-Content -LiteralPath (Join-Path $demandDir 'events.jsonl') -Value '{"type":"verification.evidence_recorded","message":"acceptance pass","data":{"status":"pass","type":"api"}}'
+        Add-Content -LiteralPath (Join-Path $demandDir 'events.jsonl') -Value '{"type":"mr_review.cleared","message":"review cleared","data":{"mr":"local"}}'
+
+        .\dist\devflow-windows-amd64.exe implementation-review refresh --root $reviewRoot --demand coupon-eligibility --changed internal/coupon/service.go --changed internal/coupon/service_test.go
+        $reviewText = Get-Content -Raw -LiteralPath (Join-Path $demandDir 'implementation-review.md')
+        if ($reviewText -notmatch 'ready_for_closeout') { throw "implementation review not ready_for_closeout" }
+
+        $evalOutput = .\dist\devflow-windows-amd64.exe evaluate --root $reviewRoot --demand coupon-eligibility --stage implementation 2>&1
+        $evalOutput | Out-Host
+        if (($evalOutput -join [Environment]::NewLine) -notmatch 'implementation.review') { throw "implementation.review check missing" }
+    }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }
     Invoke-Step "git diff check" {

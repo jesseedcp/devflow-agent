@@ -54,6 +54,7 @@ Usage:
   devflow memory list --demand <id>
   devflow memory promote --demand <id> --candidate <n> --by <name>
   devflow memory reject --demand <id> --candidate <n> --by <name> --reason <text>
+  devflow wiki distill --demand <id>
   devflow status --demand <id>
   devflow status --all
   devflow next --demand <id>
@@ -93,6 +94,7 @@ Commands:
   verify    Record local verification evidence without advancing workflow
   closeout  Record closeout and memory-candidate reports without advancing workflow
   memory    Review, promote, and reject stable knowledge candidates
+  wiki      Distill, review, promote, reject, and search local wiki knowledge
   status    Show demand state, artifacts, and next actions
   next      Print the next recommended command for a demand
   console  Show the operator demand console
@@ -157,6 +159,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCloseout(args[1:], stdout)
 	case "memory":
 		return runMemory(args[1:], stdout, stderr)
+	case "wiki":
+		return runWiki(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(args[1:], stdout)
 	case "next":

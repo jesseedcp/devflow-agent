@@ -1,6 +1,7 @@
 package implreview
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,12 @@ func Collect(root, demandID string, changedFiles []string) (Review, error) {
 	demandDir := store.DemandDir(demandID)
 	scopeText, err := os.ReadFile(filepath.Join(demandDir, artifacts.ChangeScopeFile))
 	if err != nil {
-		return Review{}, err
+		return Review{}, fmt.Errorf("read change-scope.md: %w; run `devflow scope declare --demand %s --source <file> --test <file>` first", err, demandID)
 	}
 	decl := scope.ParseDeclaration(string(scopeText))
+	if len(decl.SourceFiles) == 0 && len(decl.TestFiles) == 0 {
+		return Review{}, fmt.Errorf("change-scope.md has no declared source/test files; run `devflow scope declare --demand %s --source <file> --test <file>` first", demandID)
+	}
 	diff := scope.CompareChangedFiles(decl, changedFiles)
 	events, err := store.ReadEvents(demandID)
 	if err != nil {

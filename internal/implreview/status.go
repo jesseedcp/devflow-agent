@@ -1,6 +1,9 @@
 package implreview
 
 func Recommend(review Review) string {
+	if len(review.ChangedFiles) == 0 {
+		return "needs_implementation_diff"
+	}
 	if len(review.OutOfScope) > 0 || len(review.MissingTests) > 0 {
 		return "needs_scope_review"
 	}

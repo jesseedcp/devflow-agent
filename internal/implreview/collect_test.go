@@ -46,15 +46,50 @@ func writeDemandFile(t *testing.T, dir, name, text string) {
 }
 
 func TestRecommendationReadyWhenSignalsClean(t *testing.T) {
-	review := Review{VerificationStatus: "pass", AcceptancePass: 1, MRStatus: "cleared"}
+	review := Review{ChangedFiles: []string{"internal/coupon/service.go"}, VerificationStatus: "pass", AcceptancePass: 1, MRStatus: "cleared"}
 	if got := Recommend(review); got != "ready_for_closeout" {
 		t.Fatalf("Recommend = %q", got)
 	}
 }
 
 func TestRecommendationNeedsVerification(t *testing.T) {
-	review := Review{MRStatus: "cleared"}
+	review := Review{ChangedFiles: []string{"internal/coupon/service.go"}, MRStatus: "cleared"}
 	if got := Recommend(review); !strings.Contains(got, "verification") {
 		t.Fatalf("Recommend = %q", got)
+	}
+}
+
+func TestCollectFailsWhenChangeScopeMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "no-scope", Title: "No Scope", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(store.DemandDir(demand.ID), artifacts.ChangeScopeFile)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Collect(root, demand.ID, []string{"internal/coupon/service.go"})
+	if err == nil {
+		t.Fatal("expected error when change-scope.md is missing")
+	}
+	if !strings.Contains(err.Error(), "scope declare") {
+		t.Fatalf("error missing scope declare guidance: %v", err)
+	}
+}
+
+func TestCollectFailsWhenChangeScopeTemplateOnly(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "template-scope", Title: "Template Scope", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Collect(root, demand.ID, []string{"internal/coupon/service.go"})
+	if err == nil {
+		t.Fatal("expected error when change-scope.md is template-only")
+	}
+	if !strings.Contains(err.Error(), "scope declare") {
+		t.Fatalf("error missing scope declare guidance: %v", err)
 	}
 }

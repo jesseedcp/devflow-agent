@@ -10,7 +10,7 @@ func Recommend(review Review) string {
 	if review.AcceptanceFail > 0 || review.AcceptanceBlocked > 0 || review.AcceptancePass == 0 {
 		return "needs_acceptance_evidence"
 	}
-	if review.MRStatus != "" && review.MRStatus != "cleared" {
+	if review.MRStatus == "action_required" {
 		return "needs_review_resolution"
 	}
 	return "ready_for_closeout"

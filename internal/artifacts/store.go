@@ -87,6 +87,9 @@ func (s Store) CreateDemand(demand Demand) error {
 	if err := writeTextFile(filepath.Join(tempDir, ChangeScopeFile), "# Change Scope: "+demand.Title+"\n\n## Source Files\n\n## Test Files\n\n## Out Of Scope\n\n"); err != nil {
 		return fmt.Errorf("write change scope template: %w", err)
 	}
+	if err := writeTextFile(filepath.Join(tempDir, ImplementationReviewFile), "# Implementation Review: "+demand.Title+"\n\n"); err != nil {
+		return fmt.Errorf("write implementation review template: %w", err)
+	}
 	if err := writeTextFile(filepath.Join(tempDir, RequirementsFile), templates.Requirements(demand.Title, demand.Description)); err != nil {
 		return fmt.Errorf("write requirements template: %w", err)
 	}
@@ -553,6 +556,7 @@ func validateAppendableArtifactName(name string) error {
 		CodemapFile,
 		PlanContextFile,
 		ChangeScopeFile,
+		ImplementationReviewFile,
 		RequirementsFile,
 		PlanFile,
 		ProgressFile,

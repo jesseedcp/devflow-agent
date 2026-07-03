@@ -258,6 +258,7 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 		artifacts.CodemapFile,
 		artifacts.PlanContextFile,
 		artifacts.ChangeScopeFile,
+		artifacts.ImplementationReviewFile,
 		artifacts.RequirementsFile,
 		artifacts.PlanFile,
 		artifacts.ProgressFile,
@@ -359,6 +360,8 @@ func templateForArtifact(name string, demand artifacts.Demand) string {
 		return "# Plan Context: " + demand.Title + "\n\n"
 	case artifacts.ChangeScopeFile:
 		return "# Change Scope: " + demand.Title + "\n\n## Source Files\n\n## Test Files\n\n## Out Of Scope\n\n"
+	case artifacts.ImplementationReviewFile:
+		return "# Implementation Review: " + demand.Title + "\n\n"
 	case artifacts.VerificationFile:
 		return templates.Verification(demand.Title)
 	case artifacts.CloseoutFile:

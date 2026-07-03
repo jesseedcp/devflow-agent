@@ -105,6 +105,7 @@ func TestInspectWorkspaceTemplateAndMissingArtifacts(t *testing.T) {
 	assertArtifactStatus(t, summary, artifacts.CodemapFile, "template")
 	assertArtifactStatus(t, summary, artifacts.PlanContextFile, "template")
 	assertArtifactStatus(t, summary, artifacts.ChangeScopeFile, "template")
+	assertArtifactStatus(t, summary, artifacts.ImplementationReviewFile, "template")
 	if summary.Memory.Status != "none" {
 		t.Fatalf("Memory.Status = %q, want none", summary.Memory.Status)
 	}

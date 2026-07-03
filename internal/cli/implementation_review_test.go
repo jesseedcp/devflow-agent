@@ -42,3 +42,38 @@ func TestImplementationReviewRefreshWritesArtifact(t *testing.T) {
 		}
 	}
 }
+
+func TestImplementationReviewStatusMissingArtifactIncludesRefreshCommand(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "missing-review", Title: "Missing", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(store.DemandDir(demand.ID), artifacts.ImplementationReviewFile)); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"implementation-review", "status", "--root", root, "--demand", demand.ID}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("expected error when implementation-review.md is missing")
+	}
+	if !strings.Contains(err.Error(), "implementation-review refresh") {
+		t.Fatalf("error missing refresh guidance: %v", err)
+	}
+}
+
+func TestImplementationReviewRefreshTemplateScopeIncludesScopeDeclare(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "template-scope", Title: "Template Scope", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"implementation-review", "refresh", "--root", root, "--demand", demand.ID, "--changed", "internal/coupon/service.go"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("expected error when change-scope.md is template-only")
+	}
+	if !strings.Contains(err.Error(), "scope declare") {
+		t.Fatalf("error missing scope declare guidance: %v", err)
+	}
+}

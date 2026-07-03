@@ -339,6 +339,18 @@ devflow evidence list --demand add-coupon-eligibility-check
 
 Acceptance evidence is local and reviewable. v0.3 can fetch HTTP/API and link reachability evidence, redacts common secrets before writing `verification.md` or `events.jsonl`, and keeps `evidence add` for manual records. Evidence does not auto-confirm verification.
 
+### Implementation Review
+
+After implementation and verification evidence exist, run:
+
+```powershell
+devflow implementation-review refresh --demand add-coupon-eligibility-check
+devflow implementation-review status --demand add-coupon-eligibility-check
+devflow evaluate --demand add-coupon-eligibility-check --stage implementation
+```
+
+`implementation-review.md` summarizes declared scope, actual changed files, verification, acceptance evidence, and review status. It does not edit code or advance workflow state.
+
 ### Stable knowledge review
 
 After closeout, Devflow writes reviewable knowledge candidates to `memory-candidates.md`. These are not stable memory until a human promotes them.

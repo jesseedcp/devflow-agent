@@ -42,6 +42,8 @@ Usage:
   devflow recall --demand <id>
   devflow plan-context refresh --demand <id>
   devflow scope declare --demand <id> --source <file> --test <file>
+  devflow implementation-review refresh --demand <id>
+  devflow implementation-review status --demand <id>
   devflow codemap index
   devflow codemap search <query>
   devflow codemap refresh --demand <id> --query <text>
@@ -82,6 +84,7 @@ Commands:
   recall   Rebuild reusable memory context for a demand
   plan-context Build demand planning context from requirements, memory, and codemap
   scope    Declare and inspect demand change scope
+  implementation-review Summarize implementation scope, diff, verification, and review signals
   codemap  Index and search local code facts
   pool      List external demand pools (Feishu Bitable)
   sync      Sync demand progress to GitHub Issues or Feishu Bitable
@@ -136,6 +139,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runPlanContext(args[1:], stdout, stderr)
 	case "scope":
 		return runScope(args[1:], stdout, stderr)
+	case "implementation-review":
+		return runImplementationReview(args[1:], stdout, stderr)
 	case "codemap":
 		return runCodemap(args[1:], stdout, stderr)
 	case "pool":

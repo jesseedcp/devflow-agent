@@ -89,6 +89,23 @@ func TestCreateDemandWritesPlanContextAndChangeScopeFiles(t *testing.T) {
 	}
 }
 
+func TestCreateDemandWritesImplementationReviewFile(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("implementation-review")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	path := filepath.Join(root, ".devflow", "demands", demand.ID, ImplementationReviewFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read implementation-review.md: %v", err)
+	}
+	if !strings.Contains(string(data), "# Implementation Review") {
+		t.Fatalf("implementation-review template = %q", string(data))
+	}
+}
+
 func TestCreateDemandRejectsInvalidIDs(t *testing.T) {
 	t.Parallel()
 

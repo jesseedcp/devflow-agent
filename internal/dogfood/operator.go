@@ -11,6 +11,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/adapters"
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/demandflow"
+	"github.com/jesseedcp/devflow-agent/internal/implreview"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
@@ -192,6 +193,9 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	if err := confirm("verification", "operator dogfood verification accepted"); err != nil {
 		return result, err
 	}
+	if err := writeOperatorImplementationReview(root, scenario); err != nil {
+		return result, err
+	}
 	if err := runStage("closeout", demandflow.StageCloseout, nil); err != nil {
 		return result, err
 	}
@@ -253,6 +257,19 @@ func renderOperatorPlanContext(title, requirements, contextText, codemap string)
 	builder.WriteString(strings.TrimSpace(codemap))
 	builder.WriteString("\n")
 	return builder.String()
+}
+
+func writeOperatorImplementationReview(root string, scenario Scenario) error {
+	changedFiles := []string{"internal/coupon/service.go", "internal/coupon/service_test.go"}
+	review, err := implreview.Collect(root, scenario.DemandID, changedFiles)
+	if err != nil {
+		return fmt.Errorf("collect operator dogfood implementation review: %w", err)
+	}
+	store := artifacts.NewStore(root)
+	if err := store.WriteArtifact(scenario.DemandID, artifacts.ImplementationReviewFile, implreview.Render(review)); err != nil {
+		return fmt.Errorf("write operator dogfood implementation review: %w", err)
+	}
+	return nil
 }
 
 func operatorRoot(root string) (string, error) {

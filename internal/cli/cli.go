@@ -55,6 +55,10 @@ Usage:
   devflow memory promote --demand <id> --candidate <n> --by <name>
   devflow memory reject --demand <id> --candidate <n> --by <name> --reason <text>
   devflow wiki distill --demand <id>
+  devflow wiki list --demand <id>
+  devflow wiki promote --demand <id> --candidate <n> --name <slug> --by <name>
+  devflow wiki reject --demand <id> --candidate <n> --by <name> --reason <text>
+  devflow wiki search <query>
   devflow status --demand <id>
   devflow status --all
   devflow next --demand <id>

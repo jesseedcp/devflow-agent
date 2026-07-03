@@ -51,3 +51,19 @@ func TestPlanContextRefreshRequiresDemand(t *testing.T) {
 		t.Fatalf("err = %v, want demand required", err)
 	}
 }
+
+func TestPlanContextRefreshGuidesWhenCodemapMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "coupon", Title: "Coupon", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, ".devflow", "demands", demand.ID, artifacts.CodemapFile)); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"plan-context", "refresh", "--root", root, "--demand", demand.ID}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "run `devflow codemap refresh --demand coupon` first") {
+		t.Fatalf("plan-context refresh error = %v", err)
+	}
+}

@@ -65,6 +65,9 @@ func runScopeDeclare(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 	decl := changescope.Declaration{SourceFiles: sourceFiles, TestFiles: testFiles, OutOfScope: outOfScope}
+	if len(decl.SourceFiles)+len(decl.TestFiles) == 0 {
+		return fmt.Errorf("at least one --source or --test file is required")
+	}
 	if err := store.WriteArtifact(demand.ID, artifacts.ChangeScopeFile, changescope.RenderDeclaration(demand.Title, decl)); err != nil {
 		return err
 	}
@@ -104,21 +107,35 @@ func runScopeDiff(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 	decl := changescope.ParseDeclaration(string(data))
 	result := changescope.CompareChangedFiles(decl, changedFiles)
-	fmt.Fprintf(stdout, "scope diff for %s\n", demandID)
-	fmt.Fprintf(stdout, "in_scope=%d out_of_scope=%d missing_tests=%d\n", len(result.InScope), len(result.OutOfScope), len(result.MissingTests))
-	for _, file := range result.InScope {
-		fmt.Fprintf(stdout, "in-scope: %s\n", file)
-	}
-	for _, file := range result.OutOfScope {
-		fmt.Fprintf(stdout, "out-of-scope: %s\n", file)
-	}
-	for _, file := range result.MissingTests {
-		fmt.Fprintf(stdout, "missing-test: %s\n", file)
-	}
+	renderScopeDiff(stdout, demandID, result)
 	if len(result.OutOfScope) > 0 || len(result.MissingTests) > 0 {
 		return fmt.Errorf("scope diff found out-of-scope changes or missing declared tests")
 	}
 	return nil
+}
+
+func renderScopeDiff(stdout io.Writer, demandID string, result changescope.DiffResult) {
+	fmt.Fprintf(stdout, "scope diff for %s\n", demandID)
+	fmt.Fprintf(stdout, "Summary: in_scope=%d out_of_scope=%d missing_tests=%d\n\n", len(result.InScope), len(result.OutOfScope), len(result.MissingTests))
+	writeScopeDiffSection(stdout, "In Scope", result.InScope)
+	writeScopeDiffSection(stdout, "Out Of Scope", result.OutOfScope)
+	writeScopeDiffSection(stdout, "Missing Declared Tests", result.MissingTests)
+	if len(result.OutOfScope) > 0 || len(result.MissingTests) > 0 {
+		fmt.Fprintln(stdout, "Next: update change-scope.md or adjust implementation changes")
+	}
+}
+
+func writeScopeDiffSection(stdout io.Writer, title string, files []string) {
+	fmt.Fprintf(stdout, "## %s\n", title)
+	if len(files) == 0 {
+		fmt.Fprintln(stdout, "- none")
+		fmt.Fprintln(stdout)
+		return
+	}
+	for _, file := range files {
+		fmt.Fprintf(stdout, "- %s\n", file)
+	}
+	fmt.Fprintln(stdout)
 }
 
 func gitChangedFiles(root string) ([]string, error) {

@@ -55,15 +55,15 @@ func runPlanContextRefresh(args []string, stdout io.Writer, stderr io.Writer) er
 
 func renderPlanContext(root string, demand artifacts.Demand) (string, error) {
 	demandDir := artifacts.NewStore(root).DemandDir(demand.ID)
-	requirements, err := readPlanContextArtifact(demandDir, artifacts.RequirementsFile)
+	requirements, err := readPlanContextArtifact(demand.ID, demandDir, artifacts.RequirementsFile)
 	if err != nil {
 		return "", err
 	}
-	context, err := readPlanContextArtifact(demandDir, artifacts.ContextFile)
+	context, err := readPlanContextArtifact(demand.ID, demandDir, artifacts.ContextFile)
 	if err != nil {
 		return "", err
 	}
-	codemap, err := readPlanContextArtifact(demandDir, artifacts.CodemapFile)
+	codemap, err := readPlanContextArtifact(demand.ID, demandDir, artifacts.CodemapFile)
 	if err != nil {
 		return "", err
 	}
@@ -80,9 +80,17 @@ func renderPlanContext(root string, demand artifacts.Demand) (string, error) {
 	return builder.String(), nil
 }
 
-func readPlanContextArtifact(demandDir, name string) (string, error) {
+func readPlanContextArtifact(demandID, demandDir, name string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(demandDir, name))
 	if err != nil {
+		switch name {
+		case artifacts.CodemapFile:
+			return "", fmt.Errorf("read %s: %w; run `devflow codemap refresh --demand %s` first", name, err, demandID)
+		case artifacts.ContextFile:
+			return "", fmt.Errorf("read %s: %w; run `devflow recall --demand %s` first", name, err, demandID)
+		case artifacts.RequirementsFile:
+			return "", fmt.Errorf("read %s: %w; create or intake requirements before plan-context refresh", name, err)
+		}
 		return "", fmt.Errorf("read %s: %w", name, err)
 	}
 	return string(data), nil

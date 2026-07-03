@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/wiki"
 )
 
 type EvaluationStatus string
@@ -385,12 +386,70 @@ func normalizeVerificationEvaluationStatus(status string) string {
 func evaluateCloseout(root, demandID string) StageEvaluation {
 	closeout := readEvaluationArtifact(root, demandID, artifacts.CloseoutFile)
 	memory := readEvaluationArtifact(root, demandID, artifacts.MemoryCandidatesFile)
+	wikiCandidatesText := readEvaluationArtifact(root, demandID, artifacts.WikiCandidatesFile)
 	checks := []EvaluationCheck{
 		requiredContentCheck("closeout.exists", "closeout.md has content", closeout, "blocker"),
 		requiredSectionCheck("closeout.result", "result section has content", closeout, []string{"需求结果", "result"}, "blocker"),
 		statusCheck("closeout.memory", "memory candidates include reusable bullets", hasNonTemplateBullet(memory), "warning", evidenceSnippet(memory)),
+		wikiCandidatesCheck(wikiCandidatesText),
+		wikiDecisionsCheck(wikiCandidatesText),
 	}
 	return buildStageEvaluation(StageCloseout, checks)
+}
+
+func wikiCandidatesCheck(text string) EvaluationCheck {
+	candidates := wiki.ParseCandidates(text)
+	if len(candidates) > 0 {
+		return EvaluationCheck{
+			ID:       "closeout.wiki_candidates",
+			Label:    "wiki candidates distilled from closeout material",
+			Status:   EvaluationPass,
+			Severity: "warning",
+			Evidence: fmt.Sprintf("%d wiki candidates present", len(candidates)),
+		}
+	}
+	return EvaluationCheck{
+		ID:       "closeout.wiki_candidates",
+		Label:    "wiki candidates distilled from closeout material",
+		Status:   EvaluationWarning,
+		Severity: "warning",
+		Evidence: "wiki-candidates.md missing or only template lines; run `devflow wiki distill --demand <id>`",
+	}
+}
+
+func wikiDecisionsCheck(text string) EvaluationCheck {
+	candidates := wiki.ParseCandidates(text)
+	if len(candidates) == 0 {
+		return EvaluationCheck{
+			ID:       "closeout.wiki_decisions",
+			Label:    "all wiki candidates promoted or rejected",
+			Status:   EvaluationWarning,
+			Severity: "warning",
+			Evidence: "no wiki candidates to decide",
+		}
+	}
+	pending := 0
+	for _, candidate := range candidates {
+		if candidate.Status == wiki.StatusPending {
+			pending++
+		}
+	}
+	if pending > 0 {
+		return EvaluationCheck{
+			ID:       "closeout.wiki_decisions",
+			Label:    "all wiki candidates promoted or rejected",
+			Status:   EvaluationWarning,
+			Severity: "warning",
+			Evidence: fmt.Sprintf("%d pending wiki candidates need promote/reject review", pending),
+		}
+	}
+	return EvaluationCheck{
+		ID:       "closeout.wiki_decisions",
+		Label:    "all wiki candidates promoted or rejected",
+		Status:   EvaluationPass,
+		Severity: "warning",
+		Evidence: fmt.Sprintf("%d wiki candidates decided", len(candidates)),
+	}
 }
 
 func buildStageEvaluation(stage Stage, checks []EvaluationCheck) StageEvaluation {

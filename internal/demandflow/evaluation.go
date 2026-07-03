@@ -46,7 +46,7 @@ func EvaluateDemand(root, demandID string, stages ...Stage) (DemandEvaluation, e
 		return DemandEvaluation{}, err
 	}
 	if len(stages) == 0 {
-		stages = []Stage{StageRequirements, StagePlan, StageVerification, StageCloseout}
+		stages = []Stage{StageRequirements, StagePlan, StageImplementation, StageVerification, StageCloseout}
 	}
 	out := DemandEvaluation{DemandID: demandID, Overall: EvaluationPass}
 	for _, stage := range stages {
@@ -66,6 +66,8 @@ func evaluateStage(root, demandID string, stage Stage) (StageEvaluation, error) 
 		return evaluateRequirements(root, demandID), nil
 	case StagePlan:
 		return evaluatePlan(root, demandID), nil
+	case StageImplementation:
+		return evaluateImplementation(root, demandID), nil
 	case StageVerification:
 		return evaluateVerification(root, demandID)
 	case StageCloseout:
@@ -197,6 +199,37 @@ func evaluatePlan(root, demandID string) StageEvaluation {
 		planChangeScopeCheck(changeScopeText, text),
 	}
 	return buildStageEvaluation(StagePlan, checks)
+}
+
+func evaluateImplementation(root, demandID string) StageEvaluation {
+	text := readEvaluationArtifact(root, demandID, artifacts.ImplementationReviewFile)
+	checks := []EvaluationCheck{
+		implementationReviewCheck(text),
+	}
+	return buildStageEvaluation(StageImplementation, checks)
+}
+
+func implementationReviewCheck(text string) EvaluationCheck {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || !strings.Contains(trimmed, "Recommendation:") {
+		return EvaluationCheck{
+			ID:       "implementation.review",
+			Label:    "implementation review is recorded",
+			Status:   EvaluationWarning,
+			Severity: "warning",
+			Evidence: "implementation-review.md missing or template-only",
+		}
+	}
+	if strings.Contains(trimmed, "ready_for_closeout") {
+		return statusCheck("implementation.review", "implementation review is recorded", true, "warning", evidenceSnippet(trimmed))
+	}
+	return EvaluationCheck{
+		ID:       "implementation.review",
+		Label:    "implementation review is recorded",
+		Status:   EvaluationWarning,
+		Severity: "warning",
+		Evidence: evidenceSnippet(trimmed),
+	}
 }
 
 func planContextGroundingCheck(planContextText string) EvaluationCheck {

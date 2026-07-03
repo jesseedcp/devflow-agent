@@ -432,6 +432,43 @@ func TestEvaluatePlanPassesWithPlanContextAndChangeScope(t *testing.T) {
 	}
 }
 
+func TestEvaluateImplementationWarnsWhenImplementationReviewMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "implementation-review-missing", Title: "Implementation review missing", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StageImplementation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "implementation.review")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("implementation.review = %s, want warning", check.Status)
+	}
+}
+
+func TestEvaluateImplementationPassesReadyReview(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "implementation-review-pass", Title: "Implementation review pass", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ImplementationReviewFile, "# Implementation Review: implementation-review-pass\n\nRecommendation: `ready_for_closeout`\n\nSummary: in_scope=2 out_of_scope=0 missing_tests=0 verification=pass acceptance_pass=1 acceptance_fail=0 acceptance_blocked=0 mr=cleared\n"); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StageImplementation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "implementation.review")
+	if check.Status != EvaluationPass {
+		t.Fatalf("implementation.review = %s, want pass evidence=%s", check.Status, check.Evidence)
+	}
+}
+
 func TestEvaluateVerificationWarnsWhenManualEvidenceMissing(t *testing.T) {
 	root := t.TempDir()
 	store := artifacts.NewStore(root)

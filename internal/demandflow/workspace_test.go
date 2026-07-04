@@ -304,3 +304,80 @@ func TestWorkspaceNextActionsPreferEvidenceBeforeVerificationConfirmation(t *tes
 		t.Fatalf("first command = %q", summary.Actions[0].Command)
 	}
 }
+
+func TestWorkspaceNextActionsSuggestsWikiDistillWhenMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-distill-next", Title: "Wiki distill next", Description: "Closeout", Source: "test", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, action := range summary.Actions {
+		if strings.Contains(action.Command, "devflow wiki distill --demand") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected wiki distill action when wiki candidates missing, actions = %#v", summary.Actions)
+	}
+}
+
+func TestWorkspaceNextActionsSuggestsWikiListWhenPending(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-list-next", Title: "Wiki list next", Description: "Closeout", Source: "test", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki list next\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md)\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Wiki.Pending != 1 {
+		t.Fatalf("wiki pending = %d, want 1", summary.Wiki.Pending)
+	}
+	foundList := false
+	foundPromote := false
+	for _, action := range summary.Actions {
+		if strings.Contains(action.Command, "devflow wiki list --demand") {
+			foundList = true
+		}
+		if strings.Contains(action.Command, "devflow wiki promote --demand") {
+			foundPromote = true
+		}
+	}
+	if !foundList || !foundPromote {
+		t.Fatalf("expected wiki list and promote actions, actions = %#v", summary.Actions)
+	}
+}
+
+func TestWorkspaceNextActionsNoWikiReviewWhenDecided(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-decided-next", Title: "Wiki decided next", Description: "Closeout", Source: "test", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki decided next\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md) [promoted: .devflow/wiki/coupon-rule.md]\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range summary.Actions {
+		if strings.Contains(action.Command, "devflow wiki") {
+			t.Fatalf("expected no wiki actions when all decided, found %q", action.Command)
+		}
+	}
+}

@@ -219,3 +219,24 @@ func TestRunStatusPrintsManualEvidenceSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestRunStatusPrintsWikiCounts(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-status", Title: "Wiki status", Description: "Closeout", Source: "test", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki status\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md)\n\n## Process Improvement Candidates\n\n- Implementation review recommended needs_verification. (source: implementation-review.md) [rejected: too narrow]\n\n## Archive Only\n\n- Closeout raw material archived in closeout-raw-log.md. (source: closeout.md) [promoted: .devflow/wiki/archive.md]\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := runStatus([]string{"--root", root, "--demand", demand.ID}, &out); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Wiki: pending=1 promoted=1 rejected=1") {
+		t.Fatalf("status output missing wiki counts:\n%s", got)
+	}
+}

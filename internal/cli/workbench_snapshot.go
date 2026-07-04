@@ -46,6 +46,7 @@ func renderWorkbenchSnapshot(opts workbenchOptions) (string, error) {
 	fmt.Fprintf(&builder, "Attention: %s\n", detail.Workspace.Attention)
 	fmt.Fprintln(&builder, "Evidence:")
 	fmt.Fprintf(&builder, "  %-14s pass=%d fail=%d blocked=%d\n", "acceptance", detail.Workspace.Evidence.Pass, detail.Workspace.Evidence.Fail, detail.Workspace.Evidence.Blocked)
+	fmt.Fprintf(&builder, "  %-14s %d pending, %d promoted, %d rejected\n", "wiki", detail.Workspace.Wiki.Pending, detail.Workspace.Wiki.Promoted, detail.Workspace.Wiki.Rejected)
 	ci := humanStatus(detail.Workspace.CIGate.Status)
 	if detail.Workspace.CIGate.Repo != "" && detail.Workspace.CIGate.PR != "" {
 		ci = detail.Workspace.CIGate.Repo + "#" + detail.Workspace.CIGate.PR + " " + ci

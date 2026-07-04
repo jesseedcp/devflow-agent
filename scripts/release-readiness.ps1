@@ -594,6 +594,45 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         $evalOutput | Out-Host
         if (($evalOutput -join [Environment]::NewLine) -notmatch 'implementation.review') { throw "implementation.review check missing" }
     }
+    Invoke-Step "wiki knowledge distillation smoke" {
+        $wikiRoot = Join-Path $readinessRoot 'wiki-distillation-smoke'
+
+        .\dist\devflow-windows-amd64.exe start --root $wikiRoot --title "Coupon wiki" --description "Wiki distillation smoke"
+
+        $demandFile = Join-Path $wikiRoot '.devflow\demands\coupon-wiki\demand.json'
+        $demandJson = Get-Content -Raw -LiteralPath $demandFile
+        $demandJson = $demandJson -replace '"state":\s*"created"', '"state": "closeout"'
+        [System.IO.File]::WriteAllText($demandFile, $demandJson)
+
+        .\dist\devflow-windows-amd64.exe closeout --root $wikiRoot --demand coupon-wiki --result "Coupon eligibility shipped" --knowledge "Active membership must be checked before coupon discount rules."
+        .\dist\devflow-windows-amd64.exe wiki distill --root $wikiRoot --demand coupon-wiki
+        .\dist\devflow-windows-amd64.exe wiki list --root $wikiRoot --demand coupon-wiki
+        .\dist\devflow-windows-amd64.exe wiki promote --root $wikiRoot --demand coupon-wiki --candidate 1 --name coupon-membership-rule --by release
+        .\dist\devflow-windows-amd64.exe wiki reject --root $wikiRoot --demand coupon-wiki --candidate 2 --by release --reason "archive-only material"
+        .\dist\devflow-windows-amd64.exe wiki search --root $wikiRoot coupon
+
+        $demandDir = Join-Path $wikiRoot '.devflow\demands\coupon-wiki'
+        $candidatesPath = Join-Path $demandDir 'wiki-candidates.md'
+        if (-not (Test-Path $candidatesPath)) { throw "wiki-candidates.md missing" }
+        $candidatesText = Get-Content -Raw -LiteralPath $candidatesPath
+        if ($candidatesText -notmatch 'Active membership must be checked before coupon discount rules.') { throw "wiki candidate missing from wiki-candidates.md" }
+
+        $entryPath = Join-Path $wikiRoot '.devflow\wiki\coupon-membership-rule.md'
+        if (-not (Test-Path $entryPath)) { throw "promoted wiki entry missing" }
+
+        $indexText = Get-Content -Raw -LiteralPath (Join-Path $wikiRoot '.devflow\wiki\WIKI.md')
+        if ($indexText -notmatch 'coupon-membership-rule\.md') { throw "wiki index missing promoted entry" }
+
+        $eventsText = Get-Content -Raw -LiteralPath (Join-Path $demandDir 'events.jsonl')
+        if ($eventsText -notmatch 'wiki\.candidates_distilled') { throw "wiki.candidates_distilled event missing" }
+        if ($eventsText -notmatch 'wiki\.candidate_promoted') { throw "wiki.candidate_promoted event missing" }
+
+        $evalOutput = .\dist\devflow-windows-amd64.exe evaluate --root $wikiRoot --demand coupon-wiki --stage closeout 2>&1
+        $evalOutput | Out-Host
+        $evalJoined = $evalOutput -join [Environment]::NewLine
+        if ($evalJoined -notmatch 'closeout\.wiki_decisions') { throw "closeout.wiki_decisions check missing" }
+        if ($evalJoined -notmatch 'closeout\.wiki_decisions\s+pass') { throw "closeout.wiki_decisions should pass after all candidates decided" }
+    }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }
     Invoke-Step "git diff check" {

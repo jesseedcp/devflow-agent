@@ -374,6 +374,45 @@ devflow memory reject --demand add-coupon-check --candidate 2 --by dd --reason "
 ```
 
 Promoted memories are stored under `.devflow/memory/` and indexed in `.devflow/memory/MEMORY.md`. Future requirements and plan stages render approved stable memory before unapproved candidate memory.
+
+### Wiki knowledge distillation
+
+After closeout, distill the closeout material into reviewable wiki candidates:
+
+```powershell
+devflow wiki distill --demand add-coupon-check
+```
+
+`wiki distill` reads `closeout.md`, `memory-candidates.md`, `implementation-review.md`, and `events.jsonl`. It writes `closeout-raw-log.md` (a consolidated archive of the raw inputs) and `wiki-candidates.md` (reviewable candidates grouped into stable business knowledge, process improvement, and archive-only sections). Distillation is deterministic text extraction; it does not call an LLM.
+
+List the distilled candidates:
+
+```powershell
+devflow wiki list --demand add-coupon-check
+```
+
+Promote an approved candidate into the local project wiki:
+
+```powershell
+devflow wiki promote --demand add-coupon-check --candidate 1 --name coupon-membership-rule --by dd
+```
+
+Reject a candidate that should not enter the long-term wiki:
+
+```powershell
+devflow wiki reject --demand add-coupon-check --candidate 2 --by dd --reason "too specific to one fixture"
+```
+
+Search promoted wiki entries:
+
+```powershell
+devflow wiki search coupon
+```
+
+Promoted wiki entries live under `.devflow/wiki/<slug>.md` and are indexed in `.devflow/wiki/WIKI.md`. Slug names allow only lowercase letters, digits, hyphens, and underscores. Promotion and rejection are human gates; `--run-next` never auto-promotes or auto-rejects wiki candidates. No external wiki provider (Feishu, GitHub Wiki, Notion, Confluence) is written to.
+
+`evaluate --stage closeout` surfaces two warning-only checks: `closeout.wiki_candidates` (candidates present) and `closeout.wiki_decisions` (all candidates promoted or rejected). These warnings do not block closeout completion in v0.7.0.
+
 ## 9. Diagnostics
 
 ```powershell

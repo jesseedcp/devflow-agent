@@ -177,6 +177,9 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if err := confirm("closeout", "deterministic dogfood closeout accepted"); err != nil {
 		return result, err
 	}
+	if err := distillAndDecideWiki(root, scenario.DemandID, opts.Now); err != nil {
+		return result, fmt.Errorf("distill wiki candidates: %w", err)
+	}
 
 	demand, err := store.LoadDemand(scenario.DemandID)
 	if err != nil {

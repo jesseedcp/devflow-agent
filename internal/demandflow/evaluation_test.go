@@ -516,3 +516,82 @@ func TestEvaluateVerificationFailsOnFailedManualEvidence(t *testing.T) {
 		t.Fatalf("stage status = %s, want fail", evaluation.Stages[0].Status)
 	}
 }
+
+func TestEvaluateCloseoutWikiCandidatesWarnsWhenTemplateOnly(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-template", Title: "Wiki template", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## 需求结果\n\n- shipped\n"); err != nil {
+		t.Fatal(err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates := findEvaluationCheck(t, eval.Stages[0], "closeout.wiki_candidates")
+	if candidates.Status != EvaluationWarning {
+		t.Fatalf("closeout.wiki_candidates = %s, want warning", candidates.Status)
+	}
+	decisions := findEvaluationCheck(t, eval.Stages[0], "closeout.wiki_decisions")
+	if decisions.Status != EvaluationWarning {
+		t.Fatalf("closeout.wiki_decisions = %s, want warning", decisions.Status)
+	}
+}
+
+func TestEvaluateCloseoutWikiDecisionsWarnsOnPendingCandidate(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-pending", Title: "Wiki pending", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## 需求结果\n\n- shipped\n"); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki pending\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md)\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates := findEvaluationCheck(t, eval.Stages[0], "closeout.wiki_candidates")
+	if candidates.Status != EvaluationPass {
+		t.Fatalf("closeout.wiki_candidates = %s, want pass", candidates.Status)
+	}
+	decisions := findEvaluationCheck(t, eval.Stages[0], "closeout.wiki_decisions")
+	if decisions.Status != EvaluationWarning {
+		t.Fatalf("closeout.wiki_decisions = %s, want warning", decisions.Status)
+	}
+	if !strings.Contains(decisions.Evidence, "pending") {
+		t.Fatalf("wiki_decisions evidence missing pending: %s", decisions.Evidence)
+	}
+}
+
+func TestEvaluateCloseoutWikiDecisionsPassesWhenPromoted(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-decided", Title: "Wiki decided", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## 需求结果\n\n- shipped\n"); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki decided\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md) [promoted: .devflow/wiki/coupon-rule.md]\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions := findEvaluationCheck(t, eval.Stages[0], "closeout.wiki_decisions")
+	if decisions.Status != EvaluationPass {
+		t.Fatalf("closeout.wiki_decisions = %s, want pass evidence=%s", decisions.Status, decisions.Evidence)
+	}
+}

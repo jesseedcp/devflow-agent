@@ -373,3 +373,24 @@ func TestConsoleDetailPrintsCIGateStatus(t *testing.T) {
 		t.Fatalf("console detail missing ci gate status:\n%s", stdout.String())
 	}
 }
+
+func TestConsoleDetailPrintsWikiCounts(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-console", Title: "Wiki console", Description: "Closeout", Source: "test", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki console\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md)\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "wiki           1 pending, 0 promoted, 0 rejected") {
+		t.Fatalf("console output missing wiki counts:\n%s", got)
+	}
+}

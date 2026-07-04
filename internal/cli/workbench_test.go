@@ -282,3 +282,24 @@ func TestWorkbenchSnapshotShowsManualEvidence(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkbenchSnapshotPrintsWikiCounts(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-workbench", Title: "Wiki workbench", Description: "Closeout", Source: "test", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki workbench\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md)\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--demand", demand.ID, "--snapshot"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "wiki           1 pending, 0 promoted, 0 rejected") {
+		t.Fatalf("workbench snapshot missing wiki counts:\n%s", got)
+	}
+}

@@ -142,3 +142,33 @@ func TestEvaluateCommandPrintsManualEvidenceChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateCommandPrintsWikiDecisionWarningEvidence(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wiki-cli", Title: "Wiki CLI", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## 需求结果\n\n- shipped\n"); err != nil {
+		t.Fatal(err)
+	}
+	wikiText := "# Wiki Candidates: Wiki CLI\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md)\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := Run([]string{"evaluate", "--root", root, "--demand", demand.ID, "--stage", "closeout"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("evaluate returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "closeout.wiki_candidates") {
+		t.Fatalf("evaluate output missing closeout.wiki_candidates:\n%s", got)
+	}
+	if !strings.Contains(got, "closeout.wiki_decisions") {
+		t.Fatalf("evaluate output missing closeout.wiki_decisions:\n%s", got)
+	}
+	if !strings.Contains(got, "pending wiki candidates need promote/reject review") {
+		t.Fatalf("evaluate output missing wiki decision evidence:\n%s", got)
+	}
+}

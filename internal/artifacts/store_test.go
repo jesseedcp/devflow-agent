@@ -40,6 +40,8 @@ func TestCreateDemandWorkspace(t *testing.T) {
 		VerificationFile,
 		CloseoutFile,
 		MemoryCandidatesFile,
+		CloseoutRawLogFile,
+		WikiCandidatesFile,
 		EventsFile,
 	}
 
@@ -1212,5 +1214,25 @@ func TestReadEventsFailsOnMalformedMiddleEvent(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "decode events log events.jsonl line 2") {
 		t.Fatalf("ReadEvents error = %q, want decode line context", err)
+	}
+}
+
+
+func TestCreateDemandWritesWikiArtifacts(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("wiki-artifacts")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	for _, name := range []string{CloseoutRawLogFile, WikiCandidatesFile} {
+		path := filepath.Join(root, ".devflow", "demands", demand.ID, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if !strings.Contains(string(data), "#") {
+			t.Fatalf("%s template missing heading: %q", name, string(data))
+		}
 	}
 }

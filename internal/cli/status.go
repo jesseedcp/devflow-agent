@@ -168,6 +168,8 @@ func printWorkspaceDetail(stdout io.Writer, summary demandflow.WorkspaceSummary)
 		fmt.Fprintf(stdout, "  candidates: %d pending, %d promoted, %d rejected\n", summary.Memory.Pending, summary.Memory.Promoted, summary.Memory.Rejected)
 	}
 
+	fmt.Fprintf(stdout, "\nWiki: pending=%d promoted=%d rejected=%d\n", summary.Wiki.Pending, summary.Wiki.Promoted, summary.Wiki.Rejected)
+
 	fmt.Fprintln(stdout, "\nNext:")
 	printActions(stdout, summary.Actions)
 }

@@ -111,3 +111,40 @@ func MemoryCandidates(title string) string {
 ## 不进入长期知识的材料
 `, title)
 }
+func CloseoutRawLog(title string) string {
+	return fmt.Sprintf(`# Closeout Raw Log: %s
+
+## Closeout
+
+No closeout material captured yet.
+
+## Memory Candidates
+
+No memory candidate material captured yet.
+
+## Implementation Review
+
+No implementation review captured yet.
+
+## Review And Verification Events
+
+No events captured yet.
+`, title)
+}
+
+func WikiCandidates(title string) string {
+	return fmt.Sprintf(`# Wiki Candidates: %s
+
+## Stable Business Knowledge
+
+No stable business knowledge candidates distilled yet.
+
+## Process Improvement Candidates
+
+No process improvement candidates distilled yet.
+
+## Archive Only
+
+No archive-only material distilled yet.
+`, title)
+}

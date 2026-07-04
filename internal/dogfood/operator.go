@@ -202,6 +202,9 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	if err := confirm("closeout", "operator dogfood closeout accepted"); err != nil {
 		return result, err
 	}
+	if err := distillAndDecideWiki(root, scenario.DemandID, opts.Now); err != nil {
+		return result, fmt.Errorf("distill wiki candidates: %w", err)
+	}
 
 	demand, err := store.LoadDemand(scenario.DemandID)
 	if err != nil {

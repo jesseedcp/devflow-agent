@@ -16,6 +16,8 @@ const (
 	VerificationFile         = "verification.md"
 	CloseoutFile             = "closeout.md"
 	MemoryCandidatesFile     = "memory-candidates.md"
+	CloseoutRawLogFile       = "closeout-raw-log.md"
+	WikiCandidatesFile       = "wiki-candidates.md"
 	EventsFile               = "events.jsonl"
 )
 

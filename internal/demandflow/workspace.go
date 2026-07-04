@@ -12,6 +12,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/memory"
 	"github.com/jesseedcp/devflow-agent/internal/templates"
+	"github.com/jesseedcp/devflow-agent/internal/wiki"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
@@ -26,6 +27,7 @@ type WorkspaceSummary struct {
 	MergeRequest MergeRequestSummary
 	CIGate       CIGateSummary
 	Memory       MemorySummary
+	Wiki         WikiSummary
 	Actions      []NextAction
 	Attention    string
 }
@@ -83,6 +85,13 @@ type MemorySummary struct {
 	Error    string
 }
 
+type WikiSummary struct {
+	Status   string
+	Pending  int
+	Promoted int
+	Rejected int
+}
+
 func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	store := artifacts.NewStore(root)
 	demand, err := store.LoadDemand(demandID)
@@ -103,6 +112,7 @@ func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	summary.MergeRequest = summarizeMergeRequest(events, progressText)
 	summary.CIGate = summarizeCIGate(events)
 	summary.Memory = summarizeMemory(root, demandID)
+	summary.Wiki = summarizeWiki(root, demandID)
 	summary.Stages = summarizeStages(summary.State, events, summary.Verification, summary.MergeRequest)
 	summary.Artifacts = summarizeArtifacts(demandDir, demand, eventsErr, summary)
 	summary.Attention = workspaceAttention(summary, eventsErr)
@@ -148,12 +158,8 @@ func ListWorkspaces(root string) ([]WorkspaceSummary, error) {
 
 func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 	idArg := shellQuote(summary.Demand.ID)
-	if summary.Memory.Pending > 0 && (summary.State == workflow.Closeout || summary.State == workflow.Completed) {
-		return []NextAction{
-			{Label: "Review memory candidates", Command: "devflow memory list --demand " + idArg, Reason: "Stable knowledge candidates are still pending."},
-			{Label: "Promote memory candidate", Command: "devflow memory promote --demand " + idArg + " --candidate <index> --by <name>", Reason: "Promote reusable knowledge that should persist."},
-			{Label: "Reject memory candidate", Command: "devflow memory reject --demand " + idArg + " --candidate <index> --by <name> --reason <reason>", Reason: "Reject candidates that should remain one-time material."},
-		}
+	if summary.State == workflow.Closeout || summary.State == workflow.Completed {
+		return closeoutNextActions(summary, idArg)
 	}
 	if summary.State == workflow.Verification {
 		switch summary.Verification.Status {
@@ -176,6 +182,37 @@ func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 		return []NextAction{{Label: "Draft verification", Command: "devflow run --demand " + idArg + " --stage verification --quality-command \"go test ./...\"", Reason: "MR review is clear and verification evidence should be generated."}}
 	}
 	return NextActions(summary.State, summary.Demand.ID)
+}
+
+func closeoutNextActions(summary WorkspaceSummary, idArg string) []NextAction {
+	var actions []NextAction
+	if summary.Memory.Pending > 0 {
+		actions = append(actions,
+			NextAction{Label: "Review memory candidates", Command: "devflow memory list --demand " + idArg, Reason: "Stable knowledge candidates are still pending."},
+			NextAction{Label: "Promote memory candidate", Command: "devflow memory promote --demand " + idArg + " --candidate <index> --by <name>", Reason: "Promote reusable knowledge that should persist."},
+			NextAction{Label: "Reject memory candidate", Command: "devflow memory reject --demand " + idArg + " --candidate <index> --by <name> --reason <reason>", Reason: "Reject candidates that should remain one-time material."},
+		)
+	} else {
+		actions = append(actions, NextActions(summary.State, summary.Demand.ID)...)
+	}
+	actions = append(actions, wikiNextActions(summary, idArg)...)
+	return actions
+}
+
+func wikiNextActions(summary WorkspaceSummary, idArg string) []NextAction {
+	switch summary.Wiki.Status {
+	case "none":
+		return []NextAction{
+			{Label: "Distill wiki candidates", Command: "devflow wiki distill --demand " + idArg, Reason: "Closeout material should be distilled into reviewable wiki candidates."},
+		}
+	case "pending":
+		return []NextAction{
+			{Label: "List wiki candidates", Command: "devflow wiki list --demand " + idArg, Reason: "Wiki candidates are pending review."},
+			{Label: "Promote wiki candidate", Command: "devflow wiki promote --demand " + idArg + " --candidate <index> --name <slug> --by <name>", Reason: "Promote stable knowledge into the local wiki."},
+		}
+	default:
+		return nil
+	}
 }
 
 func summarizeStages(state workflow.State, events []artifacts.Event, verification VerificationSummary, mr MergeRequestSummary) []StageSummary {
@@ -265,6 +302,8 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 		artifacts.VerificationFile,
 		artifacts.CloseoutFile,
 		artifacts.MemoryCandidatesFile,
+		artifacts.CloseoutRawLogFile,
+		artifacts.WikiCandidatesFile,
 		artifacts.EventsFile,
 	}
 	out := make([]ArtifactSummary, 0, len(names))
@@ -368,6 +407,10 @@ func templateForArtifact(name string, demand artifacts.Demand) string {
 		return templates.Closeout(demand.Title)
 	case artifacts.MemoryCandidatesFile:
 		return templates.MemoryCandidates(demand.Title)
+	case artifacts.CloseoutRawLogFile:
+		return templates.CloseoutRawLog(demand.Title)
+	case artifacts.WikiCandidatesFile:
+		return templates.WikiCandidates(demand.Title)
 	default:
 		return ""
 	}
@@ -481,6 +524,33 @@ func summarizeMemory(root, demandID string) MemorySummary {
 		case memory.CandidatePromoted:
 			summary.Promoted++
 		case memory.CandidateRejected:
+			summary.Rejected++
+		default:
+			summary.Pending++
+		}
+	}
+	if summary.Pending > 0 {
+		summary.Status = "pending"
+	} else if summary.Promoted > 0 || summary.Rejected > 0 {
+		summary.Status = "settled"
+	}
+	return summary
+}
+
+func summarizeWiki(root, demandID string) WikiSummary {
+	summary := WikiSummary{Status: "none"}
+	store := artifacts.NewStore(root)
+	demandDir := store.DemandDir(demandID)
+	data, err := os.ReadFile(filepath.Join(demandDir, artifacts.WikiCandidatesFile))
+	if err != nil {
+		return summary
+	}
+	candidates := wiki.ParseCandidates(string(data))
+	for _, candidate := range candidates {
+		switch candidate.Status {
+		case wiki.StatusPromoted:
+			summary.Promoted++
+		case wiki.StatusRejected:
 			summary.Rejected++
 		default:
 			summary.Pending++

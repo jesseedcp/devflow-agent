@@ -334,6 +334,7 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 		artifacts.MemoryCandidatesFile,
 		artifacts.CloseoutRawLogFile,
 		artifacts.WikiCandidatesFile,
+		artifacts.MetricsFile,
 		artifacts.EventsFile,
 	}
 	out := make([]ArtifactSummary, 0, len(names))
@@ -441,6 +442,8 @@ func templateForArtifact(name string, demand artifacts.Demand) string {
 		return templates.CloseoutRawLog(demand.Title)
 	case artifacts.WikiCandidatesFile:
 		return templates.WikiCandidates(demand.Title)
+	case artifacts.MetricsFile:
+		return templates.Metrics(demand.Title)
 	default:
 		return ""
 	}

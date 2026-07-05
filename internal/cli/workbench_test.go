@@ -330,3 +330,29 @@ func TestWorkbenchSnapshotPrintsMetrics(t *testing.T) {
 		t.Fatalf("workbench snapshot missing metrics summary:\n%s", got)
 	}
 }
+
+func TestWorkbenchDetailToggleShowsMetrics(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "wb-metrics", Title: "WB metrics", Description: "Detail", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "stage.confirmed", Message: "requirements confirmed", Data: map[string]string{"stage": "requirements"}}); err != nil {
+		t.Fatalf("AppendEvent stage returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent verification returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
+
+	model := newWorkbenchModel(workbenchOptions{root: root})
+	next, _ := model.Update(workbenchLoadedMsg{demands: []workbenchDemand{{ID: demand.ID, State: string(workflow.Verification), Attention: "ready"}}})
+	next, _ = next.(workbenchModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	view := next.(workbenchModel).View()
+	if !strings.Contains(view, "Metrics: human=1 review_returns=0 verification=1/1 acceptance=1/0/0 wiki=0/0") {
+		t.Fatalf("detail view missing metrics:\n%s", view)
+	}
+}

@@ -1244,7 +1244,7 @@ func TestWriteArtifactAllowsMetricsFile(t *testing.T) {
 		t.Fatalf("CreateDemand returned error: %v", err)
 	}
 
-	if err := store.WriteArtifact(demand.ID, MetricsFile, "# Metrics`n`n"); err != nil {
+	if err := store.WriteArtifact(demand.ID, MetricsFile, "# Metrics\n\n"); err != nil {
 		t.Fatalf("WriteArtifact metrics returned error: %v", err)
 	}
 }

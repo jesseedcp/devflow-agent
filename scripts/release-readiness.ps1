@@ -669,6 +669,10 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         if ($metricsText -notmatch 'Human confirmations: 2') { throw "metrics report should count confirmations" }
         if ($metricsText -notmatch 'Acceptance evidence: pass=1 fail=0 blocked=0') { throw "metrics report should count acceptance evidence" }
     }
+    Invoke-Step "v0.8.1 hardening smoke" {
+        go test ./internal/runtime/hooks -run "HookAsync|RunCommandTimeout|RunCommandDefaultTimeout" -count=20
+        go test ./internal/artifacts ./internal/demandflow ./internal/cli ./internal/metrics -run "MetricsFile|WorkspaceIncludesMetricsArtifact|Workbench.*Metrics|PartialHistorical|PartialDataCaveats" -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

@@ -28,6 +28,8 @@ type DemandMetrics struct {
 	BlockedEvents           int
 	CIBlocked               int
 	CIPassed                int
+	PartialData             bool
+	Caveats                 []string
 }
 
 func (m DemandMetrics) VerificationPassRate() float64 {
@@ -61,6 +63,7 @@ type ProjectMetrics struct {
 	TotalWikiPromoted         int
 	TotalWikiRejected         int
 	Demands                   []DemandMetrics
+	PartialDemandCount        int
 }
 
 func (m ProjectMetrics) VerificationPassRate() float64 {

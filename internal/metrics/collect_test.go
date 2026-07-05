@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -58,5 +59,30 @@ func TestCollectDemandMetricsCountsEvents(t *testing.T) {
 	}
 	if got.TotalDuration != 2*time.Hour {
 		t.Fatalf("TotalDuration = %s, want 2h", got.TotalDuration)
+	}
+}
+
+func TestCollectDemandMetricsMarksPartialHistoricalData(t *testing.T) {
+	created := time.Date(2026, 6, 20, 1, 0, 0, 0, time.UTC)
+	demand := artifacts.Demand{
+		ID:        "old-demand",
+		Title:     "Old demand",
+		State:     "completed",
+		CreatedAt: created,
+		UpdatedAt: created.Add(time.Hour),
+	}
+	events := []artifacts.Event{
+		{Time: created, Type: "demand.created", Message: "created"},
+		{Time: created.Add(10 * time.Minute), Type: "stage.confirmed", Data: map[string]string{"stage": "requirements"}},
+	}
+	got := CollectDemand(demand, events)
+	if !got.PartialData {
+		t.Fatal("PartialData = false, want true")
+	}
+	joined := strings.Join(got.Caveats, " | ")
+	for _, want := range []string{"no verification events", "no acceptance evidence events", "no wiki decision events"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("caveats %q missing %q", joined, want)
+		}
 	}
 }

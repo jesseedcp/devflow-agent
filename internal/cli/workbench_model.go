@@ -221,6 +221,7 @@ func (m workbenchModel) renderDetail(builder *strings.Builder) {
 	fmt.Fprintf(builder, "Attention: %s\n", summary.Workspace.Attention)
 	builder.WriteString("Evidence:\n")
 	fmt.Fprintf(builder, "  %-14s pass=%d fail=%d blocked=%d\n", "acceptance", summary.Workspace.Evidence.Pass, summary.Workspace.Evidence.Fail, summary.Workspace.Evidence.Blocked)
+	renderCompactMetrics(builder, summary.Workspace.Metrics)
 	builder.WriteString("Quality:\n")
 	evaluation, err := demandflow.EvaluateDemand(m.opts.root, summary.Workspace.Demand.ID)
 	if err != nil {
@@ -245,6 +246,20 @@ func (m workbenchModel) renderDetail(builder *strings.Builder) {
 	} else {
 		fmt.Fprintf(builder, "  %s\n", summary.RunReadyAction.BlockReason)
 	}
+}
+
+func renderCompactMetrics(builder *strings.Builder, metrics demandflow.MetricsSummary) {
+	fmt.Fprintf(builder, "  Metrics: human=%d review_returns=%d verification=%d/%d acceptance=%d/%d/%d wiki=%d/%d\n",
+		metrics.HumanConfirmations,
+		metrics.ReviewReturns,
+		metrics.VerificationPasses,
+		metrics.VerificationRuns,
+		metrics.AcceptancePasses,
+		metrics.AcceptanceFailures,
+		metrics.AcceptanceBlocked,
+		metrics.WikiPromoted,
+		metrics.WikiRejected,
+	)
 }
 
 func renderWorkbenchAction(builder *strings.Builder, action demandflow.ConsoleAction) {

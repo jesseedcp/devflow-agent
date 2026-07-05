@@ -139,6 +139,8 @@ func printWorkspaceDetail(stdout io.Writer, summary demandflow.WorkspaceSummary)
 		fmt.Fprintf(stdout, "  evidence: %s\n", summary.MergeRequest.Message)
 	}
 
+	fmt.Fprintln(stdout, "\n"+demandflow.ReleaseLine(summary))
+
 	fmt.Fprintln(stdout, "\nVerification:")
 	switch summary.Verification.Status {
 	case "pass":

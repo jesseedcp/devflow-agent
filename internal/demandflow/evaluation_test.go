@@ -595,3 +595,45 @@ func TestEvaluateCloseoutWikiDecisionsPassesWhenPromoted(t *testing.T) {
 		t.Fatalf("closeout.wiki_decisions = %s, want pass evidence=%s", decisions.Status, decisions.Evidence)
 	}
 }
+
+func TestEvaluateCloseoutWarnsWhenMetricsReportMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "metrics-closeout", Title: "Metrics closeout", Description: "demo", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## Result\n\nDone.\n"); err != nil {
+		t.Fatalf("WriteArtifact closeout returned error: %v", err)
+	}
+
+	got := evaluateCloseout(root, demand.ID)
+	check := findEvaluationCheck(t, got, "closeout.metrics_report")
+	if check.Status != EvaluationWarning {
+		t.Fatalf("metrics check status = %s, want warning", check.Status)
+	}
+	if !strings.Contains(check.Evidence, "devflow metrics report") {
+		t.Fatalf("metrics evidence = %q", check.Evidence)
+	}
+}
+
+func TestEvaluateCloseoutPassesWhenMetricsReportExists(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "metrics-closeout", Title: "Metrics closeout", Description: "demo", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## Result\n\nDone.\n"); err != nil {
+		t.Fatalf("WriteArtifact closeout returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.MetricsFile, "# Devflow Metrics\n\n## Summary\n\n- Demand count: 1\n"); err != nil {
+		t.Fatalf("WriteArtifact metrics returned error: %v", err)
+	}
+
+	got := evaluateCloseout(root, demand.ID)
+	check := findEvaluationCheck(t, got, "closeout.metrics_report")
+	if check.Status != EvaluationPass {
+		t.Fatalf("metrics check status = %s, want pass", check.Status)
+	}
+}

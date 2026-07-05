@@ -148,3 +148,9 @@ No process improvement candidates distilled yet.
 No archive-only material distilled yet.
 `, title)
 }
+func Metrics(title string) string {
+	return fmt.Sprintf(`# Metrics: %s
+
+No metrics report generated yet.
+`, title)
+}

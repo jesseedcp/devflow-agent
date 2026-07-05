@@ -635,6 +635,40 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
     }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }
+    Invoke-Step "metrics report smoke" {
+        $metricsRoot = Join-Path $readinessRoot 'metrics-smoke'
+        New-Item -ItemType Directory -Force -Path $metricsRoot | Out-Null
+
+        .\dist\devflow-windows-amd64.exe start --root $metricsRoot --title "Coupon metrics"
+
+        $demandFile = Join-Path $metricsRoot '.devflow\demands\coupon-metrics\demand.json'
+        $demandDir = Join-Path $metricsRoot '.devflow\demands\coupon-metrics'
+
+        $demandJson = Get-Content -Raw -LiteralPath $demandFile
+        $demandJson = $demandJson -replace '"state":\s*"[^"]*"', '"state": "requirements_review"'
+        [System.IO.File]::WriteAllText($demandFile, $demandJson)
+        .\dist\devflow-windows-amd64.exe confirm --root $metricsRoot --demand coupon-metrics --stage requirements --by release --summary "requirements accepted"
+
+        [System.IO.File]::WriteAllText((Join-Path $demandDir 'plan.md'), "# Plan`r`n`r`n## Implementation Steps`r`n`r`n- implement coupon eligibility`r`n")
+        $demandJson = Get-Content -Raw -LiteralPath $demandFile
+        $demandJson = $demandJson -replace '"state":\s*"[^"]*"', '"state": "plan_review"'
+        [System.IO.File]::WriteAllText($demandFile, $demandJson)
+        .\dist\devflow-windows-amd64.exe confirm --root $metricsRoot --demand coupon-metrics --stage plan --by release --summary "plan accepted"
+
+        $demandJson = Get-Content -Raw -LiteralPath $demandFile
+        $demandJson = $demandJson -replace '"state":\s*"[^"]*"', '"state": "verification"'
+        [System.IO.File]::WriteAllText($demandFile, $demandJson)
+        .\dist\devflow-windows-amd64.exe evidence add --root $metricsRoot --demand coupon-metrics --type api --criterion "Inactive users are blocked" --status pass --summary "COUPON_USER_INACTIVE"
+
+        .\dist\devflow-windows-amd64.exe metrics report --root $metricsRoot --demand coupon-metrics
+
+        $metricsPath = Join-Path $demandDir 'metrics.md'
+        $metricsText = Get-Content -Raw -LiteralPath $metricsPath
+        if ($metricsText -notmatch '# Devflow Metrics') { throw "metrics report should have title" }
+        if ($metricsText -notmatch 'coupon-metrics') { throw "metrics report should include demand id" }
+        if ($metricsText -notmatch 'Human confirmations: 2') { throw "metrics report should count confirmations" }
+        if ($metricsText -notmatch 'Acceptance evidence: pass=1 fail=0 blocked=0') { throw "metrics report should count acceptance evidence" }
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

@@ -42,6 +42,7 @@ func TestCreateDemandWorkspace(t *testing.T) {
 		MemoryCandidatesFile,
 		CloseoutRawLogFile,
 		WikiCandidatesFile,
+		MetricsFile,
 		EventsFile,
 	}
 
@@ -1217,7 +1218,6 @@ func TestReadEventsFailsOnMalformedMiddleEvent(t *testing.T) {
 	}
 }
 
-
 func TestCreateDemandWritesWikiArtifacts(t *testing.T) {
 	root := t.TempDir()
 	store := NewStore(root)
@@ -1234,5 +1234,17 @@ func TestCreateDemandWritesWikiArtifacts(t *testing.T) {
 		if !strings.Contains(string(data), "#") {
 			t.Fatalf("%s template missing heading: %q", name, string(data))
 		}
+	}
+}
+func TestWriteArtifactAllowsMetricsFile(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := Demand{ID: "metrics-demo", Title: "Metrics demo", Description: "demo"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	if err := store.WriteArtifact(demand.ID, MetricsFile, "# Metrics`n`n"); err != nil {
+		t.Fatalf("WriteArtifact metrics returned error: %v", err)
 	}
 }

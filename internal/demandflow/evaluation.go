@@ -387,14 +387,36 @@ func evaluateCloseout(root, demandID string) StageEvaluation {
 	closeout := readEvaluationArtifact(root, demandID, artifacts.CloseoutFile)
 	memory := readEvaluationArtifact(root, demandID, artifacts.MemoryCandidatesFile)
 	wikiCandidatesText := readEvaluationArtifact(root, demandID, artifacts.WikiCandidatesFile)
+	metricsText := readEvaluationArtifact(root, demandID, artifacts.MetricsFile)
 	checks := []EvaluationCheck{
 		requiredContentCheck("closeout.exists", "closeout.md has content", closeout, "blocker"),
 		requiredSectionCheck("closeout.result", "result section has content", closeout, []string{"需求结果", "result"}, "blocker"),
 		statusCheck("closeout.memory", "memory candidates include reusable bullets", hasNonTemplateBullet(memory), "warning", evidenceSnippet(memory)),
 		wikiCandidatesCheck(wikiCandidatesText),
 		wikiDecisionsCheck(wikiCandidatesText),
+		metricsReportCheck(metricsText),
 	}
 	return buildStageEvaluation(StageCloseout, checks)
+}
+
+func metricsReportCheck(text string) EvaluationCheck {
+	trimmed := strings.TrimSpace(text)
+	if strings.Contains(trimmed, "# Devflow Metrics") && strings.Contains(trimmed, "## Summary") {
+		return EvaluationCheck{
+			ID:       "closeout.metrics_report",
+			Label:    "metrics report generated",
+			Status:   EvaluationPass,
+			Severity: "warning",
+			Evidence: evidenceSnippet(trimmed),
+		}
+	}
+	return EvaluationCheck{
+		ID:       "closeout.metrics_report",
+		Label:    "metrics report generated",
+		Status:   EvaluationWarning,
+		Severity: "warning",
+		Evidence: "metrics.md missing or template-only; run `devflow metrics report --demand <id>`",
+	}
 }
 
 func wikiCandidatesCheck(text string) EvaluationCheck {

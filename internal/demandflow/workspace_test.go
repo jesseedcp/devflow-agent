@@ -381,3 +381,33 @@ func TestWorkspaceNextActionsNoWikiReviewWhenDecided(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkspaceSummaryIncludesMetrics(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "workspace-metrics", Title: "Workspace metrics", Description: "Metrics", Source: "test", State: string(workflow.Verification)}
+	createWorkspaceDemand(t, store, demand)
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "stage.confirmed", Message: "requirements confirmed", Data: map[string]string{"stage": "requirements"}})
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}})
+	appendWorkspaceEvent(t, store, demand.ID, artifacts.Event{Time: fixedWorkspaceTime(), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}})
+
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectWorkspace returned error: %v", err)
+	}
+	if summary.Metrics.HumanConfirmations != 1 {
+		t.Fatalf("HumanConfirmations = %d, want 1", summary.Metrics.HumanConfirmations)
+	}
+	if summary.Metrics.ReviewReturns != 0 {
+		t.Fatalf("ReviewReturns = %d, want 0", summary.Metrics.ReviewReturns)
+	}
+	if summary.Metrics.VerificationRuns != 1 || summary.Metrics.VerificationPasses != 1 {
+		t.Fatalf("Verification = %d/%d, want 1/1", summary.Metrics.VerificationPasses, summary.Metrics.VerificationRuns)
+	}
+	if summary.Metrics.AcceptancePasses != 1 || summary.Metrics.AcceptanceFailures != 0 || summary.Metrics.AcceptanceBlocked != 0 {
+		t.Fatalf("Acceptance = %d/%d/%d, want 1/0/0", summary.Metrics.AcceptancePasses, summary.Metrics.AcceptanceFailures, summary.Metrics.AcceptanceBlocked)
+	}
+	if summary.Metrics.WikiPromoted != 0 || summary.Metrics.WikiRejected != 0 {
+		t.Fatalf("Wiki = %d/%d, want 0/0", summary.Metrics.WikiPromoted, summary.Metrics.WikiRejected)
+	}
+}

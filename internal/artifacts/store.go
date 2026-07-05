@@ -114,6 +114,9 @@ func (s Store) CreateDemand(demand Demand) error {
 	if err := writeTextFile(filepath.Join(tempDir, WikiCandidatesFile), templates.WikiCandidates(demand.Title)); err != nil {
 		return fmt.Errorf("write wiki candidates template: %w", err)
 	}
+	if err := writeTextFile(filepath.Join(tempDir, MetricsFile), templates.Metrics(demand.Title)); err != nil {
+		return fmt.Errorf("write metrics template: %w", err)
+	}
 	if err := writeTextFile(filepath.Join(tempDir, EventsFile), ""); err != nil {
 		return fmt.Errorf("create events file: %w", err)
 	}
@@ -570,7 +573,8 @@ func validateAppendableArtifactName(name string) error {
 		CloseoutFile,
 		MemoryCandidatesFile,
 		CloseoutRawLogFile,
-		WikiCandidatesFile:
+		WikiCandidatesFile,
+		MetricsFile:
 		return nil
 	default:
 		return fmt.Errorf("unsupported artifact %q", name)

@@ -303,3 +303,30 @@ func TestWorkbenchSnapshotPrintsWikiCounts(t *testing.T) {
 		t.Fatalf("workbench snapshot missing wiki counts:\n%s", got)
 	}
 }
+
+func TestWorkbenchSnapshotPrintsMetrics(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "metrics-workbench", Title: "Metrics workbench", Description: "Snapshot", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "stage.confirmed", Message: "requirements confirmed", Data: map[string]string{"stage": "requirements"}}); err != nil {
+		t.Fatalf("AppendEvent stage returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
+		t.Fatalf("AppendEvent verification returned error: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatalf("AppendEvent evidence returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Metrics: human=1 review_returns=0 verification=1/1 acceptance=1/0/0 wiki=0/0") {
+		t.Fatalf("workbench snapshot missing metrics summary:\n%s", got)
+	}
+}

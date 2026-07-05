@@ -12,6 +12,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/implreview"
+	"github.com/jesseedcp/devflow-agent/internal/metrics"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
@@ -205,6 +206,9 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	if err := distillAndDecideWiki(root, scenario.DemandID, opts.Now); err != nil {
 		return result, fmt.Errorf("distill wiki candidates: %w", err)
 	}
+	if err := writeOperatorMetricsReport(root, scenario.DemandID); err != nil {
+		return result, fmt.Errorf("write operator metrics report: %w", err)
+	}
 
 	demand, err := store.LoadDemand(scenario.DemandID)
 	if err != nil {
@@ -217,6 +221,23 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	}
 	result.ReportPath = reportPath
 	return result, nil
+}
+
+func writeOperatorMetricsReport(root, demandID string) error {
+	store := artifacts.NewStore(root)
+	demand, err := store.LoadDemand(demandID)
+	if err != nil {
+		return fmt.Errorf("load demand for metrics: %w", err)
+	}
+	events, err := store.ReadEvents(demandID)
+	if err != nil {
+		return fmt.Errorf("read events for metrics: %w", err)
+	}
+	demandMetrics := metrics.CollectDemand(demand, events)
+	report := metrics.ProjectMetrics{Demands: []metrics.DemandMetrics{demandMetrics}}
+	metrics.ApplyForCLI(&report, demandMetrics)
+	body := metrics.RenderProject(report)
+	return store.WriteArtifact(demandID, artifacts.MetricsFile, body)
 }
 
 func writeOperatorPlanGrounding(store artifacts.Store, scenario Scenario) error {

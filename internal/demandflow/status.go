@@ -86,7 +86,10 @@ func NextActions(state workflow.State, demandID string) []NextAction {
 			{Label: "Confirm closeout", Command: "devflow confirm --demand " + idArg + " --stage closeout --by <name> --summary <summary>", Reason: "Human confirmation completes the demand."},
 		}
 	case workflow.Completed:
-		return []NextAction{{Label: "No action", Command: "", Reason: "The demand is complete."}}
+		return []NextAction{
+			{Label: "Generate metrics", Command: "devflow metrics report --demand " + idArg, Reason: "Completed demands can be summarized for agent effectiveness metrics."},
+			{Label: "No action", Command: "", Reason: "The demand is complete."},
+		}
 	default:
 		return []NextAction{{Label: "Inspect manually", Command: "devflow status --demand " + idArg, Reason: fmt.Sprintf("State %s has no automated recommendation.", state)}}
 	}

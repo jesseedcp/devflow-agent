@@ -18,6 +18,7 @@ const (
 	MemoryCandidatesFile     = "memory-candidates.md"
 	CloseoutRawLogFile       = "closeout-raw-log.md"
 	WikiCandidatesFile       = "wiki-candidates.md"
+	MetricsFile              = "metrics.md"
 	EventsFile               = "events.jsonl"
 )
 

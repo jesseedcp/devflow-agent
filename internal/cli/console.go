@@ -185,6 +185,17 @@ func printConsoleEvidence(stdout io.Writer, workspace demandflow.WorkspaceSummar
 	fmt.Fprintf(stdout, "  %-14s pass=%d fail=%d blocked=%d\n", "acceptance", workspace.Evidence.Pass, workspace.Evidence.Fail, workspace.Evidence.Blocked)
 	fmt.Fprintf(stdout, "  %-14s %d pending, %d promoted, %d rejected\n", "memory", workspace.Memory.Pending, workspace.Memory.Promoted, workspace.Memory.Rejected)
 	fmt.Fprintf(stdout, "  %-14s %d pending, %d promoted, %d rejected\n", "wiki", workspace.Wiki.Pending, workspace.Wiki.Promoted, workspace.Wiki.Rejected)
+	fmt.Fprintf(stdout, "  Metrics: human=%d review_returns=%d verification=%d/%d acceptance=%d/%d/%d wiki=%d/%d\n",
+		workspace.Metrics.HumanConfirmations,
+		workspace.Metrics.ReviewReturns,
+		workspace.Metrics.VerificationPasses,
+		workspace.Metrics.VerificationRuns,
+		workspace.Metrics.AcceptancePasses,
+		workspace.Metrics.AcceptanceFailures,
+		workspace.Metrics.AcceptanceBlocked,
+		workspace.Metrics.WikiPromoted,
+		workspace.Metrics.WikiRejected,
+	)
 	mr := humanStatus(workspace.MergeRequest.Status)
 	if workspace.MergeRequest.Reference != "" {
 		mr = workspace.MergeRequest.Reference + " " + mr

@@ -420,3 +420,16 @@ func TestConsoleDetailPrintsMetrics(t *testing.T) {
 		t.Fatalf("console output missing metrics summary:\n%s", got)
 	}
 }
+
+func TestConsoleShowsReleaseControl(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Deployment)
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", "add-coupon-check"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Release:") {
+		t.Fatalf("console output missing Release:\n%s", got)
+	}
+}

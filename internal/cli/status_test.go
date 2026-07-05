@@ -245,3 +245,30 @@ func TestRunStatusPrintsWikiCounts(t *testing.T) {
 		t.Fatalf("status output missing wiki counts:\n%s", got)
 	}
 }
+
+func TestStatusShowsReleaseControl(t *testing.T) {
+	states := []struct {
+		state       workflow.State
+		commandPart string
+	}{
+		{workflow.Deployment, "devflow deploy trigger --demand add-coupon-check"},
+		{workflow.Observation, "devflow observe refresh --demand add-coupon-check"},
+		{workflow.BlockedNeedReleaseDecision, "devflow rollback confirm --demand add-coupon-check"},
+	}
+	for _, tc := range states {
+		t.Run(string(tc.state), func(t *testing.T) {
+			root := t.TempDir()
+			createDemandAtState(t, root, tc.state)
+			var stdout bytes.Buffer
+			if err := Run([]string{"status", "--root", root, "--demand", "add-coupon-check"}, &stdout, &bytes.Buffer{}); err != nil {
+				t.Fatalf("status: %v", err)
+			}
+			got := stdout.String()
+			for _, want := range []string{"Release:", "deployment.md", "observation.md", "rollback.md", tc.commandPart} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("status output missing %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}

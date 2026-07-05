@@ -459,3 +459,24 @@ devflow doctor --platform all
 ```
 
 Doctor reports each platform credential as `set` or `not set` without printing secret values.
+
+## Metrics
+
+After a demand has accumulated events, run:
+
+```powershell
+devflow metrics report --demand coupon-metrics
+```
+
+The report is deterministic and local. It reads `events.jsonl` and writes `metrics.md`.
+
+Tracked signals include:
+
+- human confirmations
+- review returns
+- verification runs and pass rate
+- acceptance evidence pass/fail/blocked
+- wiki candidate promote/reject decisions
+- blocked events and CI gate outcomes
+
+Metrics are advisory in v0.8. They do not block closeout automatically.

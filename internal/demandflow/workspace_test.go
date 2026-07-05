@@ -411,3 +411,30 @@ func TestWorkspaceSummaryIncludesMetrics(t *testing.T) {
 		t.Fatalf("Wiki = %d/%d, want 0/0", summary.Metrics.WikiPromoted, summary.Metrics.WikiRejected)
 	}
 }
+
+func TestInspectWorkspaceIncludesMetricsArtifact(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "metrics-artifact", Title: "Metrics artifact", Description: "demo", Source: "test", State: string(workflow.Completed)}
+	createWorkspaceDemand(t, store, demand)
+
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectWorkspace returned error: %v", err)
+	}
+	var found bool
+	for _, artifact := range summary.Artifacts {
+		if artifact.Name == artifacts.MetricsFile {
+			found = true
+			if !artifact.Exists {
+				t.Fatalf("metrics artifact exists = false")
+			}
+			if artifact.Status != "template" {
+				t.Fatalf("metrics artifact status = %q, want template", artifact.Status)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("workspace artifacts missing %s: %#v", artifacts.MetricsFile, summary.Artifacts)
+	}
+}

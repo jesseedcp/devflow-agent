@@ -17,7 +17,8 @@ func RenderProject(report ProjectMetrics) string {
 	fmt.Fprintf(&b, "- Verification runs: %d\n", report.TotalVerificationRuns)
 	fmt.Fprintf(&b, "- Verification pass rate: %.0f%%\n", report.VerificationPassRate()*100)
 	fmt.Fprintf(&b, "- Acceptance evidence: pass=%d fail=%d blocked=%d\n", report.TotalAcceptancePasses, report.TotalAcceptanceFailures, report.TotalAcceptanceBlocked)
-	fmt.Fprintf(&b, "- Wiki decisions: %d/%d\n\n", report.TotalWikiPromoted+report.TotalWikiRejected, report.TotalWikiCandidates)
+	fmt.Fprintf(&b, "- Wiki decisions: %d/%d\n", report.TotalWikiPromoted+report.TotalWikiRejected, report.TotalWikiCandidates)
+	fmt.Fprintf(&b, "- Partial historical data: %d\n\n", report.PartialDemandCount)
 	b.WriteString("## Demands\n\n")
 	b.WriteString("| Demand | Title | State | Duration | Human confirms | Review returns | Verification | Acceptance evidence | Wiki decisions |\n")
 	b.WriteString("| --- | --- | --- | --- | ---: | ---: | --- | --- | --- |\n")
@@ -39,6 +40,16 @@ func RenderProject(report ProjectMetrics) string {
 		)
 	}
 	b.WriteString("\n")
+	if report.PartialDemandCount > 0 {
+		b.WriteString("## Caveats\n\n")
+		for _, demand := range report.Demands {
+			if !demand.PartialData {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s: %s\n", demand.DemandID, strings.Join(demand.Caveats, "; "))
+		}
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 

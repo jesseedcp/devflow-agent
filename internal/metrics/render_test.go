@@ -41,3 +41,29 @@ func TestRenderProjectMetricsIncludesSummaryAndDemandRows(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderProjectMetricsIncludesPartialDataCaveats(t *testing.T) {
+	report := ProjectMetrics{
+		DemandCount:        1,
+		PartialDemandCount: 1,
+		Demands: []DemandMetrics{
+			{
+				DemandID:    "old-demand",
+				Title:       "Old demand",
+				State:       "completed",
+				PartialData: true,
+				Caveats:     []string{"no verification events", "no acceptance evidence events"},
+			},
+		},
+	}
+	body := RenderProject(report)
+	for _, want := range []string{
+		"Partial historical data: 1",
+		"## Caveats",
+		"old-demand: no verification events; no acceptance evidence events",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics report missing %q:\n%s", want, body)
+		}
+	}
+}

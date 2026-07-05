@@ -29,6 +29,8 @@ func CollectDemand(demand artifacts.Demand, events []artifacts.Event) DemandMetr
 	} else if !out.FirstEventAt.IsZero() && !out.LastEventAt.IsZero() && out.LastEventAt.After(out.FirstEventAt) {
 		out.TotalDuration = out.LastEventAt.Sub(out.FirstEventAt)
 	}
+	out.Caveats = demandCaveats(out, events)
+	out.PartialData = len(out.Caveats) > 0
 	return out
 }
 
@@ -112,4 +114,21 @@ func positiveInt(value string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func demandCaveats(out DemandMetrics, events []artifacts.Event) []string {
+	if len(events) == 0 {
+		return []string{"no events recorded"}
+	}
+	var caveats []string
+	if out.VerificationRuns == 0 {
+		caveats = append(caveats, "no verification events")
+	}
+	if out.AcceptancePasses+out.AcceptanceFailures+out.AcceptanceBlocked == 0 {
+		caveats = append(caveats, "no acceptance evidence events")
+	}
+	if out.WikiCandidatesDistilled == 0 && out.WikiPromoted == 0 && out.WikiRejected == 0 {
+		caveats = append(caveats, "no wiki decision events")
+	}
+	return caveats
 }

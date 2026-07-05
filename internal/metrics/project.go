@@ -52,6 +52,9 @@ func applyDemandMetrics(out *ProjectMetrics, demand DemandMetrics) {
 	if demand.BlockedEvents > 0 {
 		out.BlockedCount++
 	}
+	if demand.PartialData {
+		out.PartialDemandCount++
+	}
 	out.TotalHumanConfirmations += demand.HumanConfirmations
 	out.TotalReviewReturns += demand.ReviewReturns
 	out.TotalVerificationRuns += demand.VerificationRuns

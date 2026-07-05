@@ -64,6 +64,7 @@ Usage:
   devflow next --demand <id>
   devflow console [--demand <id>] [--run-next]
   devflow drive --demand <id> [--dry-run]
+  devflow observe refresh --demand <id>
   devflow evidence add --demand <id> --type <api|log|monitor|manual|link> --criterion <text> --summary <text>
   devflow evidence fetch --demand <id> --type <api|link> --criterion <text> --url <url>
   devflow evidence list --demand <id>
@@ -195,6 +196,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCIGate(args[1:], stdout, stderr)
 	case "deploy":
 		return runDeploy(args[1:], stdout, stderr)
+	case "observe":
+		return runObserve(args[1:], stdout, stderr)
 	case "mr":
 		return runMR(args[1:], stdout, stderr)
 	case "change-request", "cr":

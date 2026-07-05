@@ -480,3 +480,5 @@ Tracked signals include:
 - blocked events and CI gate outcomes
 
 Metrics are advisory in v0.8. They do not block closeout automatically.
+
+Metrics can include partial historical data caveats. Older demands may have been created before verification evidence, acceptance evidence, wiki decisions, or metrics events existed. In that case `metrics.md` marks the demand as partial instead of pretending the missing signals were zero-effort or zero-risk outcomes.

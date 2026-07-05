@@ -146,23 +146,38 @@ func TestHookHTTPAction(t *testing.T) {
 
 func TestHookAsyncIsNonBlocking(t *testing.T) {
 	eng := NewEngine()
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	eng.AgentRunner = func(prompt string, ctx HookContext) (string, error) {
+		started <- struct{}{}
+		<-release
+		return "done", nil
+	}
+	defer close(release)
+
 	eng.LoadHooks([]Hook{{
-		ID:    "slow",
+		ID:    "slow-agent",
 		Event: EventTurnEnd,
 		Async: true,
 		Action: Action{
-			Type:    ActionCommand,
-			Command: testSleepCommand(200 * time.Millisecond),
+			Type:    ActionAgent,
+			Message: "inspect later",
 		},
 	}})
+
 	start := time.Now()
 	res := eng.RunHooks(HookContext{EventName: EventTurnEnd})
 	elapsed := time.Since(start)
-	if elapsed > 100*time.Millisecond {
+	if elapsed > 250*time.Millisecond {
 		t.Errorf("async hook blocked the caller for %v", elapsed)
 	}
 	if len(res) != 1 || res[0].Output != "(async)" {
 		t.Errorf("expected async stub result, got %#v", res)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("async agent hook did not start")
 	}
 }
 

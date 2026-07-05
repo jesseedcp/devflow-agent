@@ -96,7 +96,6 @@ var allowedTransitions = map[State]map[State]struct{}{
 	},
 	Verification: {
 		Deployment:        {},
-		Closeout:          {},
 		FailedQualityGate: {},
 		BlockedNeedUser:   {},
 		Cancelled:         {},

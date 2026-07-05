@@ -14,6 +14,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/implreview"
 	"github.com/jesseedcp/devflow-agent/internal/metrics"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
+	"github.com/jesseedcp/devflow-agent/internal/releasecontrol"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
@@ -197,6 +198,44 @@ func RunOperator(ctx context.Context, opts OperatorOptions) (OperatorResult, err
 	if err := writeOperatorImplementationReview(root, scenario); err != nil {
 		return result, err
 	}
+	releaseNow := opts.Now()
+	deploymentRecord := releasecontrol.DeploymentRecord{
+		Provider:    "offline",
+		Repo:        "dogfood/offline",
+		WorkflowID:  "deploy.yml",
+		Ref:         "dogfood/test",
+		RunID:       "12345",
+		RunURL:      "https://offline/runs/12345",
+		Environment: "dogfood",
+		Status:      releasecontrol.StatusPassed,
+		Conclusion:  "success",
+		TriggeredBy: "devflow dogfood operator",
+		CreatedAt:   releaseNow,
+		UpdatedAt:   releaseNow,
+	}
+	if err := store.WriteArtifact(scenario.DemandID, artifacts.DeploymentFile, releasecontrol.RenderDeployment(scenario.Title, deploymentRecord)); err != nil {
+		return result, fmt.Errorf("write operator dogfood deployment: %w", err)
+	}
+	if err := advanceDogfoodState(store, scenario.DemandID, workflow.Observation); err != nil {
+		return result, err
+	}
+	result.Steps = append(result.Steps, OperatorStep{Name: "deployment", State: workflow.Observation, Output: "offline deployment passed"})
+	observationRecord := releasecontrol.ObservationRecord{
+		Provider:         "offline",
+		Repo:             "dogfood/offline",
+		RunID:            "12345",
+		RunURL:           "https://offline/runs/12345",
+		DeploymentStatus: releasecontrol.StatusPassed,
+		Status:           releasecontrol.StatusPassed,
+		ObservedAt:       releaseNow,
+	}
+	if err := store.WriteArtifact(scenario.DemandID, artifacts.ObservationFile, releasecontrol.RenderObservation(scenario.Title, observationRecord)); err != nil {
+		return result, fmt.Errorf("write operator dogfood observation: %w", err)
+	}
+	if err := advanceDogfoodState(store, scenario.DemandID, workflow.Closeout); err != nil {
+		return result, err
+	}
+	result.Steps = append(result.Steps, OperatorStep{Name: "observation", State: workflow.Closeout, Output: "offline observation passed"})
 	if err := runStage("closeout", demandflow.StageCloseout, nil); err != nil {
 		return result, err
 	}

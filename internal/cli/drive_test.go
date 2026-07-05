@@ -173,3 +173,27 @@ func TestDriveUsesBackendDemandDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestDriveStopsAtDeployment(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Deployment)
+
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		t.Fatal("runner should not be called for deployment")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"drive", "--root", root, "--demand", "add-coupon-check"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("drive returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Trigger deployment") {
+		t.Fatalf("drive output missing Trigger deployment:\n%s", got)
+	}
+	if !strings.Contains(got, "Stopped") {
+		t.Fatalf("drive output missing Stopped:\n%s", got)
+	}
+}

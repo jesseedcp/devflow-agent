@@ -433,3 +433,27 @@ func TestConsoleShowsReleaseControl(t *testing.T) {
 		t.Fatalf("console output missing Release:\n%s", got)
 	}
 }
+
+func TestConsoleRunNextDoesNotAutoDeploy(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Deployment)
+
+	var called bool
+	old := runConsoleDemandStage
+	defer func() { runConsoleDemandStage = old }()
+	runConsoleDemandStage = func(args []string, stdout io.Writer, stderr io.Writer) error {
+		called = true
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", "add-coupon-check", "--run-next"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console --run-next returned error: %v", err)
+	}
+	if called {
+		t.Fatal("runner was called for deployment")
+	}
+	if !strings.Contains(stdout.String(), "next action is not runner-safe: Trigger deployment") {
+		t.Fatalf("stdout = %q, want runner-safe refusal", stdout.String())
+	}
+}

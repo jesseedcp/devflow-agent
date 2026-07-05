@@ -15,6 +15,8 @@ func TestAdvanceHappyPath(t *testing.T) {
 		Implementation,
 		MRReview,
 		Verification,
+		Deployment,
+		Observation,
 		Closeout,
 		Completed,
 	}

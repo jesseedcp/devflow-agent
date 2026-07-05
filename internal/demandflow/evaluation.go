@@ -414,12 +414,24 @@ func evaluateObservation(root, demandID string) StageEvaluation {
 func evaluateRollback(root, demandID string) StageEvaluation {
 	text := readEvaluationArtifact(root, demandID, artifacts.RollbackFile)
 	record := releasecontrol.ParseRollback(text)
+	observationText := readEvaluationArtifact(root, demandID, artifacts.ObservationFile)
+	observation := releasecontrol.ParseObservation(observationText)
 	decided := record.Decision == releasecontrol.RollbackConfirmed ||
 		record.Decision == releasecontrol.RollbackRiskAccepted ||
 		record.Decision == releasecontrol.RollbackRedeployRequired
 	checks := []EvaluationCheck{
 		requiredContentCheck("rollback.exists", "rollback.md has content", text, "warning"),
-		statusCheck("rollback.decision", "rollback decision recorded when needed", decided, "warning", string(record.Decision)),
+	}
+	if observation.Status == releasecontrol.StatusPassed {
+		checks = append(checks, EvaluationCheck{
+			ID:       "rollback.decision",
+			Label:    "rollback decision recorded when needed",
+			Status:   EvaluationNotApplicable,
+			Severity: "warning",
+			Evidence: "observation passed; no rollback needed",
+		})
+	} else {
+		checks = append(checks, statusCheck("rollback.decision", "rollback decision recorded when needed", decided, "warning", string(record.Decision)))
 	}
 	return buildStageEvaluation(StageRollback, checks)
 }

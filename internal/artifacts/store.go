@@ -102,6 +102,15 @@ func (s Store) CreateDemand(demand Demand) error {
 	if err := writeTextFile(filepath.Join(tempDir, VerificationFile), templates.Verification(demand.Title)); err != nil {
 		return fmt.Errorf("write verification template: %w", err)
 	}
+	if err := writeTextFile(filepath.Join(tempDir, DeploymentFile), templates.Deployment(demand.Title)); err != nil {
+		return fmt.Errorf("write deployment template: %w", err)
+	}
+	if err := writeTextFile(filepath.Join(tempDir, ObservationFile), templates.Observation(demand.Title)); err != nil {
+		return fmt.Errorf("write observation template: %w", err)
+	}
+	if err := writeTextFile(filepath.Join(tempDir, RollbackFile), templates.Rollback(demand.Title)); err != nil {
+		return fmt.Errorf("write rollback template: %w", err)
+	}
 	if err := writeTextFile(filepath.Join(tempDir, CloseoutFile), templates.Closeout(demand.Title)); err != nil {
 		return fmt.Errorf("write closeout template: %w", err)
 	}
@@ -570,6 +579,9 @@ func validateAppendableArtifactName(name string) error {
 		PlanFile,
 		ProgressFile,
 		VerificationFile,
+		DeploymentFile,
+		ObservationFile,
+		RollbackFile,
 		CloseoutFile,
 		MemoryCandidatesFile,
 		CloseoutRawLogFile,

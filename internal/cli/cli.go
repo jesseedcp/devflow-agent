@@ -65,6 +65,8 @@ Usage:
   devflow console [--demand <id>] [--run-next]
   devflow drive --demand <id> [--dry-run]
   devflow observe refresh --demand <id>
+  devflow rollback plan --demand <id> --trigger <text> --impact <text> --recommendation <text>
+  devflow rollback confirm --demand <id> --decision <rollback_confirmed|risk_accepted|redeploy_required> --by <name> --summary <text>
   devflow evidence add --demand <id> --type <api|log|monitor|manual|link> --criterion <text> --summary <text>
   devflow evidence fetch --demand <id> --type <api|link> --criterion <text> --url <url>
   devflow evidence list --demand <id>
@@ -198,6 +200,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runDeploy(args[1:], stdout, stderr)
 	case "observe":
 		return runObserve(args[1:], stdout, stderr)
+	case "rollback":
+		return runRollback(args[1:], stdout, stderr)
 	case "mr":
 		return runMR(args[1:], stdout, stderr)
 	case "change-request", "cr":

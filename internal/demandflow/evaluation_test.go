@@ -173,6 +173,9 @@ func TestEvaluateCloseoutWarnsWithoutMemoryCandidates(t *testing.T) {
 	if err := store.WriteArtifact(demand.ID, artifacts.MemoryCandidatesFile, "# Memory\n\n"); err != nil {
 		t.Fatalf("WriteArtifact returned error: %v", err)
 	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ObservationFile, "# Observation\n\nStatus: `passed`\n"); err != nil {
+		t.Fatalf("WriteArtifact observation returned error: %v", err)
+	}
 
 	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
 	if err != nil {
@@ -635,5 +638,172 @@ func TestEvaluateCloseoutPassesWhenMetricsReportExists(t *testing.T) {
 	check := findEvaluationCheck(t, got, "closeout.metrics_report")
 	if check.Status != EvaluationPass {
 		t.Fatalf("metrics check status = %s, want pass", check.Status)
+	}
+}
+
+func setupPassingCloseout(t *testing.T, store artifacts.Store, demandID string) {
+	t.Helper()
+	if err := store.WriteArtifact(demandID, artifacts.CloseoutFile, "# Closeout\n\n## 需求结果\n\n- shipped\n"); err != nil {
+		t.Fatalf("WriteArtifact closeout returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demandID, artifacts.MemoryCandidatesFile, "# Memory Candidates\n\n- reused tenant validation rule\n"); err != nil {
+		t.Fatalf("WriteArtifact memory returned error: %v", err)
+	}
+	wikiText := "# Wiki Candidates: closeout\n\n## Stable Business Knowledge\n\n- Active membership gates coupons. (source: memory-candidates.md) [promoted: .devflow/wiki/coupon-rule.md]\n\n## Process Improvement Candidates\n\nNo process improvement candidates distilled yet.\n\n## Archive Only\n\nNo archive-only material distilled yet.\n"
+	if err := store.WriteArtifact(demandID, artifacts.WikiCandidatesFile, wikiText); err != nil {
+		t.Fatalf("WriteArtifact wiki returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demandID, artifacts.MetricsFile, "# Devflow Metrics\n\n## Summary\n\n- Demand count: 1\n"); err != nil {
+		t.Fatalf("WriteArtifact metrics returned error: %v", err)
+	}
+}
+
+func TestEvaluateDeploymentPassesWithPassedArtifact(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-deploy-pass", Title: "Deploy pass", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.DeploymentFile, "# Deployment\n\nStatus: `passed`\n\nRun ID: `12345`\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageDeployment)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationPass {
+		t.Fatalf("deployment status = %s, want pass; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateDeploymentFailsWithFailedArtifact(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-deploy-fail", Title: "Deploy fail", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.DeploymentFile, "# Deployment\n\nStatus: `failed`\n\nRun ID: `12345`\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageDeployment)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationFail {
+		t.Fatalf("deployment status = %s, want fail; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateObservationPassesWithPassedArtifact(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-obs-pass", Title: "Obs pass", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ObservationFile, "# Observation\n\nStatus: `passed`\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageObservation)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationPass {
+		t.Fatalf("observation status = %s, want pass; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateRollbackWarnsWhenUndecided(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-rollback-pending", Title: "Rollback pending", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageRollback)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationWarning {
+		t.Fatalf("rollback status = %s, want warning; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateCloseoutBlocksWhenObservationMissing(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-closeout-block", Title: "Block", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	setupPassingCloseout(t, store, demand.ID)
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationFail {
+		t.Fatalf("closeout status = %s, want fail; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateCloseoutPassesWhenObservationPassed(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-closeout-obs", Title: "Obs closeout", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	setupPassingCloseout(t, store, demand.ID)
+	if err := store.WriteArtifact(demand.ID, artifacts.ObservationFile, "# Observation\n\nStatus: `passed`\n"); err != nil {
+		t.Fatalf("WriteArtifact observation returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationPass {
+		t.Fatalf("closeout status = %s, want pass; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateCloseoutPassesWhenRiskAccepted(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-closeout-risk", Title: "Risk closeout", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	setupPassingCloseout(t, store, demand.ID)
+	if err := store.WriteArtifact(demand.ID, artifacts.RollbackFile, "# Rollback\n\nDecision: `risk_accepted`\n"); err != nil {
+		t.Fatalf("WriteArtifact rollback returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationPass {
+		t.Fatalf("closeout status = %s, want pass; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
+	}
+}
+
+func TestEvaluateCloseoutFailsWhenRollbackConfirmed(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "eval-closeout-confirmed", Title: "Confirmed closeout", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	setupPassingCloseout(t, store, demand.ID)
+	if err := store.WriteArtifact(demand.ID, artifacts.RollbackFile, "# Rollback\n\nDecision: `rollback_confirmed`\n"); err != nil {
+		t.Fatalf("WriteArtifact rollback returned error: %v", err)
+	}
+	eval, err := EvaluateDemand(root, demand.ID, StageCloseout)
+	if err != nil {
+		t.Fatalf("EvaluateDemand returned error: %v", err)
+	}
+	if eval.Stages[0].Status != EvaluationFail {
+		t.Fatalf("closeout status = %s, want fail; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
 	}
 }

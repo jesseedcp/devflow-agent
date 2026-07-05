@@ -172,3 +172,26 @@ func TestEvaluateCommandPrintsWikiDecisionWarningEvidence(t *testing.T) {
 		t.Fatalf("evaluate output missing wiki decision evidence:\n%s", got)
 	}
 }
+
+func TestEvaluateCommandPrintsMetricsReportWarning(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "metrics-eval-cli", Title: "Metrics eval CLI", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.CloseoutFile, "# Closeout\n\n## 需求结果\n\n- shipped\n"); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := Run([]string{"evaluate", "--root", root, "--demand", demand.ID, "--stage", "closeout"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("evaluate returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "closeout.metrics_report") {
+		t.Fatalf("evaluate output missing closeout.metrics_report:\n%s", got)
+	}
+	if !strings.Contains(got, "devflow metrics report") {
+		t.Fatalf("evaluate output missing metrics report guidance:\n%s", got)
+	}
+}

@@ -339,6 +339,26 @@ devflow evidence list --demand add-coupon-eligibility-check
 
 Acceptance evidence is local and reviewable. v0.3 can fetch HTTP/API and link reachability evidence, redacts common secrets before writing `verification.md` or `events.jsonl`, and keeps `evidence add` for manual records. Evidence does not auto-confirm verification.
 
+### Release Control Loop
+
+After verification is confirmed, Devflow enters `deployment` instead of `closeout`.
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow deploy trigger --demand add-coupon-eligibility-check --provider github --github-repo "owner/repo" --workflow "release.yml" --ref "main"
+devflow deploy status --demand add-coupon-eligibility-check --provider github --github-repo "owner/repo" --workflow "release.yml" --ref "main"
+devflow observe refresh --demand add-coupon-eligibility-check
+```
+
+If deployment or observation fails, record a release decision:
+
+```powershell
+devflow rollback plan --demand add-coupon-eligibility-check --trigger "deployment failed" --impact "release blocked" --recommendation "redeploy after fix"
+devflow rollback confirm --demand add-coupon-eligibility-check --decision redeploy_required --by "<name>" --summary "<summary>"
+```
+
+`v0.9.0` records rollback decisions only. It does not execute rollback.
+
 ### Implementation Review
 
 After implementation and verification evidence exist, run:

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
 func TestWikiDistillWritesArtifactsAndAppendsEvent(t *testing.T) {
@@ -314,5 +315,73 @@ func TestWikiPromoteRequiresNameAndBy(t *testing.T) {
 		"")
 	if err := Run([]string{"wiki", "promote", "--root", root, "--demand", demand.ID, "--candidate", "1", "--name", "ok-name"}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 		t.Fatal("expected error when --by is missing")
+	}
+}
+func TestWikiPromoteRequiresCandidateNameAndBy(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "coupon-wiki", Title: "Coupon wiki", Description: "demo", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, "# Wiki Candidates: Coupon wiki\n\n## Stable Business Knowledge\n\n- Active membership gates coupon claims.\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"wiki", "promote", "--root", root, "--demand", demand.ID}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("wiki promote returned nil error for missing flags")
+	}
+	for _, want := range []string{"--candidate", "--name", "--by"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q missing %q", err.Error(), want)
+		}
+	}
+}
+
+func TestWikiRejectRequiresCandidateByAndReason(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "coupon-wiki", Title: "Coupon wiki", Description: "demo", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, "# Wiki Candidates: Coupon wiki\n\n## Process Improvement Candidates\n\n- Review comments should be classified.\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"wiki", "reject", "--root", root, "--demand", demand.ID}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("wiki reject returned nil error for missing flags")
+	}
+	for _, want := range []string{"--candidate", "--by", "--reason"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q missing %q", err.Error(), want)
+		}
+	}
+}
+
+func TestWikiPromoteUnsafeNameExplainsSlugRules(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "coupon-wiki", Title: "Coupon wiki", Description: "demo", State: string(workflow.Closeout)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.WikiCandidatesFile, "# Wiki Candidates: Coupon wiki\n\n## Stable Business Knowledge\n\n- Active membership gates coupon claims.\n"); err != nil {
+		t.Fatalf("WriteArtifact returned error: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"wiki", "promote", "--root", root, "--demand", demand.ID, "--candidate", "1", "--name", "..\\secret", "--by", "qa"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("wiki promote returned nil error for unsafe name")
+	}
+	for _, want := range []string{"lowercase", "digits", "hyphen", "underscore"} {
+		if !strings.Contains(strings.ToLower(err.Error()), want) {
+			t.Fatalf("error %q missing slug rule %q", err.Error(), want)
+		}
 	}
 }

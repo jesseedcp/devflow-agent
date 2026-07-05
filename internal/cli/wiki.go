@@ -125,17 +125,14 @@ func runWikiPromote(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 	demandID = strings.TrimSpace(demandID)
-	candidateIndex, err := strconv.Atoi(strings.TrimSpace(candidateRaw))
-	if err != nil || candidateIndex < 1 {
-		return fmt.Errorf("--candidate must be a positive integer")
-	}
+	candidateIndex, _ := strconv.Atoi(strings.TrimSpace(candidateRaw))
 	name = strings.TrimSpace(name)
 	by = strings.TrimSpace(by)
-	if name == "" {
-		return fmt.Errorf("--name is required")
+	if candidateIndex < 1 || name == "" || by == "" {
+		return fmt.Errorf("wiki promote requires --candidate <n>, --name <slug>, and --by <name>")
 	}
-	if by == "" {
-		return fmt.Errorf("--by is required")
+	if err := wiki.ValidateSlug(name); err != nil {
+		return fmt.Errorf("invalid wiki entry name %q: use lowercase letters, digits, hyphen, or underscore only: %w", name, err)
 	}
 	root = normalizedRoot(root)
 	store := artifacts.NewStore(root)
@@ -205,17 +202,11 @@ func runWikiReject(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 	demandID = strings.TrimSpace(demandID)
-	candidateIndex, err := strconv.Atoi(strings.TrimSpace(candidateRaw))
-	if err != nil || candidateIndex < 1 {
-		return fmt.Errorf("--candidate must be a positive integer")
-	}
+	candidateIndex, _ := strconv.Atoi(strings.TrimSpace(candidateRaw))
 	by = strings.TrimSpace(by)
 	reason = strings.TrimSpace(reason)
-	if by == "" {
-		return fmt.Errorf("--by is required")
-	}
-	if reason == "" {
-		return fmt.Errorf("--reason is required")
+	if candidateIndex < 1 || by == "" || reason == "" {
+		return fmt.Errorf("wiki reject requires --candidate <n>, --by <name>, and --reason <text>")
 	}
 	root = normalizedRoot(root)
 	store := artifacts.NewStore(root)

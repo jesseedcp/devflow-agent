@@ -162,3 +162,40 @@ func TestAdvanceAllowsMRReviewBackToImplementation(t *testing.T) {
 		t.Fatalf("state after advance = %s, want %s", next, Implementation)
 	}
 }
+
+func TestReleaseControlTransitions(t *testing.T) {
+	cases := []struct {
+		from State
+		to   State
+	}{
+		{Verification, Deployment},
+		{Deployment, Observation},
+		{Deployment, BlockedNeedReleaseDecision},
+		{Observation, Closeout},
+		{Observation, BlockedNeedReleaseDecision},
+		{BlockedNeedReleaseDecision, Deployment},
+		{BlockedNeedReleaseDecision, Closeout},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.from)+"_to_"+string(tc.to), func(t *testing.T) {
+			got, err := Advance(tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("Advance returned error: %v", err)
+			}
+			if got != tc.to {
+				t.Fatalf("Advance = %s, want %s", got, tc.to)
+			}
+		})
+	}
+}
+
+func TestReleaseDecisionRequiresHumanConfirmation(t *testing.T) {
+	if !RequiresHumanConfirmation(BlockedNeedReleaseDecision) {
+		t.Fatalf("%s should require human confirmation", BlockedNeedReleaseDecision)
+	}
+	for _, state := range []State{Deployment, Observation} {
+		if RequiresHumanConfirmation(state) {
+			t.Fatalf("%s should be an evidence gate, not a generic human confirmation gate", state)
+		}
+	}
+}

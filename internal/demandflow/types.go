@@ -17,12 +17,15 @@ const (
 	StageImplementation Stage = "implementation"
 	StageMRReview       Stage = "mr-review"
 	StageVerification   Stage = "verification"
+	StageDeployment     Stage = "deployment"
+	StageObservation    Stage = "observation"
+	StageRollback       Stage = "rollback"
 	StageCloseout       Stage = "closeout"
 )
 
 func ParseStage(value string) (Stage, error) {
 	switch Stage(value) {
-	case StageRequirements, StagePlan, StageImplementation, StageMRReview, StageVerification, StageCloseout:
+	case StageRequirements, StagePlan, StageImplementation, StageMRReview, StageVerification, StageDeployment, StageObservation, StageRollback, StageCloseout:
 		return Stage(value), nil
 	default:
 		return "", fmt.Errorf("unsupported stage %q", value)

@@ -64,3 +64,7 @@ func applyDemandMetrics(out *ProjectMetrics, demand DemandMetrics) {
 	out.TotalWikiPromoted += demand.WikiPromoted
 	out.TotalWikiRejected += demand.WikiRejected
 }
+
+func ApplyForCLI(out *ProjectMetrics, demand DemandMetrics) {
+	applyDemandMetrics(out, demand)
+}

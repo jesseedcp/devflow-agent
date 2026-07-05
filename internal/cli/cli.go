@@ -165,6 +165,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runMemory(args[1:], stdout, stderr)
 	case "wiki":
 		return runWiki(args[1:], stdout, stderr)
+	case "metrics":
+		return runMetrics(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(args[1:], stdout)
 	case "next":

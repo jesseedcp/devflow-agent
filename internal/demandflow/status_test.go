@@ -23,7 +23,7 @@ func TestNextActionsMapStatesToCommands(t *testing.T) {
 		{workflow.PlanDrafting, "Draft plan", "devflow run --demand add-coupon-check --stage plan"},
 		{workflow.FailedQualityGate, "Retry implementation", "devflow run --demand add-coupon-check --stage implementation"},
 		{workflow.MRReview, "Check MR review", "devflow run --demand add-coupon-check --stage mr-review"},
-		{workflow.Completed, "No action", ""},
+		{workflow.Completed, "Generate metrics", "devflow metrics report"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.state), func(t *testing.T) {

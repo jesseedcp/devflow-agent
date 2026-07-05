@@ -59,7 +59,7 @@ func TestStatusRequiresDemand(t *testing.T) {
 	}
 }
 
-func TestNextForCompletedDemandPrintsNoCommand(t *testing.T) {
+func TestNextForCompletedDemandPrintsMetricsReport(t *testing.T) {
 	root := t.TempDir()
 	createDemandAtState(t, root, workflow.Completed)
 
@@ -67,8 +67,10 @@ func TestNextForCompletedDemandPrintsNoCommand(t *testing.T) {
 	if err := Run([]string{"next", "--root", root, "--demand", "add-coupon-check"}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("next: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "No next command for add-coupon-check in state completed") {
-		t.Fatalf("stdout = %q", stdout.String())
+	got := strings.TrimSpace(stdout.String())
+	want := "devflow metrics report --demand add-coupon-check"
+	if got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 }
 
@@ -129,6 +131,9 @@ func TestRunStatusPrintsWorkspaceSummary(t *testing.T) {
 	}
 	if strings.Contains(got, "Next actions:") {
 		t.Fatalf("status output printed duplicate legacy Next actions section:\n%s", got)
+	}
+	if !strings.Contains(got, "Metrics: human=1 review_returns=0 verification=1/1 acceptance=0/0/0 wiki=0/0") {
+		t.Fatalf("status output missing metrics summary:\n%s", got)
 	}
 }
 

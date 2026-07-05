@@ -11,6 +11,7 @@ import (
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/memory"
+	"github.com/jesseedcp/devflow-agent/internal/metrics"
 	"github.com/jesseedcp/devflow-agent/internal/templates"
 	"github.com/jesseedcp/devflow-agent/internal/wiki"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
@@ -28,6 +29,7 @@ type WorkspaceSummary struct {
 	CIGate       CIGateSummary
 	Memory       MemorySummary
 	Wiki         WikiSummary
+	Metrics      MetricsSummary
 	Actions      []NextAction
 	Attention    string
 }
@@ -92,6 +94,18 @@ type WikiSummary struct {
 	Rejected int
 }
 
+type MetricsSummary struct {
+	HumanConfirmations int
+	ReviewReturns      int
+	VerificationRuns   int
+	VerificationPasses int
+	AcceptancePasses   int
+	AcceptanceFailures int
+	AcceptanceBlocked  int
+	WikiPromoted       int
+	WikiRejected       int
+}
+
 func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	store := artifacts.NewStore(root)
 	demand, err := store.LoadDemand(demandID)
@@ -113,6 +127,7 @@ func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	summary.CIGate = summarizeCIGate(events)
 	summary.Memory = summarizeMemory(root, demandID)
 	summary.Wiki = summarizeWiki(root, demandID)
+	summary.Metrics = summarizeMetrics(demand, events)
 	summary.Stages = summarizeStages(summary.State, events, summary.Verification, summary.MergeRequest)
 	summary.Artifacts = summarizeArtifacts(demandDir, demand, eventsErr, summary)
 	summary.Attention = workspaceAttention(summary, eventsErr)
@@ -212,6 +227,21 @@ func wikiNextActions(summary WorkspaceSummary, idArg string) []NextAction {
 		}
 	default:
 		return nil
+	}
+}
+
+func summarizeMetrics(demand artifacts.Demand, events []artifacts.Event) MetricsSummary {
+	collected := metrics.CollectDemand(demand, events)
+	return MetricsSummary{
+		HumanConfirmations: collected.HumanConfirmations,
+		ReviewReturns:      collected.ReviewReturns,
+		VerificationRuns:   collected.VerificationRuns,
+		VerificationPasses: collected.VerificationPasses,
+		AcceptancePasses:   collected.AcceptancePasses,
+		AcceptanceFailures: collected.AcceptanceFailures,
+		AcceptanceBlocked:  collected.AcceptanceBlocked,
+		WikiPromoted:       collected.WikiPromoted,
+		WikiRejected:       collected.WikiRejected,
 	}
 }
 

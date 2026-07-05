@@ -394,3 +394,29 @@ func TestConsoleDetailPrintsWikiCounts(t *testing.T) {
 		t.Fatalf("console output missing wiki counts:\n%s", got)
 	}
 }
+
+func TestConsoleDetailPrintsMetrics(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "metrics-console", Title: "Metrics console", Description: "Show metrics", Source: "test", State: string(workflow.Verification)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime(), Type: "stage.confirmed", Message: "requirements confirmed", Data: map[string]string{"stage": "requirements"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime(), Type: "verification.recorded", Message: "verification pass", Data: map[string]string{"status": "pass", "command": "go test ./..."}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Time: fixedConsoleCLITime(), Type: "verification.evidence_recorded", Message: "manual evidence", Data: map[string]string{"status": "pass", "type": "api", "criterion": "Inactive users are blocked", "summary": "COUPON_USER_INACTIVE"}}); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := Run([]string{"console", "--root", root, "--demand", demand.ID}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("console returned error: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Metrics: human=1 review_returns=0 verification=1/1 acceptance=1/0/0 wiki=0/0") {
+		t.Fatalf("console output missing metrics summary:\n%s", got)
+	}
+}

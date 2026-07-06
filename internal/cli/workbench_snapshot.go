@@ -53,6 +53,7 @@ func renderWorkbenchSnapshot(opts workbenchOptions) (string, error) {
 		ci = detail.Workspace.CIGate.Repo + "#" + detail.Workspace.CIGate.PR + " " + ci
 	}
 	fmt.Fprintf(&builder, "  %-14s %s\n", "ci", ci)
+	fmt.Fprintln(&builder, demandflow.ReleaseLine(detail.Workspace))
 	fmt.Fprintln(&builder, "Quality:")
 	evaluation, err := demandflow.EvaluateDemand(opts.root, detail.Workspace.Demand.ID)
 	if err != nil {

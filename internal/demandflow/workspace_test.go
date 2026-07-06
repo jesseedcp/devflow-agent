@@ -438,3 +438,55 @@ func TestInspectWorkspaceIncludesMetricsArtifact(t *testing.T) {
 		t.Fatalf("workspace artifacts missing %s: %#v", artifacts.MetricsFile, summary.Artifacts)
 	}
 }
+
+func TestWorkspaceReleaseControlNextActions(t *testing.T) {
+	states := []struct {
+		state       workflow.State
+		label       string
+		commandPart string
+	}{
+		{workflow.Deployment, "Trigger deployment", "devflow deploy trigger --demand add-coupon-check"},
+		{workflow.Observation, "Refresh observation", "devflow observe refresh --demand add-coupon-check"},
+		{workflow.BlockedNeedReleaseDecision, "Record rollback decision", "devflow rollback confirm --demand add-coupon-check"},
+	}
+	for _, tc := range states {
+		t.Run(string(tc.state), func(t *testing.T) {
+			root := t.TempDir()
+			store := artifacts.NewStore(root)
+			demand := artifacts.Demand{ID: "add-coupon-check", Title: "coupon flow", Description: "release control", Source: "test", State: string(tc.state)}
+			if err := store.CreateDemand(demand); err != nil {
+				t.Fatalf("CreateDemand returned error: %v", err)
+			}
+			summary, err := InspectWorkspace(root, demand.ID)
+			if err != nil {
+				t.Fatalf("InspectWorkspace returned error: %v", err)
+			}
+			if len(summary.Actions) == 0 {
+				t.Fatalf("no next actions for state %q", tc.state)
+			}
+			if summary.Actions[0].Label != tc.label {
+				t.Fatalf("Actions[0].Label = %q, want %q", summary.Actions[0].Label, tc.label)
+			}
+			if !strings.Contains(summary.Actions[0].Command, tc.commandPart) {
+				t.Fatalf("Actions[0].Command = %q, want to contain %q", summary.Actions[0].Command, tc.commandPart)
+			}
+			var foundDeployment, foundObservation, foundRollback bool
+			for _, artifact := range summary.Artifacts {
+				switch artifact.Name {
+				case artifacts.DeploymentFile:
+					foundDeployment = true
+				case artifacts.ObservationFile:
+					foundObservation = true
+				case artifacts.RollbackFile:
+					foundRollback = true
+				}
+			}
+			if !foundDeployment || !foundObservation || !foundRollback {
+				t.Fatalf("artifacts missing release files: deployment=%v observation=%v rollback=%v", foundDeployment, foundObservation, foundRollback)
+			}
+			if !strings.Contains(ReleaseLine(summary), "Release:") {
+				t.Fatalf("ReleaseLine missing Release: prefix: %q", ReleaseLine(summary))
+			}
+		})
+	}
+}

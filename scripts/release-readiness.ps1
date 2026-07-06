@@ -633,6 +633,106 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         if ($evalJoined -notmatch 'closeout\.wiki_decisions') { throw "closeout.wiki_decisions check missing" }
         if ($evalJoined -notmatch 'closeout\.wiki_decisions\s+pass') { throw "closeout.wiki_decisions should pass after all candidates decided" }
     }
+    Invoke-Step "release control smoke" {
+        $releaseRoot = Join-Path $readinessRoot 'release-control-smoke'
+        New-Item -ItemType Directory -Force $releaseRoot | Out-Null
+
+        .\dist\devflow-windows-amd64.exe start --root $releaseRoot --title "Coupon release"
+        if ($LASTEXITCODE -ne 0) { throw "devflow start failed for release control smoke" }
+
+        $demandDir = Join-Path $releaseRoot '.devflow\demands\coupon-release'
+        $demandFile = Join-Path $demandDir 'demand.json'
+        $demandJson = Get-Content -Raw -LiteralPath $demandFile
+        $demandJson = $demandJson -replace '"state":\s*"[^"]*"', '"state": "deployment"'
+        [System.IO.File]::WriteAllText($demandFile, $demandJson)
+
+        $port = Get-Random -Minimum 20000 -Maximum 50000
+        $prefix = "http://127.0.0.1:$port/"
+        $readyFile = New-LocalServerReadyFile 'release-control'
+        $serverJob = Start-Job -ScriptBlock {
+            param($Prefix, $ReadyFile)
+            $listener = [System.Net.HttpListener]::new()
+            $listener.Prefixes.Add($Prefix)
+            $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyFile, 'ready')
+            try {
+                for ($i = 0; $i -lt 2; $i++) {
+                    $context = $listener.GetContext()
+                    if ($context.Request.HttpMethod -eq 'POST') {
+                        $context.Response.StatusCode = 204
+                        $context.Response.ContentLength64 = 0
+                        $context.Response.Close()
+                    } else {
+                        $body = '{"workflow_runs":[{"id":123,"html_url":"https://github.example/owner/repo/actions/runs/123","head_sha":"abc123","head_branch":"main","status":"completed","conclusion":"success","created_at":"2026-07-05T10:00:00Z","updated_at":"2026-07-05T10:02:00Z"}]}'
+                        $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+                        $context.Response.StatusCode = 200
+                        $context.Response.ContentType = 'application/json; charset=utf-8'
+                        $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                        $context.Response.OutputStream.Close()
+                    }
+                }
+            } finally {
+                $listener.Stop()
+                $listener.Close()
+            }
+        } -ArgumentList $prefix, $readyFile
+        try {
+            Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
+            $deployOutput = Invoke-LocalServerCommand { .\dist\devflow-windows-amd64.exe deploy trigger --root $releaseRoot --demand coupon-release --provider github --github-repo owner/repo --workflow release.yml --ref main --github-base-url $prefix.TrimEnd('/') --github-token fake }
+            $deployOutput | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "deploy trigger failed" }
+
+            .\dist\devflow-windows-amd64.exe observe refresh --root $releaseRoot --demand coupon-release
+            if ($LASTEXITCODE -ne 0) { throw "observe refresh failed" }
+
+            .\dist\devflow-windows-amd64.exe evaluate --root $releaseRoot --demand coupon-release --stage deployment --strict
+            if ($LASTEXITCODE -ne 0) { throw "evaluate deployment failed" }
+
+            .\dist\devflow-windows-amd64.exe evaluate --root $releaseRoot --demand coupon-release --stage observation --strict
+            if ($LASTEXITCODE -ne 0) { throw "evaluate observation failed" }
+
+            $statusOutput = .\dist\devflow-windows-amd64.exe status --root $releaseRoot --demand coupon-release
+            if ($LASTEXITCODE -ne 0) { throw "status failed" }
+            $statusOutput | Out-Host
+
+            $workbenchOutput = .\dist\devflow-windows-amd64.exe workbench --root $releaseRoot --snapshot --demand coupon-release
+            if ($LASTEXITCODE -ne 0) { throw "workbench snapshot failed" }
+            $workbenchOutput | Out-Host
+
+            $deploymentText = Get-Content -Raw -LiteralPath (Join-Path $demandDir 'deployment.md')
+            if ($deploymentText -notmatch 'Status: `passed`') { throw "deployment.md should record passed status" }
+            $observationText = Get-Content -Raw -LiteralPath (Join-Path $demandDir 'observation.md')
+            if ($observationText -notmatch 'Status: `passed`') { throw "observation.md should record passed status" }
+            $statusText = $statusOutput -join [Environment]::NewLine
+            if ($statusText -notmatch 'Release:') { throw "status should show release line" }
+            $workbenchText = $workbenchOutput -join [Environment]::NewLine
+            if ($workbenchText -notmatch 'Release:') { throw "workbench snapshot should show release line" }
+        } finally {
+            if ($serverJob.State -eq 'Running') { Stop-Job $serverJob }
+            Remove-Job $serverJob -Force
+        }
+    }
+    Invoke-Step "release rollback smoke" {
+        $rollbackRoot = Join-Path $readinessRoot 'release-rollback-smoke'
+        New-Item -ItemType Directory -Force $rollbackRoot | Out-Null
+
+        .\dist\devflow-windows-amd64.exe start --root $rollbackRoot --title "Coupon rollback"
+        if ($LASTEXITCODE -ne 0) { throw "devflow start failed for rollback smoke" }
+
+        $demandDir = Join-Path $rollbackRoot '.devflow\demands\coupon-rollback'
+        $demandFile = Join-Path $demandDir 'demand.json'
+        $demandJson = Get-Content -Raw -LiteralPath $demandFile
+        $demandJson = $demandJson -replace '"state":\s*"[^"]*"', '"state": "blocked_need_release_decision"'
+        [System.IO.File]::WriteAllText($demandFile, $demandJson)
+
+        .\dist\devflow-windows-amd64.exe rollback plan --root $rollbackRoot --demand coupon-rollback --trigger "deployment failed" --impact "release blocked" --recommendation "redeploy after fix"
+        if ($LASTEXITCODE -ne 0) { throw "rollback plan failed" }
+        .\dist\devflow-windows-amd64.exe rollback confirm --root $rollbackRoot --demand coupon-rollback --decision risk_accepted --by release --summary "accepted for offline smoke"
+        if ($LASTEXITCODE -ne 0) { throw "rollback confirm failed" }
+
+        $rollbackText = Get-Content -Raw -LiteralPath (Join-Path $demandDir 'rollback.md')
+        if ($rollbackText -notmatch 'Decision: `risk_accepted`') { throw "rollback.md should record risk_accepted decision" }
+    }
     Invoke-Step "deterministic dogfood" { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'scripts\dogfood-local.ps1') -Version $Version }
     Invoke-Step "operator dogfood" { .\dist\devflow-windows-amd64.exe dogfood --operator-loop --root (Join-Path $readinessRoot 'operator-dogfood') --quality-root $repoRoot --quality-command "go test ./internal/version -count=1" }
     Invoke-Step "metrics report smoke" {

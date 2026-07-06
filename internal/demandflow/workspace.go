@@ -12,6 +12,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/memory"
 	"github.com/jesseedcp/devflow-agent/internal/metrics"
+	"github.com/jesseedcp/devflow-agent/internal/releasecontrol"
 	"github.com/jesseedcp/devflow-agent/internal/templates"
 	"github.com/jesseedcp/devflow-agent/internal/wiki"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
@@ -30,6 +31,7 @@ type WorkspaceSummary struct {
 	Memory       MemorySummary
 	Wiki         WikiSummary
 	Metrics      MetricsSummary
+	Release      ReleaseSummary
 	Actions      []NextAction
 	Attention    string
 }
@@ -106,6 +108,15 @@ type MetricsSummary struct {
 	WikiRejected       int
 }
 
+type ReleaseSummary struct {
+	DeploymentStatus  string
+	ObservationStatus string
+	RollbackDecision  string
+	RunID             string
+	RunURL            string
+	Message           string
+}
+
 func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	store := artifacts.NewStore(root)
 	demand, err := store.LoadDemand(demandID)
@@ -128,7 +139,8 @@ func InspectWorkspace(root, demandID string) (WorkspaceSummary, error) {
 	summary.Memory = summarizeMemory(root, demandID)
 	summary.Wiki = summarizeWiki(root, demandID)
 	summary.Metrics = summarizeMetrics(demand, events)
-	summary.Stages = summarizeStages(summary.State, events, summary.Verification, summary.MergeRequest)
+	summary.Release = summarizeReleaseControl(demandDir)
+	summary.Stages = summarizeStages(summary.State, events, summary.Verification, summary.MergeRequest, summary.Release)
 	summary.Artifacts = summarizeArtifacts(demandDir, demand, eventsErr, summary)
 	summary.Attention = workspaceAttention(summary, eventsErr)
 	summary.Actions = WorkspaceNextActions(summary)
@@ -196,6 +208,15 @@ func WorkspaceNextActions(summary WorkspaceSummary) []NextAction {
 		}
 		return []NextAction{{Label: "Draft verification", Command: "devflow run --demand " + idArg + " --stage verification --quality-command \"go test ./...\"", Reason: "MR review is clear and verification evidence should be generated."}}
 	}
+	if summary.State == workflow.Deployment {
+		return []NextAction{{Label: "Trigger deployment", Command: "devflow deploy trigger --demand " + idArg + " --provider github --github-repo <owner/repo> --workflow <workflow> --ref <ref>", Reason: "Verification is confirmed; release evidence is required before observation."}}
+	}
+	if summary.State == workflow.Observation {
+		return []NextAction{{Label: "Refresh observation", Command: "devflow observe refresh --demand " + idArg, Reason: "Deployment evidence must be observed before closeout."}}
+	}
+	if summary.State == workflow.BlockedNeedReleaseDecision {
+		return []NextAction{{Label: "Record rollback decision", Command: "devflow rollback confirm --demand " + idArg + " --decision <risk_accepted|redeploy_required|rollback_confirmed> --by <name> --summary <summary>", Reason: "Release evidence is not passing and needs a human decision."}}
+	}
 	return NextActions(summary.State, summary.Demand.ID)
 }
 
@@ -245,7 +266,71 @@ func summarizeMetrics(demand artifacts.Demand, events []artifacts.Event) Metrics
 	}
 }
 
-func summarizeStages(state workflow.State, events []artifacts.Event, verification VerificationSummary, mr MergeRequestSummary) []StageSummary {
+func summarizeReleaseControl(demandDir string) ReleaseSummary {
+	deploymentText := readArtifactText(filepath.Join(demandDir, artifacts.DeploymentFile)).text
+	observationText := readArtifactText(filepath.Join(demandDir, artifacts.ObservationFile)).text
+	rollbackText := readArtifactText(filepath.Join(demandDir, artifacts.RollbackFile)).text
+
+	deployment := releasecontrol.ParseDeployment(deploymentText)
+	observation := releasecontrol.ParseObservation(observationText)
+	rollback := releasecontrol.ParseRollback(rollbackText)
+
+	return ReleaseSummary{
+		DeploymentStatus:  string(deployment.Status),
+		ObservationStatus: string(observation.Status),
+		RollbackDecision:  string(rollback.Decision),
+		RunID:             deployment.RunID,
+		RunURL:            deployment.RunURL,
+		Message:           releaseMessage(deployment, observation, rollback),
+	}
+}
+
+func releaseMessage(deployment releasecontrol.DeploymentRecord, observation releasecontrol.ObservationRecord, rollback releasecontrol.RollbackRecord) string {
+	switch {
+	case rollback.Decision == releasecontrol.RollbackRiskAccepted:
+		return "risk accepted"
+	case rollback.Decision == releasecontrol.RollbackRedeployRequired:
+		return "redeploy required"
+	case rollback.Decision == releasecontrol.RollbackConfirmed:
+		return "rollback confirmed"
+	case observation.Status == releasecontrol.StatusPassed:
+		return "observation passed"
+	case deployment.Status == releasecontrol.StatusFailed:
+		return "deployment failed"
+	case deployment.Status == releasecontrol.StatusPassed:
+		return "deployment passed"
+	case deployment.Status == releasecontrol.StatusPending:
+		return "deployment pending"
+	default:
+		return "no deployment recorded"
+	}
+}
+
+func summaryStatusFromRelease(status string) string {
+	switch releasecontrol.Status(status) {
+	case releasecontrol.StatusPassed:
+		return "passed"
+	case releasecontrol.StatusFailed:
+		return "failed"
+	case releasecontrol.StatusPending:
+		return "pending"
+	case releasecontrol.StatusBlocked:
+		return "blocked"
+	case releasecontrol.StatusUnknown:
+		return "unknown"
+	}
+	return "pending"
+}
+
+func ReleaseLine(summary WorkspaceSummary) string {
+	run := summary.Release.RunID
+	if strings.TrimSpace(run) == "" {
+		run = "none"
+	}
+	return fmt.Sprintf("Release: deployment=%s observation=%s rollback=%s run=%s",
+		summary.Release.DeploymentStatus, summary.Release.ObservationStatus, summary.Release.RollbackDecision, run)
+}
+func summarizeStages(state workflow.State, events []artifacts.Event, verification VerificationSummary, mr MergeRequestSummary, release ReleaseSummary) []StageSummary {
 	confirmed := confirmedStages(events)
 	statuses := map[string]string{
 		"requirements":   "pending",
@@ -253,6 +338,9 @@ func summarizeStages(state workflow.State, events []artifacts.Event, verificatio
 		"implementation": "pending",
 		"mr-review":      "pending",
 		"verification":   "pending",
+		"deployment":     "pending",
+		"observation":    "pending",
+		"rollback":       "pending",
 		"closeout":       "pending",
 	}
 
@@ -302,6 +390,13 @@ func summarizeStages(state workflow.State, events []artifacts.Event, verificatio
 		if verification.Status == "none" {
 			statuses["verification"] = "needs_evidence"
 		}
+	case workflow.Deployment:
+		statuses["deployment"] = "needs_release"
+	case workflow.Observation:
+		statuses["deployment"] = summaryStatusFromRelease(release.DeploymentStatus)
+		statuses["observation"] = "needs_observation"
+	case workflow.BlockedNeedReleaseDecision:
+		statuses["rollback"] = "needs_decision"
 	case workflow.Closeout:
 		if !confirmed["closeout"] {
 			statuses["closeout"] = "needs_confirmation"
@@ -310,7 +405,7 @@ func summarizeStages(state workflow.State, events []artifacts.Event, verificatio
 		statuses["implementation"] = "blocked"
 	}
 
-	names := []string{"requirements", "plan", "implementation", "mr-review", "verification", "closeout"}
+	names := []string{"requirements", "plan", "implementation", "mr-review", "verification", "deployment", "observation", "rollback", "closeout"}
 	out := make([]StageSummary, 0, len(names))
 	for _, name := range names {
 		out = append(out, StageSummary{Name: name, Status: statuses[name]})
@@ -330,6 +425,9 @@ func summarizeArtifacts(demandDir string, demand artifacts.Demand, eventsErr err
 		artifacts.PlanFile,
 		artifacts.ProgressFile,
 		artifacts.VerificationFile,
+		artifacts.DeploymentFile,
+		artifacts.ObservationFile,
+		artifacts.RollbackFile,
 		artifacts.CloseoutFile,
 		artifacts.MemoryCandidatesFile,
 		artifacts.CloseoutRawLogFile,
@@ -634,6 +732,15 @@ func workspaceAttention(summary WorkspaceSummary, eventsErr error) string {
 			return "needs verification evidence"
 		}
 	}
+	if summary.State == workflow.Deployment {
+		return "needs deployment evidence"
+	}
+	if summary.State == workflow.Observation {
+		return "needs post-deploy observation"
+	}
+	if summary.State == workflow.BlockedNeedReleaseDecision {
+		return "needs release decision"
+	}
 	if summary.Memory.Pending > 0 {
 		return "memory candidates pending"
 	}
@@ -652,9 +759,9 @@ func workspaceAttention(summary WorkspaceSummary, eventsErr error) string {
 
 func workspacePriority(summary WorkspaceSummary) int {
 	switch summary.State {
-	case workflow.BlockedNeedUser, workflow.BlockedNeedPlatform, workflow.FailedQualityGate, workflow.ReturnedToRequirements, workflow.ReturnedToPlan:
+	case workflow.BlockedNeedUser, workflow.BlockedNeedPlatform, workflow.BlockedNeedReleaseDecision, workflow.FailedQualityGate, workflow.ReturnedToRequirements, workflow.ReturnedToPlan:
 		return 0
-	case workflow.MRReview, workflow.Verification, workflow.Closeout:
+	case workflow.MRReview, workflow.Verification, workflow.Deployment, workflow.Observation, workflow.Closeout:
 		return 1
 	case workflow.RequirementsReview, workflow.PlanReview, workflow.Implementation, workflow.RequirementsDrafting, workflow.PlanDrafting, workflow.Created, workflow.ContextLoaded:
 		return 2

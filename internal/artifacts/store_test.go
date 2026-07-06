@@ -1248,3 +1248,39 @@ func TestWriteArtifactAllowsMetricsFile(t *testing.T) {
 		t.Fatalf("WriteArtifact metrics returned error: %v", err)
 	}
 }
+
+func TestCreateDemandWritesReleaseControlArtifacts(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("release-control")
+
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	for _, name := range []string{DeploymentFile, ObservationFile, RollbackFile} {
+		path := filepath.Join(store.DemandDir(demand.ID), name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if !strings.Contains(string(data), demand.Title) {
+			t.Fatalf("%s template missing demand title: %q", name, string(data))
+		}
+	}
+}
+
+func TestWriteArtifactAllowsReleaseControlFiles(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	demand := testDemand("release-write")
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("CreateDemand returned error: %v", err)
+	}
+
+	for _, name := range []string{DeploymentFile, ObservationFile, RollbackFile} {
+		if err := store.WriteArtifact(demand.ID, name, "# Release\n\nstatus: pass\n"); err != nil {
+			t.Fatalf("WriteArtifact(%s) returned error: %v", name, err)
+		}
+	}
+}

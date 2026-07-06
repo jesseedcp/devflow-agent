@@ -110,7 +110,7 @@ func ConfirmationTarget(stage string) (artifact string, requiredCurrent workflow
 	case "plan":
 		return artifacts.PlanFile, workflow.PlanReview, workflow.Implementation, "plan", nil
 	case "verification":
-		return artifacts.VerificationFile, workflow.Verification, workflow.Closeout, "verification", nil
+		return artifacts.VerificationFile, workflow.Verification, workflow.Deployment, "verification", nil
 	case "closeout":
 		return artifacts.CloseoutFile, workflow.Closeout, workflow.Completed, "closeout", nil
 	default:

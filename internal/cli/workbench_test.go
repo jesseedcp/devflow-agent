@@ -356,3 +356,16 @@ func TestWorkbenchDetailToggleShowsMetrics(t *testing.T) {
 		t.Fatalf("detail view missing metrics:\n%s", view)
 	}
 }
+
+func TestWorkbenchSnapshotShowsReleaseControl(t *testing.T) {
+	root := t.TempDir()
+	createDemandAtState(t, root, workflow.Deployment)
+	var stdout bytes.Buffer
+	if err := Run([]string{"workbench", "--root", root, "--snapshot", "--demand", "add-coupon-check"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("workbench snapshot: %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Release:") {
+		t.Fatalf("workbench snapshot output missing Release:\n%s", got)
+	}
+}

@@ -154,3 +154,66 @@ func Metrics(title string) string {
 No metrics report generated yet.
 `, title)
 }
+
+func Deployment(title string) string {
+	return fmt.Sprintf(`# Deployment: %s
+
+## Summary
+
+No deployment recorded yet.
+
+## Provider
+
+## Target
+
+## Workflow Run
+
+## Commit And Branch
+
+## Environment
+
+## Status
+
+## Evidence Links
+
+## Events
+`, title)
+}
+
+func Observation(title string) string {
+	return fmt.Sprintf(`# Observation: %s
+
+## Summary
+
+No post-release observation recorded yet.
+
+## Deployment Evidence
+
+## Provider Checks
+
+## Result
+
+## Blocking Findings
+
+## Evidence Links
+`, title)
+}
+
+func Rollback(title string) string {
+	return fmt.Sprintf(`# Rollback: %s
+
+## Trigger
+
+No rollback trigger recorded yet.
+
+## Impact
+
+## Recommended Action
+
+## Manual Decision
+
+Decision: `+"`pending`"+`
+
+## Decision Evidence
+`, title)
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/quality"
+	"github.com/jesseedcp/devflow-agent/internal/releasecontrol"
 	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
@@ -171,6 +172,44 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 	if err := confirm("verification", "deterministic dogfood verification accepted"); err != nil {
 		return result, err
 	}
+	releaseNow := opts.Now()
+	deploymentRecord := releasecontrol.DeploymentRecord{
+		Provider:    "offline",
+		Repo:        "dogfood/offline",
+		WorkflowID:  "deploy.yml",
+		Ref:         "dogfood/test",
+		RunID:       "12345",
+		RunURL:      "https://offline/runs/12345",
+		Environment: "dogfood",
+		Status:      releasecontrol.StatusPassed,
+		Conclusion:  "success",
+		TriggeredBy: "devflow dogfood",
+		CreatedAt:   releaseNow,
+		UpdatedAt:   releaseNow,
+	}
+	if err := store.WriteArtifact(scenario.DemandID, artifacts.DeploymentFile, releasecontrol.RenderDeployment(scenario.Title, deploymentRecord)); err != nil {
+		return result, fmt.Errorf("write dogfood deployment: %w", err)
+	}
+	if err := advanceDogfoodState(store, scenario.DemandID, workflow.Observation); err != nil {
+		return result, err
+	}
+	result.Steps = append(result.Steps, Step{Name: "deployment", State: workflow.Observation, Output: "offline deployment passed"})
+	observationRecord := releasecontrol.ObservationRecord{
+		Provider:         "offline",
+		Repo:             "dogfood/offline",
+		RunID:            "12345",
+		RunURL:           "https://offline/runs/12345",
+		DeploymentStatus: releasecontrol.StatusPassed,
+		Status:           releasecontrol.StatusPassed,
+		ObservedAt:       releaseNow,
+	}
+	if err := store.WriteArtifact(scenario.DemandID, artifacts.ObservationFile, releasecontrol.RenderObservation(scenario.Title, observationRecord)); err != nil {
+		return result, fmt.Errorf("write dogfood observation: %w", err)
+	}
+	if err := advanceDogfoodState(store, scenario.DemandID, workflow.Closeout); err != nil {
+		return result, err
+	}
+	result.Steps = append(result.Steps, Step{Name: "observation", State: workflow.Closeout, Output: "offline observation passed"})
 	if err := runStage("closeout", demandflow.StageCloseout, nil); err != nil {
 		return result, err
 	}
@@ -226,6 +265,8 @@ func renderReport(result Result, demandDir string) string {
 		artifacts.PlanFile,
 		artifacts.ProgressFile,
 		artifacts.VerificationFile,
+		artifacts.DeploymentFile,
+		artifacts.ObservationFile,
 		artifacts.CloseoutFile,
 		artifacts.MemoryCandidatesFile,
 		artifacts.EventsFile,
@@ -233,4 +274,17 @@ func renderReport(result Result, demandDir string) string {
 		fmt.Fprintf(&b, "- `%s`\n", filepath.Join(demandDir, name))
 	}
 	return b.String()
+}
+
+func advanceDogfoodState(store artifacts.Store, demandID string, next workflow.State) error {
+	demand, err := store.LoadDemand(demandID)
+	if err != nil {
+		return fmt.Errorf("load demand for advance: %w", err)
+	}
+	advanced, err := workflow.Advance(workflow.State(demand.State), next)
+	if err != nil {
+		return err
+	}
+	demand.State = string(advanced)
+	return store.SaveDemand(demand)
 }

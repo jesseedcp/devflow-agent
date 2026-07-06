@@ -64,6 +64,9 @@ Usage:
   devflow next --demand <id>
   devflow console [--demand <id>] [--run-next]
   devflow drive --demand <id> [--dry-run]
+  devflow observe refresh --demand <id>
+  devflow rollback plan --demand <id> --trigger <text> --impact <text> --recommendation <text>
+  devflow rollback confirm --demand <id> --decision <rollback_confirmed|risk_accepted|redeploy_required> --by <name> --summary <text>
   devflow evidence add --demand <id> --type <api|log|monitor|manual|link> --criterion <text> --summary <text>
   devflow evidence fetch --demand <id> --type <api|link> --criterion <text> --url <url>
   devflow evidence list --demand <id>
@@ -74,6 +77,8 @@ Usage:
   devflow run --demand <id> --stage <requirements|plan|implementation|mr-review|verification|closeout>
   devflow review-gate --gitlab-project <project> --gitlab-mr <iid> | --github-repo <owner/repo> --github-pr <number>
   devflow ci-gate --github-repo <owner/repo> --github-pr <number>
+  devflow deploy trigger --demand <id> --provider github --github-repo <owner/repo> --workflow <workflow-id-or-file> --ref <branch-or-sha>
+  devflow deploy status --demand <id> --provider github --github-repo <owner/repo> --workflow <workflow-id-or-file> --ref <branch-or-sha>
   devflow change-request ensure --provider <gitlab|github> [--gitlab-project <project> | --github-repo <owner/repo>] --source-branch <branch> --target-branch <branch> --title <text>
   devflow mr ensure --gitlab-project <project> --source-branch <branch> --target-branch <branch> --title <text>
   devflow live-dogfood [--root <path>] [--config <path>] [--with-gitlab]
@@ -191,6 +196,12 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runReviewGate(args[1:], stdout, stderr)
 	case "ci-gate":
 		return runCIGate(args[1:], stdout, stderr)
+	case "deploy":
+		return runDeploy(args[1:], stdout, stderr)
+	case "observe":
+		return runObserve(args[1:], stdout, stderr)
+	case "rollback":
+		return runRollback(args[1:], stdout, stderr)
 	case "mr":
 		return runMR(args[1:], stdout, stderr)
 	case "change-request", "cr":

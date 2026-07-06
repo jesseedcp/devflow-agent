@@ -5,43 +5,49 @@ import "fmt"
 type State string
 
 const (
-	Created                State = "created"
-	ContextLoaded          State = "context_loaded"
-	RequirementsDrafting   State = "requirements_drafting"
-	RequirementsReview     State = "requirements_review"
-	PlanDrafting           State = "plan_drafting"
-	PlanReview             State = "plan_review"
-	Implementation         State = "implementation"
-	MRReview               State = "mr_review"
-	Verification           State = "verification"
-	Closeout               State = "closeout"
-	Completed              State = "completed"
-	BlockedNeedUser        State = "blocked_need_user"
-	BlockedNeedPlatform    State = "blocked_need_platform"
-	FailedQualityGate      State = "failed_quality_gate"
-	ReturnedToRequirements State = "returned_to_requirements"
-	ReturnedToPlan         State = "returned_to_plan"
-	Cancelled              State = "cancelled"
+	Created                    State = "created"
+	ContextLoaded              State = "context_loaded"
+	RequirementsDrafting       State = "requirements_drafting"
+	RequirementsReview         State = "requirements_review"
+	PlanDrafting               State = "plan_drafting"
+	PlanReview                 State = "plan_review"
+	Implementation             State = "implementation"
+	MRReview                   State = "mr_review"
+	Verification               State = "verification"
+	Deployment                 State = "deployment"
+	Observation                State = "observation"
+	Closeout                   State = "closeout"
+	Completed                  State = "completed"
+	BlockedNeedUser            State = "blocked_need_user"
+	BlockedNeedReleaseDecision State = "blocked_need_release_decision"
+	BlockedNeedPlatform        State = "blocked_need_platform"
+	FailedQualityGate          State = "failed_quality_gate"
+	ReturnedToRequirements     State = "returned_to_requirements"
+	ReturnedToPlan             State = "returned_to_plan"
+	Cancelled                  State = "cancelled"
 )
 
 var knownStates = map[State]struct{}{
-	Created:                {},
-	ContextLoaded:          {},
-	RequirementsDrafting:   {},
-	RequirementsReview:     {},
-	PlanDrafting:           {},
-	PlanReview:             {},
-	Implementation:         {},
-	MRReview:               {},
-	Verification:           {},
-	Closeout:               {},
-	Completed:              {},
-	BlockedNeedUser:        {},
-	BlockedNeedPlatform:    {},
-	FailedQualityGate:      {},
-	ReturnedToRequirements: {},
-	ReturnedToPlan:         {},
-	Cancelled:              {},
+	Created:                    {},
+	ContextLoaded:              {},
+	RequirementsDrafting:       {},
+	RequirementsReview:         {},
+	PlanDrafting:               {},
+	PlanReview:                 {},
+	Implementation:             {},
+	MRReview:                   {},
+	Verification:               {},
+	Deployment:                 {},
+	Observation:                {},
+	Closeout:                   {},
+	Completed:                  {},
+	BlockedNeedUser:            {},
+	BlockedNeedReleaseDecision: {},
+	BlockedNeedPlatform:        {},
+	FailedQualityGate:          {},
+	ReturnedToRequirements:     {},
+	ReturnedToPlan:             {},
+	Cancelled:                  {},
 }
 
 var allowedTransitions = map[State]map[State]struct{}{
@@ -89,10 +95,25 @@ var allowedTransitions = map[State]map[State]struct{}{
 		Cancelled:              {},
 	},
 	Verification: {
-		Closeout:          {},
+		Deployment:        {},
 		FailedQualityGate: {},
 		BlockedNeedUser:   {},
 		Cancelled:         {},
+	},
+	Deployment: {
+		Observation:                {},
+		BlockedNeedReleaseDecision: {},
+		Cancelled:                  {},
+	},
+	Observation: {
+		Closeout:                   {},
+		BlockedNeedReleaseDecision: {},
+		Cancelled:                  {},
+	},
+	BlockedNeedReleaseDecision: {
+		Deployment: {},
+		Closeout:   {},
+		Cancelled:  {},
 	},
 	Closeout: {
 		Completed:       {},
@@ -147,7 +168,7 @@ func isKnownState(state State) bool {
 
 func RequiresHumanConfirmation(state State) bool {
 	switch state {
-	case RequirementsReview, PlanReview, Verification, Closeout:
+	case RequirementsReview, PlanReview, Verification, BlockedNeedReleaseDecision, Closeout:
 		return true
 	default:
 		return false

@@ -76,3 +76,23 @@ For production GitLab projects, use `devflow mr ensure` or `devflow run --stage 
 $env:GITHUB_TOKEN = "<github token>"
 devflow ci-gate --github-repo "jesseedcp/devflow-agent" --github-pr "18"
 ```
+
+## Optional Live Release Control
+
+Live release control is opt-in. It dispatches a real GitHub Actions workflow and is not part of the default release-readiness gate. Run it only against a demand in the `deployment` state after verification is confirmed:
+
+```powershell
+$env:GITHUB_TOKEN = "<github token>"
+devflow deploy trigger --demand add-coupon-eligibility-check --provider github --github-repo "owner/repo" --workflow "release.yml" --ref "main"
+devflow deploy status --demand add-coupon-eligibility-check --provider github --github-repo "owner/repo" --workflow "release.yml" --ref "main"
+devflow observe refresh --demand add-coupon-eligibility-check
+```
+
+If deployment or observation fails, record a rollback decision:
+
+```powershell
+devflow rollback plan --demand add-coupon-eligibility-check --trigger "deployment failed" --impact "release blocked" --recommendation "redeploy after fix"
+devflow rollback confirm --demand add-coupon-eligibility-check --decision risk_accepted --by "<name>" --summary "<summary>"
+```
+
+v0.9.0 records rollback decisions only; it does not execute rollback. The default release-readiness gate covers release control through a local fake GitHub API and does not require a token.

@@ -115,6 +115,8 @@ func printConsoleDetail(stdout io.Writer, root string, summary demandflow.Consol
 		fmt.Fprintf(stdout, "  %-14s %s\n", stage.Name, humanStatus(stage.Status))
 	}
 
+	fmt.Fprintln(stdout, "\n"+demandflow.ReleaseLine(workspace))
+
 	fmt.Fprintln(stdout, "\nEvidence:")
 	printConsoleEvidence(stdout, workspace)
 

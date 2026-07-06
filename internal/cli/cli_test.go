@@ -80,12 +80,12 @@ func TestConfirmStagesAdvanceWorkflow(t *testing.T) {
 			next:         workflow.Implementation,
 		},
 		{
-			name:         "verification advances to closeout",
+			name:         "verification advances to deployment",
 			current:      workflow.Verification,
 			stage:        "verification",
 			artifactName: artifacts.VerificationFile,
 			label:        "verification",
-			next:         workflow.Closeout,
+			next:         workflow.Deployment,
 		},
 		{
 			name:         "closeout advances to completed",
@@ -1498,8 +1498,10 @@ func setupDemandAtState(t *testing.T, root string, target workflow.State) artifa
 		workflow.Implementation:       {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation},
 		workflow.MRReview:             {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview},
 		workflow.Verification:         {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification},
-		workflow.Closeout:             {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification, workflow.Closeout},
-		workflow.Completed:            {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification, workflow.Closeout, workflow.Completed},
+		workflow.Deployment:           {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification, workflow.Deployment},
+		workflow.Observation:          {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification, workflow.Deployment, workflow.Observation},
+		workflow.Closeout:             {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification, workflow.Deployment, workflow.Observation, workflow.Closeout},
+		workflow.Completed:            {workflow.ContextLoaded, workflow.RequirementsDrafting, workflow.RequirementsReview, workflow.PlanDrafting, workflow.PlanReview, workflow.Implementation, workflow.MRReview, workflow.Verification, workflow.Deployment, workflow.Observation, workflow.Closeout, workflow.Completed},
 	}
 	path, ok := pathByTarget[target]
 	if !ok {
@@ -1647,4 +1649,25 @@ type failingCLIWriter struct{}
 
 func (failingCLIWriter) Write([]byte) (int, error) {
 	return 0, fmt.Errorf("stdout unavailable")
+}
+
+func TestConfirmRejectsReleaseStages(t *testing.T) {
+	for _, stage := range []string{"deployment", "observation", "rollback"} {
+		t.Run(stage, func(t *testing.T) {
+			root := t.TempDir()
+			createDemandAtState(t, root, workflow.Deployment)
+			var stdout bytes.Buffer
+			err := Run([]string{
+				"confirm",
+				"--root", root,
+				"--demand", "add-coupon-check",
+				"--stage", stage,
+				"--by", "alice",
+				"--summary", "should be rejected",
+			}, &stdout, &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), "unsupported confirmation stage") {
+				t.Fatalf("err = %v, want unsupported confirmation stage", err)
+			}
+		})
+	}
 }

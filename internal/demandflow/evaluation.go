@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/releasecontrol"
 	"github.com/jesseedcp/devflow-agent/internal/wiki"
 )
 
@@ -47,7 +48,7 @@ func EvaluateDemand(root, demandID string, stages ...Stage) (DemandEvaluation, e
 		return DemandEvaluation{}, err
 	}
 	if len(stages) == 0 {
-		stages = []Stage{StageRequirements, StagePlan, StageImplementation, StageVerification, StageCloseout}
+		stages = []Stage{StageRequirements, StagePlan, StageImplementation, StageVerification, StageDeployment, StageObservation, StageRollback, StageCloseout}
 	}
 	out := DemandEvaluation{DemandID: demandID, Overall: EvaluationPass}
 	for _, stage := range stages {
@@ -71,6 +72,12 @@ func evaluateStage(root, demandID string, stage Stage) (StageEvaluation, error) 
 		return evaluateImplementation(root, demandID), nil
 	case StageVerification:
 		return evaluateVerification(root, demandID)
+	case StageDeployment:
+		return evaluateDeployment(root, demandID), nil
+	case StageObservation:
+		return evaluateObservation(root, demandID), nil
+	case StageRollback:
+		return evaluateRollback(root, demandID), nil
 	case StageCloseout:
 		return evaluateCloseout(root, demandID), nil
 	default:
@@ -383,6 +390,60 @@ func normalizeVerificationEvaluationStatus(status string) string {
 	}
 }
 
+func evaluateDeployment(root, demandID string) StageEvaluation {
+	text := readEvaluationArtifact(root, demandID, artifacts.DeploymentFile)
+	record := releasecontrol.ParseDeployment(text)
+	checks := []EvaluationCheck{
+		requiredContentCheck("deployment.exists", "deployment.md has content", text, "blocker"),
+		statusCheck("deployment.status", "deployment passed", record.Status == releasecontrol.StatusPassed, "blocker", fmt.Sprintf("status=%s conclusion=%s run=%s", record.Status, record.Conclusion, record.RunID)),
+		statusCheck("deployment.run", "deployment run id recorded", strings.TrimSpace(record.RunID) != "", "warning", record.RunID),
+	}
+	return buildStageEvaluation(StageDeployment, checks)
+}
+
+func evaluateObservation(root, demandID string) StageEvaluation {
+	text := readEvaluationArtifact(root, demandID, artifacts.ObservationFile)
+	record := releasecontrol.ParseObservation(text)
+	checks := []EvaluationCheck{
+		requiredContentCheck("observation.exists", "observation.md has content", text, "blocker"),
+		statusCheck("observation.status", "observation passed", record.Status == releasecontrol.StatusPassed, "blocker", fmt.Sprintf("status=%s deployment=%s", record.Status, record.DeploymentStatus)),
+	}
+	return buildStageEvaluation(StageObservation, checks)
+}
+
+func evaluateRollback(root, demandID string) StageEvaluation {
+	text := readEvaluationArtifact(root, demandID, artifacts.RollbackFile)
+	record := releasecontrol.ParseRollback(text)
+	observationText := readEvaluationArtifact(root, demandID, artifacts.ObservationFile)
+	observation := releasecontrol.ParseObservation(observationText)
+	decided := record.Decision == releasecontrol.RollbackConfirmed ||
+		record.Decision == releasecontrol.RollbackRiskAccepted ||
+		record.Decision == releasecontrol.RollbackRedeployRequired
+	checks := []EvaluationCheck{
+		requiredContentCheck("rollback.exists", "rollback.md has content", text, "warning"),
+	}
+	if observation.Status == releasecontrol.StatusPassed {
+		checks = append(checks, EvaluationCheck{
+			ID:       "rollback.decision",
+			Label:    "rollback decision recorded when needed",
+			Status:   EvaluationNotApplicable,
+			Severity: "warning",
+			Evidence: "observation passed; no rollback needed",
+		})
+	} else {
+		checks = append(checks, statusCheck("rollback.decision", "rollback decision recorded when needed", decided, "warning", string(record.Decision)))
+	}
+	return buildStageEvaluation(StageRollback, checks)
+}
+
+func releaseEvidenceCloseoutCheck(root, demandID string) EvaluationCheck {
+	observationText := readEvaluationArtifact(root, demandID, artifacts.ObservationFile)
+	rollbackText := readEvaluationArtifact(root, demandID, artifacts.RollbackFile)
+	observation := releasecontrol.ParseObservation(observationText)
+	rollback := releasecontrol.ParseRollback(rollbackText)
+	passed := observation.Status == releasecontrol.StatusPassed || rollback.Decision == releasecontrol.RollbackRiskAccepted
+	return statusCheck("closeout.release_evidence", "release-control evidence allows closeout", passed, "blocker", fmt.Sprintf("observation=%s rollback=%s", observation.Status, rollback.Decision))
+}
 func evaluateCloseout(root, demandID string) StageEvaluation {
 	closeout := readEvaluationArtifact(root, demandID, artifacts.CloseoutFile)
 	memory := readEvaluationArtifact(root, demandID, artifacts.MemoryCandidatesFile)
@@ -391,6 +452,7 @@ func evaluateCloseout(root, demandID string) StageEvaluation {
 	checks := []EvaluationCheck{
 		requiredContentCheck("closeout.exists", "closeout.md has content", closeout, "blocker"),
 		requiredSectionCheck("closeout.result", "result section has content", closeout, []string{"需求结果", "result"}, "blocker"),
+		releaseEvidenceCloseoutCheck(root, demandID),
 		statusCheck("closeout.memory", "memory candidates include reusable bullets", hasNonTemplateBullet(memory), "warning", evidenceSnippet(memory)),
 		wikiCandidatesCheck(wikiCandidatesText),
 		wikiDecisionsCheck(wikiCandidatesText),

@@ -60,3 +60,25 @@ func TestValidateStageArtifactAcceptsCloseoutWithMemoryMarker(t *testing.T) {
 		t.Fatalf("ValidateStageArtifact returned error: %v", err)
 	}
 }
+
+func TestValidateStageArtifactAcceptsPlanStepsUnderChildHeadings(t *testing.T) {
+	t.Parallel()
+
+	body := "# Technical Plan: Weather\n\n## 当前实现与代码事实\n\nExisting main.go.\n\n## 目标设计\n\nAdd /recommend.\n\n## 实施步骤\n\n### Step 1\n- 修改 internal/weather/service.go。\n\n## 改动范围\n\nservice.go.\n\n## 数据结构/API/配置变化\n\nPOST /recommend.\n\n## 测试策略\n\n- go test ./...\n\n## 验收方式\n\nAPI evidence.\n\n## 风险与回滚\n\nRevert commit.\n\n## 不做事项\n\nNo external provider.\n\n## 人工确认记录\n\nPending."
+	if err := ValidateStageArtifact(StagePlan, body); err != nil {
+		t.Fatalf("ValidateStageArtifact returned error: %v", err)
+	}
+}
+
+func TestValidateStageArtifactRejectsHeaderOnlyPlanSections(t *testing.T) {
+	t.Parallel()
+
+	body := "# Technical Plan: Weather\n\n## 当前实现与代码事实\n\nExisting main.go.\n\n## 目标设计\n\nAdd /recommend.\n\n## 实施步骤\n\n### Step 1\n\n## 改动范围\n\nservice.go.\n\n## 数据结构/API/配置变化\n\nPOST /recommend.\n\n## 测试策略\n\n- go test ./...\n\n## 验收方式\n\nAPI evidence.\n\n## 风险与回滚\n\nRevert commit.\n\n## 不做事项\n\nNo external provider.\n\n## 人工确认记录\n\nPending."
+	err := ValidateStageArtifact(StagePlan, body)
+	if err == nil {
+		t.Fatal("ValidateStageArtifact returned nil, want missing section content error")
+	}
+	if !strings.Contains(err.Error(), "section") {
+		t.Fatalf("error = %q, want section content error", err.Error())
+	}
+}

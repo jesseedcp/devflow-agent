@@ -490,3 +490,32 @@ func TestWorkspaceReleaseControlNextActions(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkspaceStageSummaryUsesRecordedReleaseEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "weather-release", Title: "Weather release", Description: "Release", Source: "test", State: string(workflow.Completed)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatalf("create demand: %v", err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{Type: "implementation.completed", Message: "implementation completed"}); err != nil {
+		t.Fatalf("append implementation event: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.DeploymentFile, "# Deployment: Weather release\n\nStatus: passed\nRun ID: 1001\nConclusion: success\n"); err != nil {
+		t.Fatalf("write deployment: %v", err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.ObservationFile, "# Observation: Weather release\n\nStatus: passed\nDeployment Status: passed\n"); err != nil {
+		t.Fatalf("write observation: %v", err)
+	}
+
+	summary, err := InspectWorkspace(root, demand.ID)
+	if err != nil {
+		t.Fatalf("InspectWorkspace: %v", err)
+	}
+	assertStageStatus(t, summary, "implementation", "completed")
+	assertStageStatus(t, summary, "deployment", "passed")
+	assertStageStatus(t, summary, "observation", "passed")
+	assertStageStatus(t, summary, "rollback", "not_needed")
+}

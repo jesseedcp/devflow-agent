@@ -365,6 +365,20 @@ func summarizeStages(state workflow.State, events []artifacts.Event, verificatio
 		statuses["verification"] = "failed"
 	}
 
+	if release.DeploymentStatus != "" {
+		statuses["deployment"] = summaryStatusFromRelease(release.DeploymentStatus)
+	}
+	if release.ObservationStatus != "" {
+		statuses["observation"] = summaryStatusFromRelease(release.ObservationStatus)
+	}
+	rollbackDecided := release.RollbackDecision != "" && release.RollbackDecision != string(releasecontrol.RollbackPending)
+	if release.ObservationStatus == string(releasecontrol.StatusPassed) && !rollbackDecided {
+		statuses["rollback"] = "not_needed"
+	}
+	if rollbackDecided {
+		statuses["rollback"] = string(release.RollbackDecision)
+	}
+
 	switch state {
 	case workflow.RequirementsDrafting:
 		statuses["requirements"] = "drafting"

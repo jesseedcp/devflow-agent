@@ -36,6 +36,13 @@ func qualityRoot(opts Options) string {
 	return opts.Root
 }
 
+func validateRunnerArtifact(stage Stage, body string) error {
+	if err := ValidateStageArtifact(stage, body); err != nil {
+		return err
+	}
+	return nil
+}
+
 func runnerRoot(opts Options) string {
 	if strings.TrimSpace(opts.RunnerRoot) != "" {
 		return opts.RunnerRoot
@@ -153,6 +160,10 @@ func (e Engine) runRequirements(ctx context.Context, opts Options, result *RunRe
 		return err
 	}
 
+	if err := validateRunnerArtifact(StageRequirements, resp.Text); err != nil {
+		return err
+	}
+
 	if err := e.Store.WriteArtifact(opts.DemandID, artifacts.RequirementsFile, resp.Text); err != nil {
 		return err
 	}
@@ -194,6 +205,10 @@ func (e Engine) runPlan(ctx context.Context, opts Options, result *RunResult) er
 		ToolMode: ToolModeReadOnly,
 	})
 	if err != nil {
+		return err
+	}
+
+	if err := validateRunnerArtifact(StagePlan, resp.Text); err != nil {
 		return err
 	}
 
@@ -250,6 +265,10 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 		ToolMode: toolMode,
 	})
 	if err != nil {
+		return err
+	}
+
+	if err := validateRunnerArtifact(StageImplementation, resp.Text); err != nil {
 		return err
 	}
 
@@ -355,6 +374,10 @@ func (e Engine) runVerification(ctx context.Context, opts Options, result *RunRe
 		return err
 	}
 
+	if err := validateRunnerArtifact(StageVerification, resp.Text); err != nil {
+		return err
+	}
+
 	body := strings.TrimSpace(resp.Text)
 	qualityFailed := false
 	qualitySummary := ""
@@ -416,6 +439,10 @@ func (e Engine) runCloseout(ctx context.Context, opts Options, result *RunResult
 		ToolMode: ToolModeReadOnly,
 	})
 	if err != nil {
+		return err
+	}
+
+	if err := validateRunnerArtifact(StageCloseout, resp.Text); err != nil {
 		return err
 	}
 

@@ -131,7 +131,7 @@ func TestImplementationQualityGateUsesQualityRoot(t *testing.T) {
 		DemandID:    "quality-root-check",
 		Stage:       StageImplementation,
 		Runner: &StaticRunner{Responses: map[Stage]RunnerResponse{
-			StageImplementation: {Text: "implementation body"},
+			StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 		}},
 		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test", "./..."}}},
 		Now:             fixedNow,
@@ -148,7 +148,7 @@ func TestEngineRequirementsDraftsAndAdvances(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Created)
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nimplement coupon check\n"},
+		StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nimplement coupon check\n\n## 非目标范围\n\nnone\n\n## 业务规则\n\nonly active members\n\n## 用户/调用方影响\n\napi callers\n\n## 验收标准\n\nreturns coupon\n\n## 风险与歧义\n\nnone\n\n## 待确认问题\n\nnone\n\n## 人工确认记录\n\npending\n"},
 	}}
 	if err := engine.Run(context.Background(), Options{
 		Root:     root,
@@ -175,7 +175,7 @@ func TestEngineRunDetailedReportsResult(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Created)
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nimplement coupon check\n"},
+		StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nimplement coupon check\n\n## 非目标范围\n\nnone\n\n## 业务规则\n\nonly active members\n\n## 用户/调用方影响\n\napi callers\n\n## 验收标准\n\nreturns coupon\n\n## 风险与歧义\n\nnone\n\n## 待确认问题\n\nnone\n\n## 人工确认记录\n\npending\n"},
 	}}
 	result, err := engine.RunDetailed(context.Background(), Options{
 		Root:     root,
@@ -203,7 +203,7 @@ func TestEngineRunDetailedReportsFailedQualityGate(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 1, stderr: "test failed"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 	result, err := engine.RunDetailed(context.Background(), Options{
 		Root:            root,
@@ -230,7 +230,7 @@ func TestEnginePlanDraftsAndAdvances(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.PlanDrafting)
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StagePlan: {Text: "# Technical Plan: coupon flow\n\n## 目标设计\n\nplan body\n"},
+		StagePlan: {Text: "# Technical Plan: coupon flow\n\n## 当前实现与代码事实\n\nexisting\n\n## 目标设计\n\nplan body\n\n## 实施步骤\n\n- step\n\n## 改动范围\n\nscope\n\n## 数据结构/API/配置变化\n\nnone\n\n## 测试策略\n\ngo test ./...\n\n## 验收方式\n\nverification\n\n## 风险与回滚\n\nrevert\n\n## 不做事项\n\nnone\n\n## 人工确认记录\n\npending\n"},
 	}}
 	if err := engine.Run(context.Background(), Options{
 		Root:     root,
@@ -255,7 +255,7 @@ func TestEngineImplementationPassesToMRReview(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nimplemented coupon check\n", ToolSummary: []string{"edit file"}},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented coupon check\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n", ToolSummary: []string{"edit file"}},
 	}}
 	if err := engine.Run(context.Background(), Options{
 		Root:            root,
@@ -281,7 +281,7 @@ func TestEngineImplementationFailsQualityGate(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 1, stderr: "test failed"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 	err := engine.Run(context.Background(), Options{
 		Root:            root,
@@ -305,7 +305,7 @@ func TestEngineImplementationRetriesFailedQualityGate(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.FailedQualityGate)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nretry fixed tests\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nretry fixed tests\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 	if err := engine.Run(context.Background(), Options{
 		Root:            root,
@@ -342,7 +342,7 @@ func TestEngineVerificationStaysAndWritesArtifact(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Verification)
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageVerification: {Text: "# Verification: coupon flow\n\n## 结论\n\nall green\n"},
+		StageVerification: {Text: "# Verification: coupon flow\n\n## 验收标准映射\n\nmapped\n\n## 自动化测试结果\n\npass\n\n## 手动验证记录\n\nnone\n\n## 接口/日志/监控证据\n\nnone\n\n## 未覆盖风险\n\nnone\n\n## 结论\n\nall green\n"},
 	}}
 	if err := engine.Run(context.Background(), Options{
 		Root:     root,
@@ -367,7 +367,7 @@ func TestEngineVerificationFailsQualityGate(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Verification)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 1, stderr: "verification failed"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageVerification: {Text: "# Verification: coupon flow\n\n## 结论\n\nneeds work\n"},
+		StageVerification: {Text: "# Verification: coupon flow\n\n## 验收标准映射\n\nmapped\n\n## 自动化测试结果\n\npass\n\n## 手动验证记录\n\nnone\n\n## 接口/日志/监控证据\n\nnone\n\n## 未覆盖风险\n\nnone\n\n## 结论\n\nneeds work\n"},
 	}}
 	result, err := engine.RunDetailed(context.Background(), Options{
 		Root:            root,
@@ -396,7 +396,7 @@ func TestEngineCloseoutWritesCloseoutAndMemory(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Closeout)
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageCloseout: {Text: "# Closeout: coupon flow\n\n## 需求结果\n\ndone\n\n---DEVFLOW-MEMORY-CANDIDATES---\n\n# Memory Candidates: coupon flow\n\n## 稳定知识候选\n\n- coupon flow knowledge\n"},
+		StageCloseout: {Text: "# Closeout: coupon flow\n\n## 需求结果\n\ndone\n\n## 关键产物链接\n\n- verification.md\n\n## MR 评论与处理摘要\n\nnone\n\n## 验收证据摘要\n\npass\n\n## 稳定知识候选\n\n- coupon flow knowledge\n\n## 流程改进候选\n\nnone\n\n## 一次性材料归档\n\nnone\n\n## 人工确认记录\n\npending\n\n---DEVFLOW-MEMORY-CANDIDATES---\n\n# Memory Candidates: coupon flow\n\n## 稳定知识候选\n\n- coupon flow knowledge\n\n## 流程改进候选\n\nnone\n\n## 不进入长期知识的材料\n\nnone\n"},
 	}}
 	if err := engine.Run(context.Background(), Options{
 		Root:     root,
@@ -419,23 +419,29 @@ func TestEngineCloseoutWritesCloseoutAndMemory(t *testing.T) {
 	}
 }
 
-func TestEngineCloseoutWithoutMarkerKeepsMemoryNote(t *testing.T) {
+func TestEngineCloseoutRejectsMissingMemoryMarker(t *testing.T) {
 	t.Parallel()
 	engine, root := newTestEngine(t, workflow.Closeout)
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageCloseout: {Text: "# Closeout: coupon flow\n\n## 需求结果\n\ndone\n"},
+		StageCloseout: {Text: "# Closeout: coupon flow\n\n## 需求结果\n\ndone\n\n## 关键产物链接\n\n- verification.md\n\n## MR 评论与处理摘要\n\nnone\n\n## 验收证据摘要\n\npass\n\n## 稳定知识候选\n\n- rule\n\n## 流程改进候选\n\nnone\n\n## 一次性材料归档\n\nnone\n\n## 人工确认记录\n\npending\n"},
 	}}
-	if err := engine.Run(context.Background(), Options{
+
+	err := engine.Run(context.Background(), Options{
 		Root:     root,
 		DemandID: "add-coupon-check",
 		Stage:    StageCloseout,
 		Runner:   runner,
 		Now:      fixedNow,
-	}); err != nil {
-		t.Fatalf("run: %v", err)
+	})
+	if err == nil || !strings.Contains(err.Error(), "missing memory candidates marker") {
+		t.Fatalf("err = %v want missing memory candidates marker", err)
 	}
-	if body := readArtifact(t, engine, artifacts.MemoryCandidatesFile); !strings.Contains(body, "no stable candidates were generated") {
-		t.Fatalf("memory-candidates.md = %q", body)
+	demand, loadErr := engine.Store.LoadDemand("add-coupon-check")
+	if loadErr != nil {
+		t.Fatalf("load demand: %v", loadErr)
+	}
+	if demand.State != string(workflow.Closeout) {
+		t.Fatalf("state = %s, want closeout", demand.State)
 	}
 }
 
@@ -471,7 +477,7 @@ type recordingDemandRunner struct {
 
 func (r *recordingDemandRunner) Run(_ context.Context, req RunnerRequest) (RunnerResponse, error) {
 	r.root = req.Root
-	return RunnerResponse{Text: "# Requirements\n\nrunner root recorded\n"}, nil
+	return RunnerResponse{Text: "# Requirements: runner root check\n\n## 目标行为\n\nrunner root recorded\n\n## 非目标范围\n\nnone\n\n## 业务规则\n\nrule\n\n## 用户/调用方影响\n\nimpact\n\n## 验收标准\n\ncriteria\n\n## 风险与歧义\n\nnone\n\n## 待确认问题\n\nnone\n\n## 人工确认记录\n\npending\n"}, nil
 }
 
 func TestRequirementsRunnerUsesRunnerRoot(t *testing.T) {
@@ -520,7 +526,7 @@ func TestEngineImplementationSyncMergeRequestPasses(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 
 	fakeAdapter := fakeMergeRequestSyncAdapter{
@@ -555,7 +561,7 @@ func TestEngineImplementationSyncMergeRequestSkippedWhenNil(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 
 	if err := engine.Run(context.Background(), Options{
@@ -580,7 +586,7 @@ func TestEngineImplementationSyncMergeRequestFailureBlocksPlatform(t *testing.T)
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 
 	result, err := engine.RunDetailed(context.Background(), Options{
@@ -612,7 +618,7 @@ func TestEngineImplementationSyncChangeRequestOptionPasses(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 瀹炵幇鎽樿\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 
 	fakeAdapter := fakeMergeRequestSyncAdapter{
@@ -647,7 +653,7 @@ func TestEngineChangeRequestOptionOverridesMergeRequest(t *testing.T) {
 	engine, root := newTestEngine(t, workflow.Implementation)
 	engine.Gate = quality.Gate{Runner: fakeQualityRunner{exitCode: 0, stdout: "all tests pass"}}
 	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
-		StageImplementation: {Text: "## 瀹炵幇鎽樿\n\nimplemented\n"},
+		StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 	}}
 
 	if err := engine.Run(context.Background(), Options{
@@ -675,5 +681,67 @@ func TestEngineChangeRequestOptionOverridesMergeRequest(t *testing.T) {
 	}
 	if strings.Contains(body, "!11") {
 		t.Fatalf("progress.md should not use merge-request adapter (!11):\n%s", body)
+	}
+}
+
+func TestEnginePlanRejectsInvalidArtifactAndDoesNotAdvance(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.PlanDrafting)
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StagePlan: {Text: "# Technical Plan: coupon flow\n\n## 目标设计\n\nmissing steps"},
+	}}
+
+	err := engine.Run(context.Background(), Options{
+		Root:     root,
+		DemandID: "add-coupon-check",
+		Stage:    StagePlan,
+		Runner:   runner,
+		Now:      fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "plan.md invalid") {
+		t.Fatalf("err = %v want plan.md invalid", err)
+	}
+	demand, loadErr := engine.Store.LoadDemand("add-coupon-check")
+	if loadErr != nil {
+		t.Fatalf("load demand: %v", loadErr)
+	}
+	if demand.State != string(workflow.PlanDrafting) {
+		t.Fatalf("state = %s, want plan_drafting", demand.State)
+	}
+	planPath := filepath.Join(engine.Store.DemandDir("add-coupon-check"), artifacts.PlanFile)
+	if body, readErr := os.ReadFile(planPath); readErr == nil && strings.Contains(string(body), "missing steps") {
+		t.Fatalf("plan.md should not contain invalid artifact text, got %q", body)
+	}
+}
+
+func TestEngineImplementationRejectsInvalidProgressBeforeQualityGate(t *testing.T) {
+	t.Parallel()
+	engine, root := newTestEngine(t, workflow.Implementation)
+	qualityRunner := &recordingQualityRunner{}
+	engine.Gate = quality.Gate{Runner: qualityRunner}
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {Text: "## 实现摘要\n\nmissing required sections"},
+	}}
+
+	err := engine.Run(context.Background(), Options{
+		Root:            root,
+		DemandID:        "add-coupon-check",
+		Stage:           StageImplementation,
+		Runner:          runner,
+		QualityCommands: []quality.Command{{Name: "go", Args: []string{"test", "./..."}}},
+		Now:             fixedNow,
+	})
+	if err == nil || !strings.Contains(err.Error(), "progress.md invalid") {
+		t.Fatalf("err = %v want progress.md invalid", err)
+	}
+	if qualityRunner.root != "" {
+		t.Fatalf("quality gate should not run for invalid progress, ran in %q", qualityRunner.root)
+	}
+	demand, loadErr := engine.Store.LoadDemand("add-coupon-check")
+	if loadErr != nil {
+		t.Fatalf("load demand: %v", loadErr)
+	}
+	if demand.State != string(workflow.Implementation) {
+		t.Fatalf("state = %s, want implementation", demand.State)
 	}
 }

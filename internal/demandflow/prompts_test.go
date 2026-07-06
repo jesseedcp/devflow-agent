@@ -114,3 +114,25 @@ func TestRenderMemoryHitsSeparatesStableAndCandidate(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanPromptRequiresImplementationSteps(t *testing.T) {
+	t.Parallel()
+
+	prompt := planPrompt(ContextSnapshot{Demand: artifacts.Demand{Title: "Coupon", Description: "Add rule"}})
+	for _, want := range []string{"## 实施步骤", "concrete file/test steps"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("plan prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestImplementationPromptRequiresChangedFilesAndCommands(t *testing.T) {
+	t.Parallel()
+
+	prompt := implementationPrompt(ContextSnapshot{Demand: artifacts.Demand{Title: "Coupon", Description: "Add rule"}})
+	for _, want := range []string{"exact changed files", "exact commands run"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("implementation prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}

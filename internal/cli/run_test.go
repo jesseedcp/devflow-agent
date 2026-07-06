@@ -87,7 +87,7 @@ func TestRunRequirementsStageWritesArtifact(t *testing.T) {
 	defer func() { newDemandRunner = original }()
 	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nstubbed requirements body\n"},
+			demandflow.StageRequirements: {Text: "# Requirements: coupon flow\n\n## 目标行为\n\nstubbed requirements body\n\n## 非目标范围\n\nnone\n\n## 业务规则\n\nrule\n\n## 用户/调用方影响\n\nimpact\n\n## 验收标准\n\ncriteria\n\n## 风险与歧义\n\nnone\n\n## 待确认问题\n\nnone\n\n## 人工确认记录\n\npending\n"},
 		}}
 	}
 
@@ -124,7 +124,7 @@ func TestRunQualityCommandParsesQuotedArguments(t *testing.T) {
 	defer func() { newDemandRunner = original }()
 	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n"},
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 		}}
 	}
 
@@ -169,7 +169,7 @@ func TestRunQualityCommandUsesQualityRoot(t *testing.T) {
 	defer func() { newDemandRunner = original }()
 	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n"},
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 		}}
 	}
 
@@ -203,7 +203,7 @@ type cliRecordingRunner struct {
 
 func (r *cliRecordingRunner) Run(_ context.Context, req demandflow.RunnerRequest) (demandflow.RunnerResponse, error) {
 	r.root = req.Root
-	return demandflow.RunnerResponse{Text: "# Requirements\n\ncli runner root recorded\n"}, nil
+	return demandflow.RunnerResponse{Text: "# Requirements: cli runner root check\n\n## 目标行为\n\ncli runner root recorded\n\n## 非目标范围\n\nnone\n\n## 业务规则\n\nrule\n\n## 用户/调用方影响\n\nimpact\n\n## 验收标准\n\ncriteria\n\n## 风险与歧义\n\nnone\n\n## 待确认问题\n\nnone\n\n## 人工确认记录\n\npending\n"}, nil
 }
 
 func TestRunUsesRunnerRootForDemandRunner(t *testing.T) {
@@ -322,7 +322,7 @@ func TestRunImplementationCreateMergeRequestFlagsSyncMR(t *testing.T) {
 	defer func() { newDemandRunner = originalRunner }()
 	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n"},
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 		}}
 	}
 
@@ -387,7 +387,7 @@ func TestRunImplementationUsesBackendDemandDefaults(t *testing.T) {
 	newDemandRunner = func(configPath string, mode permissions.PermissionMode) demandflow.Runner {
 		gotMode = mode
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageImplementation: {Text: "implemented"},
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nimplemented\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 		}}
 	}
 
@@ -542,7 +542,7 @@ func TestRunImplementationCreateChangeRequestGitHubSyncsPR(t *testing.T) {
 	defer func() { newDemandRunner = originalRunner }()
 	newDemandRunner = func(string, permissions.PermissionMode) demandflow.Runner {
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageImplementation: {Text: "## 瀹炵幇鎽樿\n\nstubbed implementation body\n"},
+			demandflow.StageImplementation: {Text: "## 实现摘要\n\nstubbed implementation body\n\n## 代码改动\n\n- file.go\n\n## 测试与验证\n\n- go test ./...\n\n## 遗留问题\n\nnone\n"},
 		}}
 	}
 

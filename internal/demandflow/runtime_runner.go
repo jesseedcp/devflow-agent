@@ -57,7 +57,7 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 	}
 	provider := &cfg.Providers[0]
 
-	systemPrompt := "You are Devflow, the backend demand delivery agent. Follow the stage prompt exactly and return only the requested artifact body."
+	systemPrompt := "You are Devflow, the backend demand delivery agent. Follow the stage prompt exactly. Return a complete markdown artifact body only. Never return an empty answer. If blocked, still return the required headings and describe the blocker under the relevant section."
 	client, err := llm.NewClient(provider, systemPrompt)
 	if err != nil {
 		return RunnerResponse{}, fmt.Errorf("create llm client: %w", err)
@@ -100,8 +100,17 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 		return RunnerResponse{}, agentErr
 	}
 
+	text := strings.TrimSpace(strings.Join(textParts, ""))
+	if text == "" {
+		return RunnerResponse{}, runtimeEmptyOutputError(req.Stage, provider.Model, maxIterations)
+	}
+
 	return RunnerResponse{
-		Text:        strings.Join(textParts, ""),
+		Text:        text,
 		ToolSummary: toolSummary,
 	}, nil
+}
+
+func runtimeEmptyOutputError(stage Stage, model string, maxIterations int) error {
+	return fmt.Errorf("runtime runner produced no artifact text after %d iterations for stage %s with model %s; retry with a stronger model, inspect provider compatibility, or write the artifact manually and continue through the review gate", maxIterations, stage, model)
 }

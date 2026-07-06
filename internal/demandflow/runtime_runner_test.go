@@ -1,6 +1,7 @@
 package demandflow
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jesseedcp/devflow-agent/internal/runtime/permissions"
@@ -60,5 +61,20 @@ func TestPermissionModeForUnsupportedStageErrors(t *testing.T) {
 
 	if _, err := permissionModeFor(RunnerRequest{Stage: StageMRReview}, permissions.ModeBypass); err == nil {
 		t.Fatalf("expected error for mr-review stage")
+	}
+}
+
+func TestRuntimeEmptyOutputErrorIncludesStageAndIterations(t *testing.T) {
+	t.Parallel()
+
+	err := runtimeEmptyOutputError(StagePlan, "ark-code-latest", 20)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	message := err.Error()
+	for _, want := range []string{"runtime runner produced no artifact text", "plan", "ark-code-latest", "20"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("error %q missing %q", message, want)
+		}
 	}
 }

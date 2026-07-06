@@ -71,6 +71,7 @@ Use these headings exactly:
 - # Technical Plan: %s
 - ## 当前实现与代码事实
 - ## 目标设计
+- ## 实施步骤
 - ## 改动范围
 - ## 数据结构/API/配置变化
 - ## 测试策略
@@ -78,6 +79,7 @@ Use these headings exactly:
 - ## 风险与回滚
 - ## 不做事项
 - ## 人工确认记录
+The ## 实施步骤 section must list concrete file/test steps, not a vague summary.
 Do not include chat commentary around the artifact body.
 `, ctx.Demand.Title, ctx.Demand.Description, ctx.Artifacts.Requirements, renderMemoryHits(ctx.Memories), ctx.Demand.Title))
 }
@@ -105,6 +107,7 @@ Use these headings exactly:
 - ## 代码改动
 - ## 测试与验证
 - ## 遗留问题
+The ## 代码改动 section must list exact changed files. The ## 测试与验证 section must list exact commands run and their result.
 Do not include chat commentary around the artifact body.
 `, ctx.Demand.Title, ctx.Demand.Description, ctx.Artifacts.Requirements, ctx.Artifacts.Plan))
 }

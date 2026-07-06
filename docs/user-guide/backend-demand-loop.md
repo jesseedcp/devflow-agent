@@ -211,6 +211,8 @@ devflow run --demand add-coupon-eligibility-check --stage plan
 devflow confirm --demand add-coupon-eligibility-check --stage plan --by dd --summary "plan approved"
 ```
 
+Runtime-generated artifacts are validated before Devflow advances the workflow. If `plan.md`, `progress.md`, `verification.md`, or closeout artifacts are empty or missing required sections, `devflow run` fails and keeps the demand in the current state. Retry with a stronger provider, inspect provider compatibility, or repair the artifact manually before confirming the gate.
+
 ## 6. Run Implementation
 
 ```powershell

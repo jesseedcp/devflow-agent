@@ -42,6 +42,39 @@ func permissionModeFor(req RunnerRequest, explicit permissions.PermissionMode) (
 	}
 }
 
+func runtimePermissionResponse(req RunnerRequest, mode permissions.PermissionMode, ev agent.PermissionRequestEvent) agent.PermissionResponse {
+	switch req.Stage {
+	case StageRequirements, StagePlan, StageVerification, StageCloseout:
+		if isRuntimeReadOnlyTool(ev.ToolName) {
+			return agent.PermAllow
+		}
+		return agent.PermDeny
+	case StageImplementation:
+		switch mode {
+		case permissions.ModeBypass:
+			return agent.PermAllow
+		case permissions.ModeAcceptEdits:
+			if isRuntimeReadOnlyTool(ev.ToolName) || ev.ToolName == "WriteFile" || ev.ToolName == "EditFile" {
+				return agent.PermAllow
+			}
+			return agent.PermDeny
+		default:
+			return agent.PermDeny
+		}
+	default:
+		return agent.PermDeny
+	}
+}
+
+func isRuntimeReadOnlyTool(toolName string) bool {
+	switch toolName {
+	case "ReadFile", "Glob", "Grep", "ToolSearch":
+		return true
+	default:
+		return false
+	}
+}
+
 func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerResponse, error) {
 	mode, err := permissionModeFor(req, r.PermissionMode)
 	if err != nil {
@@ -90,7 +123,7 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 		case agent.ToolResultEvent:
 			toolSummary = append(toolSummary, e.ToolName)
 		case agent.PermissionRequestEvent:
-			e.ResponseCh <- agent.PermDeny
+			e.ResponseCh <- runtimePermissionResponse(req, mode, e)
 		case agent.ErrorEvent:
 			agentErr = fmt.Errorf("agent error: %s", e.Message)
 		case agent.LoopComplete:

@@ -773,6 +773,9 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         go test ./internal/runtime/hooks -run "HookAsync|RunCommandTimeout|RunCommandDefaultTimeout" -count=20
         go test ./internal/artifacts ./internal/demandflow ./internal/cli ./internal/metrics -run "MetricsFile|WorkspaceIncludesMetricsArtifact|Workbench.*Metrics|PartialHistorical|PartialDataCaveats" -count=1
     }
+    Invoke-Step "v1.0.1 runtime artifact hardening smoke" {
+        go test ./internal/demandflow -run "TestValidateStageArtifact|TestEnginePlanRejectsInvalidArtifact|TestEngineImplementationRejectsInvalidProgress|TestRuntimeEmptyOutputError|TestWorkspaceStageSummaryUsesRecordedReleaseEvidence" -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

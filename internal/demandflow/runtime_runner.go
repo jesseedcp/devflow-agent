@@ -125,7 +125,7 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 		case agent.PermissionRequestEvent:
 			e.ResponseCh <- runtimePermissionResponse(req, mode, e)
 		case agent.ErrorEvent:
-			agentErr = fmt.Errorf("agent error: %s", e.Message)
+			agentErr = runtimeAgentError(req.Stage, provider.Model, maxIterations, toolSummary, e.Message)
 		case agent.LoopComplete:
 		}
 	}
@@ -146,4 +146,26 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 
 func runtimeEmptyOutputError(stage Stage, model string, maxIterations int) error {
 	return fmt.Errorf("runtime runner produced no artifact text after %d iterations for stage %s with model %s; retry with a stronger model, inspect provider compatibility, or write the artifact manually and continue through the review gate", maxIterations, stage, model)
+}
+
+func runtimeAgentError(stage Stage, model string, maxIterations int, toolSummary []string, message string) error {
+	if len(toolSummary) == 0 {
+		return fmt.Errorf("runtime runner failed for stage %s with model %s after up to %d iterations: %s; no tool results were observed", stage, model, maxIterations, message)
+	}
+	return fmt.Errorf(
+		"runtime runner failed for stage %s with model %s after up to %d iterations: %s; tool calls=%d last tools=%s",
+		stage,
+		model,
+		maxIterations,
+		message,
+		len(toolSummary),
+		strings.Join(lastRuntimeTools(toolSummary, 5), ","),
+	)
+}
+
+func lastRuntimeTools(values []string, limit int) []string {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[len(values)-limit:]
 }

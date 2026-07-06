@@ -121,3 +121,16 @@ func TestRuntimePermissionResponseAllowsImplementationBypassRequests(t *testing.
 		}
 	}
 }
+
+func TestRuntimeAgentErrorIncludesToolSummary(t *testing.T) {
+	err := runtimeAgentError(StageImplementation, "glm-5.2", 20, []string{"ReadFile", "Grep", "ReadFile"}, "Agent reached maximum iterations (20)")
+	if err == nil {
+		t.Fatal("runtimeAgentError returned nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{"implementation", "glm-5.2", "maximum iterations", "ReadFile", "Grep", "tool calls=3"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error = %q, want %q", msg, want)
+		}
+	}
+}

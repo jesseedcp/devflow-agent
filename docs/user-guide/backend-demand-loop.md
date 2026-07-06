@@ -228,6 +228,22 @@ devflow run --demand add-coupon-eligibility-check --stage implementation --permi
 
 If the quality gate fails, fix the reported problem and rerun the same implementation command.
 
+### Runtime Provider Hardening
+
+`devflow run --stage plan` may use safe read/search tools to ground a plan in repository facts. Mutation tools and arbitrary commands remain blocked during read-only stages.
+
+`devflow run --stage implementation` requires an explicit edit permission mode. When a provider reaches the runtime iteration limit, Devflow reports the stage, model, observed tool count, and recent tool names so the operator can distinguish provider/tool-loop failures from artifact validation failures.
+
+For OpenAI-compatible providers, keep credentials in environment variables:
+
+```powershell
+$env:OPENAI_BASE_URL="https://ark.cn-beijing.volces.com/api/coding/v3"
+$env:OPENAI_MODEL="glm-5.2"
+# Set OPENAI_API_KEY in the shell or user environment; never write the value into repo files.
+```
+
+Do not write provider keys into demand artifacts, dogfood reports, or release notes.
+
 ### Change Request Terminology
 
 GitLab merge requests (MRs) and GitHub pull requests (PRs) are both *change requests*. Devflow exposes provider-neutral vocabulary while keeping the legacy commands:

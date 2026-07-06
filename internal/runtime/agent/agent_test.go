@@ -986,3 +986,55 @@ func TestFilterSchemasByNameEmptyInput(t *testing.T) {
 		t.Errorf("expected empty result, got %d entries", len(got))
 	}
 }
+
+func TestAgentFeedsToolResultsBackToNextTurn(t *testing.T) {
+	readTool := &mockTool{
+		name:   "ReadFile",
+		result: "file says WEATHER_OK",
+	}
+
+	client := &dynamicMock{handlers: []func([]conversation.Message) []llm.StreamEvent{
+		// Turn 0: model requests a tool call.
+		func(msgs []conversation.Message) []llm.StreamEvent {
+			return []llm.StreamEvent{
+				llm.ToolCallStart{ToolName: "ReadFile", ToolID: "read1"},
+				llm.ToolCallComplete{
+					ToolID:    "read1",
+					ToolName:  "ReadFile",
+					Arguments: map[string]any{"file_path": "internal/weather/service.go"},
+				},
+				llm.StreamEnd{StopReason: "tool_calls"},
+			}
+		},
+		// Turn 1: model should see the tool result and finish.
+		func(msgs []conversation.Message) []llm.StreamEvent {
+			foundToolResult := false
+			for _, message := range msgs {
+				for _, tr := range message.ToolResults {
+					if strings.Contains(tr.Content, "WEATHER_OK") {
+						foundToolResult = true
+					}
+				}
+			}
+			if !foundToolResult {
+				t.Fatalf("turn 1 did not receive tool result in conversation: %#v", msgs)
+			}
+			return []llm.StreamEvent{
+				llm.TextDelta{Text: "done after tool"},
+				llm.StreamEnd{StopReason: "stop"},
+			}
+		},
+	}}
+
+	reg := tools.NewRegistry()
+	reg.Register(readTool)
+	ag := New(client, reg, "anthropic")
+	ag.MaxIterations = 3
+
+	conv := conversation.NewManager()
+	text, _ := runConversationRound(ag, conv, "read then answer")
+
+	if got := text; got != "done after tool" {
+		t.Fatalf("text = %q, want done after tool", got)
+	}
+}

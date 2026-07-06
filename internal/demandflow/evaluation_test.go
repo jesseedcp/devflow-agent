@@ -807,3 +807,74 @@ func TestEvaluateCloseoutFailsWhenRollbackConfirmed(t *testing.T) {
 		t.Fatalf("closeout status = %s, want fail; checks=%#v", eval.Stages[0].Status, eval.Stages[0].Checks)
 	}
 }
+
+func TestEvaluatePlanStepsAcceptsContentUnderChildHeadings(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "child-heading-plan", Title: "Child Heading Plan", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	body := `# 实施计划
+
+## 范围
+- coupon eligibility
+
+## 实施步骤
+### Step 1
+- 修改 internal/weather/service.go，加入雨天室内推荐规则。
+
+### Step 2
+- 修改 internal/weather/service_test.go，覆盖 rainy -> indoor。
+
+## 测试策略
+- go test ./...
+
+## 风险
+- 天气输入为空时需要明确错误码。
+`
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, body); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StagePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "plan.steps")
+	if check.Status != EvaluationPass {
+		t.Fatalf("plan.steps = %s evidence=%q, want pass", check.Status, check.Evidence)
+	}
+}
+
+func TestEvaluatePlanStepsRejectsEmptyChildHeadings(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "empty-child-heading-plan", Title: "Empty Child Heading Plan", Description: "Evaluate", Source: "test"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	body := `# 实施计划
+
+## 实施步骤
+### Step 1
+
+### Step 2
+
+## 测试策略
+- go test ./...
+
+## 风险
+- none
+`
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, body); err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := EvaluateDemand(root, demand.ID, StagePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := findEvaluationCheck(t, evaluation.Stages[0], "plan.steps")
+	if check.Status != EvaluationFail {
+		t.Fatalf("plan.steps = %s evidence=%q, want fail", check.Status, check.Evidence)
+	}
+}

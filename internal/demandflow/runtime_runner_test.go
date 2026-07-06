@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jesseedcp/devflow-agent/internal/runtime/agent"
 	"github.com/jesseedcp/devflow-agent/internal/runtime/permissions"
 )
 
@@ -75,6 +76,61 @@ func TestRuntimeEmptyOutputErrorIncludesStageAndIterations(t *testing.T) {
 	for _, want := range []string{"runtime runner produced no artifact text", "plan", "ark-code-latest", "20"} {
 		if !strings.Contains(message, want) {
 			t.Fatalf("error %q missing %q", message, want)
+		}
+	}
+}
+
+func TestRuntimePermissionResponseAllowsPlanReadTools(t *testing.T) {
+	req := RunnerRequest{Stage: StagePlan}
+
+	for _, toolName := range []string{"ReadFile", "Glob", "Grep", "ToolSearch"} {
+		resp := runtimePermissionResponse(req, permissions.ModePlan, agent.PermissionRequestEvent{
+			ToolName: toolName,
+			Desc:     "read-only planning lookup",
+		})
+		if resp != agent.PermAllow {
+			t.Fatalf("runtimePermissionResponse(%s) = %v, want allow", toolName, resp)
+		}
+	}
+}
+
+func TestRuntimePermissionResponseDeniesPlanMutationTools(t *testing.T) {
+	req := RunnerRequest{Stage: StagePlan}
+
+	for _, toolName := range []string{"WriteFile", "EditFile", "Bash"} {
+		resp := runtimePermissionResponse(req, permissions.ModePlan, agent.PermissionRequestEvent{
+			ToolName: toolName,
+			Desc:     "mutation should not be allowed in plan stage",
+		})
+		if resp != agent.PermDeny {
+			t.Fatalf("runtimePermissionResponse(%s) = %v, want deny", toolName, resp)
+		}
+	}
+}
+
+func TestRuntimePermissionResponseAllowsImplementationBypassRequests(t *testing.T) {
+	req := RunnerRequest{Stage: StageImplementation}
+
+	for _, toolName := range []string{"ReadFile", "WriteFile", "EditFile", "Bash"} {
+		resp := runtimePermissionResponse(req, permissions.ModeBypass, agent.PermissionRequestEvent{
+			ToolName: toolName,
+			Desc:     "bypass mode should answer tool asks affirmatively after checker produced Ask",
+		})
+		if resp != agent.PermAllow {
+			t.Fatalf("runtimePermissionResponse(%s) = %v, want allow", toolName, resp)
+		}
+	}
+}
+
+func TestRuntimeAgentErrorIncludesToolSummary(t *testing.T) {
+	err := runtimeAgentError(StageImplementation, "glm-5.2", 20, []string{"ReadFile", "Grep", "ReadFile"}, "Agent reached maximum iterations (20)")
+	if err == nil {
+		t.Fatal("runtimeAgentError returned nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{"implementation", "glm-5.2", "maximum iterations", "ReadFile", "Grep", "tool calls=3"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error = %q, want %q", msg, want)
 		}
 	}
 }

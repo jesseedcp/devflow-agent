@@ -776,6 +776,11 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
     Invoke-Step "v1.0.1 runtime artifact hardening smoke" {
         go test ./internal/demandflow -run "TestValidateStageArtifact|TestEnginePlanRejectsInvalidArtifact|TestEngineImplementationRejectsInvalidProgress|TestRuntimeEmptyOutputError|TestWorkspaceStageSummaryUsesRecordedReleaseEvidence" -count=1
     }
+    Invoke-Step "v1.1 runtime tool-calling hardening smoke" {
+        go test ./internal/demandflow -run "TestRuntimePermissionResponse|TestEvaluatePlanSteps.*ChildHeadings|TestValidateStageArtifact.*Plan|TestRuntimeAgentErrorIncludesToolSummary" -count=1
+        go test ./internal/runtime/llm -run "TestOpenAICompat.*Tool|TestOpenAICompatArkStyleFragmentedToolCallAccumulatesByIndex|TestOpenAICompatDoesNotEmitDuplicateToolCompleteAcrossUsageChunk" -count=1
+        go test ./internal/runtime/agent -run "TestAgentFeedsToolResultsBackToNextTurn|TestAgentToolCallLoop" -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

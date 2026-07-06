@@ -42,6 +42,39 @@ func permissionModeFor(req RunnerRequest, explicit permissions.PermissionMode) (
 	}
 }
 
+func runtimePermissionResponse(req RunnerRequest, mode permissions.PermissionMode, ev agent.PermissionRequestEvent) agent.PermissionResponse {
+	switch req.Stage {
+	case StageRequirements, StagePlan, StageVerification, StageCloseout:
+		if isRuntimeReadOnlyTool(ev.ToolName) {
+			return agent.PermAllow
+		}
+		return agent.PermDeny
+	case StageImplementation:
+		switch mode {
+		case permissions.ModeBypass:
+			return agent.PermAllow
+		case permissions.ModeAcceptEdits:
+			if isRuntimeReadOnlyTool(ev.ToolName) || ev.ToolName == "WriteFile" || ev.ToolName == "EditFile" {
+				return agent.PermAllow
+			}
+			return agent.PermDeny
+		default:
+			return agent.PermDeny
+		}
+	default:
+		return agent.PermDeny
+	}
+}
+
+func isRuntimeReadOnlyTool(toolName string) bool {
+	switch toolName {
+	case "ReadFile", "Glob", "Grep", "ToolSearch":
+		return true
+	default:
+		return false
+	}
+}
+
 func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerResponse, error) {
 	mode, err := permissionModeFor(req, r.PermissionMode)
 	if err != nil {
@@ -90,9 +123,9 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 		case agent.ToolResultEvent:
 			toolSummary = append(toolSummary, e.ToolName)
 		case agent.PermissionRequestEvent:
-			e.ResponseCh <- agent.PermDeny
+			e.ResponseCh <- runtimePermissionResponse(req, mode, e)
 		case agent.ErrorEvent:
-			agentErr = fmt.Errorf("agent error: %s", e.Message)
+			agentErr = runtimeAgentError(req.Stage, provider.Model, maxIterations, toolSummary, e.Message)
 		case agent.LoopComplete:
 		}
 	}
@@ -113,4 +146,26 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 
 func runtimeEmptyOutputError(stage Stage, model string, maxIterations int) error {
 	return fmt.Errorf("runtime runner produced no artifact text after %d iterations for stage %s with model %s; retry with a stronger model, inspect provider compatibility, or write the artifact manually and continue through the review gate", maxIterations, stage, model)
+}
+
+func runtimeAgentError(stage Stage, model string, maxIterations int, toolSummary []string, message string) error {
+	if len(toolSummary) == 0 {
+		return fmt.Errorf("runtime runner failed for stage %s with model %s after up to %d iterations: %s; no tool results were observed", stage, model, maxIterations, message)
+	}
+	return fmt.Errorf(
+		"runtime runner failed for stage %s with model %s after up to %d iterations: %s; tool calls=%d last tools=%s",
+		stage,
+		model,
+		maxIterations,
+		message,
+		len(toolSummary),
+		strings.Join(lastRuntimeTools(toolSummary, 5), ","),
+	)
+}
+
+func lastRuntimeTools(values []string, limit int) []string {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[len(values)-limit:]
 }

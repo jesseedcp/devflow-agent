@@ -95,6 +95,9 @@ func ValidateStageArtifact(stage Stage, body string) error {
 		if !containsMarkdownSection(trimmed, section) {
 			return fmt.Errorf("%s invalid: missing required section %q", contract.Name, section)
 		}
+		if strings.TrimSpace(markdownSectionContent(trimmed, section)) == "" {
+			return fmt.Errorf("%s invalid: required section %q has no content", contract.Name, section)
+		}
 	}
 	if stage == StageCloseout && !strings.Contains(trimmed, "---DEVFLOW-MEMORY-CANDIDATES---") {
 		return fmt.Errorf("%s invalid: missing memory candidates marker", contract.Name)
@@ -102,6 +105,45 @@ func ValidateStageArtifact(stage Stage, body string) error {
 	return nil
 }
 
+func markdownSectionContent(body, section string) string {
+	needle := strings.ToLower(section)
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	inSection := false
+	targetLevel := 0
+	var out strings.Builder
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if level := artifactHeadingLevel(trimmed); level > 0 {
+			if inSection && level <= targetLevel {
+				break
+			}
+			if !inSection && strings.Contains(strings.ToLower(trimmed), needle) {
+				inSection = true
+				targetLevel = level
+			}
+			continue
+		}
+		if inSection {
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
+
+func artifactHeadingLevel(line string) int {
+	if line == "" || line[0] != '#' {
+		return 0
+	}
+	level := 0
+	for level < len(line) && line[level] == '#' {
+		level++
+	}
+	if level == len(line) || line[level] != ' ' {
+		return 0
+	}
+	return level
+}
 func containsMarkdownSection(body, section string) bool {
 	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		trimmed := strings.TrimSpace(line)

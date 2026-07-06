@@ -1081,3 +1081,109 @@ func discardRequestBody(r *http.Request) {
 	io.Copy(io.Discard, r.Body)
 	r.Body.Close()
 }
+
+func TestOpenAICompatArkStyleFragmentedToolCallAccumulatesByIndex(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, strings.Join([]string{
+			`data: {"id":"chatcmpl-ark","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_read_1","type":"function","function":{"name":"ReadFile","arguments":""}}]},"finish_reason":null}],"usage":null}`,
+			`data: {"id":"chatcmpl-ark","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"file_"}}]},"finish_reason":null}],"usage":null}`,
+			`data: {"id":"chatcmpl-ark","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"path\":\"internal/weather/service.go\"}"}}]},"finish_reason":null}],"usage":null}`,
+			`data: {"id":"chatcmpl-ark","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":null}`,
+			`data: {"id":"chatcmpl-ark","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":8,"total_tokens":18}}`,
+			`data: [DONE]`,
+		}, "\n\n")+"\n\n")
+	}))
+	defer srv.Close()
+
+	client, err := newOpenAICompatClient(&config.ProviderConfig{
+		BaseURL: srv.URL,
+		APIKey:  "test-key",
+		Model:   "glm-5.2",
+	}, "system")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conv := conversation.NewManager()
+	conv.AddUserMessage("read the file")
+
+	events, errs := client.Stream(context.Background(), conv, nil)
+	gotEvents := collectEvents(t, events)
+	gotErrs := collectErrors(t, errs)
+	if len(gotErrs) != 0 {
+		t.Fatalf("errors = %v, want none", gotErrs)
+	}
+
+	var starts []ToolCallStart
+	var deltas []ToolCallDelta
+	var completes []ToolCallComplete
+	var ends []StreamEnd
+	for _, event := range gotEvents {
+		switch typed := event.(type) {
+		case ToolCallStart:
+			starts = append(starts, typed)
+		case ToolCallDelta:
+			deltas = append(deltas, typed)
+		case ToolCallComplete:
+			completes = append(completes, typed)
+		case StreamEnd:
+			ends = append(ends, typed)
+		}
+	}
+	if len(starts) != 1 {
+		t.Fatalf("starts = %d, want 1; events=%#v", len(starts), gotEvents)
+	}
+	if len(deltas) != 2 {
+		t.Fatalf("deltas = %d, want 2; events=%#v", len(deltas), gotEvents)
+	}
+	if len(completes) != 1 {
+		t.Fatalf("completes = %d, want 1; events=%#v", len(completes), gotEvents)
+	}
+	if completes[0].ToolID != "call_read_1" || completes[0].ToolName != "ReadFile" {
+		t.Fatalf("complete = %+v, want call_read_1/ReadFile", completes[0])
+	}
+	if got := completes[0].Arguments["file_path"]; got != "internal/weather/service.go" {
+		t.Fatalf("arguments = %+v, want file_path", completes[0].Arguments)
+	}
+	if len(ends) != 1 || ends[0].StopReason != "tool_calls" {
+		t.Fatalf("stream ends = %+v, want one tool_calls end", ends)
+	}
+}
+
+func TestOpenAICompatDoesNotEmitDuplicateToolCompleteAcrossUsageChunk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, strings.Join([]string{
+			`data: {"id":"chatcmpl-dup","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"Glob","arguments":"{\"pattern\":\"*.go\"}"}}]},"finish_reason":"tool_calls"}],"usage":null}`,
+			`data: {"id":"chatcmpl-dup","object":"chat.completion.chunk","created":1,"model":"glm-5.2","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":4,"total_tokens":9}}`,
+			`data: [DONE]`,
+		}, "\n\n")+"\n\n")
+	}))
+	defer srv.Close()
+
+	client, err := newOpenAICompatClient(&config.ProviderConfig{BaseURL: srv.URL, APIKey: "test-key", Model: "glm-5.2"}, "system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conv := conversation.NewManager()
+	conv.AddUserMessage("glob")
+
+	events, errs := client.Stream(context.Background(), conv, nil)
+	gotEvents := collectEvents(t, events)
+	gotErrs := collectErrors(t, errs)
+	if len(gotErrs) != 0 {
+		t.Fatalf("errors = %v, want none", gotErrs)
+	}
+	var completes []ToolCallComplete
+	for _, event := range gotEvents {
+		if complete, ok := event.(ToolCallComplete); ok {
+			completes = append(completes, complete)
+		}
+	}
+	if len(completes) != 1 {
+		t.Fatalf("complete count = %d, want 1; events=%#v", len(completes), gotEvents)
+	}
+}

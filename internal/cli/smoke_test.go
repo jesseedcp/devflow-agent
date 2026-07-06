@@ -29,7 +29,7 @@ func TestSmokeCreatesDemandAndRunsRequirements(t *testing.T) {
 	defer func() { newSmokeRunner = original }()
 	newSmokeRunner = func(string) demandflow.Runner {
 		return &demandflow.StaticRunner{Responses: map[demandflow.Stage]demandflow.RunnerResponse{
-			demandflow.StageRequirements: {Text: "# Requirements: Smoke coupon check\n\nsmoke requirements body\n"},
+			demandflow.StageRequirements: {Text: "# Requirements: Smoke coupon check\n\n## 目标行为\n\nsmoke requirements body\n\n## 非目标范围\n\nnone\n\n## 业务规则\n\nrule\n\n## 用户/调用方影响\n\nimpact\n\n## 验收标准\n\ncriteria\n\n## 风险与歧义\n\nnone\n\n## 待确认问题\n\nnone\n\n## 人工确认记录\n\npending\n"},
 		}}
 	}
 

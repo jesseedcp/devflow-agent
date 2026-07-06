@@ -614,15 +614,17 @@ func sectionAfterHeading(text, heading string) string {
 	needle := strings.ToLower(heading)
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	inSection := false
+	targetLevel := 0
 	var section strings.Builder
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") {
-			if inSection {
+		if headingLevel := markdownHeadingLevel(trimmed); headingLevel > 0 {
+			if inSection && headingLevel <= targetLevel {
 				break
 			}
-			if strings.Contains(strings.ToLower(trimmed), needle) {
+			if !inSection && strings.Contains(strings.ToLower(trimmed), needle) {
 				inSection = true
+				targetLevel = headingLevel
 			}
 			continue
 		}
@@ -634,6 +636,19 @@ func sectionAfterHeading(text, heading string) string {
 	return section.String()
 }
 
+func markdownHeadingLevel(line string) int {
+	if line == "" || line[0] != '#' {
+		return 0
+	}
+	level := 0
+	for level < len(line) && line[level] == '#' {
+		level++
+	}
+	if level == len(line) || line[level] != ' ' {
+		return 0
+	}
+	return level
+}
 func evidenceSnippet(text string) string {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {

@@ -33,6 +33,8 @@ type openAICompatToolCallAccum struct {
 	id       string
 	name     string
 	argsJSON string
+	started  bool
+	done     bool
 }
 
 func newOpenAICompatClient(cfg *config.ProviderConfig, systemPrompt string) (*openaiCompatClient, error) {
@@ -184,8 +186,9 @@ func (c *openaiCompatClient) Stream(ctx context.Context, conv *conversation.Mana
 				if tc.ID != "" {
 					acc.id = tc.ID
 				}
-				if tc.Function.Name != "" {
+				if tc.Function.Name != "" && !acc.started {
 					acc.name = tc.Function.Name
+					acc.started = true
 					events <- ToolCallStart{ToolName: acc.name, ToolID: acc.id}
 				}
 
@@ -196,12 +199,16 @@ func (c *openaiCompatClient) Stream(ctx context.Context, conv *conversation.Mana
 				}
 			}
 
-			// When the model signals it is done (stop or tool_calls), emit completion events
-			if choice.FinishReason == "tool_calls" || choice.FinishReason == "stop" {
-				// Emit ToolCallComplete for each accumulated tool call
+			// When the model signals completion, emit tool-call completions
+			// (tool_calls) or finalize the turn (stop). A stop with pending tool
+			// calls is an inconsistent provider state and surfaces as an error.
+			if choice.FinishReason == "tool_calls" {
 				toolCallIndexes := sortedToolCallIndexes(toolCalls)
 				for _, index := range toolCallIndexes {
 					acc := toolCalls[index]
+					if acc.done {
+						continue
+					}
 					args, err := decodeToolArguments("OpenAI-compatible", acc.argsJSON)
 					if err != nil {
 						errs <- err
@@ -212,10 +219,25 @@ func (c *openaiCompatClient) Stream(ctx context.Context, conv *conversation.Mana
 						ToolName:  acc.name,
 						Arguments: args,
 					}
+					acc.done = true
 				}
-				// Reset for potential next round (should not happen in single stream, but safe)
-				toolCalls = make(map[int64]*openAICompatToolCallAccum)
 
+				if !streamEnded {
+					if hasFinalUsage {
+						events <- StreamEnd{StopReason: choice.FinishReason, Usage: finalUsage}
+						streamEnded = true
+					} else {
+						pendingStreamEnd = true
+						pendingStopReason = choice.FinishReason
+					}
+				}
+			} else if choice.FinishReason == "stop" {
+				for _, index := range sortedToolCallIndexes(toolCalls) {
+					if !toolCalls[index].done {
+						errs <- &LLMError{Message: "OpenAI-compatible stream finished with stop reason but had pending tool calls"}
+						return
+					}
+				}
 				if !streamEnded {
 					if hasFinalUsage {
 						events <- StreamEnd{StopReason: choice.FinishReason, Usage: finalUsage}

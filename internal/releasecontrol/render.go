@@ -86,7 +86,31 @@ func RenderObservation(title string, record ObservationRecord) string {
 		fmt.Fprintf(&b, "Run URL: %s\n", record.RunURL)
 	}
 	fmt.Fprintf(&b, "%s\n\n", metadataLine("Deployment Status", string(deploymentStatus)))
-	fmt.Fprintf(&b, "## Provider Checks\n\n%s\n\n", metadataLine("Status", string(status)))
+	b.WriteString("## Provider Checks\n\n")
+	if len(record.Checks) == 0 {
+		fmt.Fprintf(&b, "%s\n\n", metadataLine("Status", string(status)))
+	} else {
+		for _, check := range record.Checks {
+			if strings.TrimSpace(check.Name) == "" {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s\n", metadataLine("Name", check.Name))
+			fmt.Fprintf(&b, "  %s\n", metadataLine("Status", string(statusOrDefault(check.Status))))
+			if strings.TrimSpace(check.URL) != "" {
+				fmt.Fprintf(&b, "  URL: %s\n", check.URL)
+			}
+			if check.ActualStatus != 0 {
+				fmt.Fprintf(&b, "  Actual Status: `%d`\n", check.ActualStatus)
+			}
+			if strings.TrimSpace(check.Summary) != "" {
+				fmt.Fprintf(&b, "  Summary: %s\n", check.Summary)
+			}
+			if strings.TrimSpace(check.ResponseExcerpt) != "" {
+				fmt.Fprintf(&b, "  Response Excerpt: `%s`\n", check.ResponseExcerpt)
+			}
+		}
+		b.WriteString("\n")
+	}
 	fmt.Fprintf(&b, "## Result\n\n%s\n\n", nonEmpty(record.Summary, "No result recorded."))
 	b.WriteString("## Blocking Findings\n\n")
 	for _, finding := range record.BlockingFindings {

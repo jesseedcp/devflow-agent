@@ -39,6 +39,15 @@ type DeploymentRecord struct {
 	UpdatedAt   time.Time
 }
 
+type ObservationCheck struct {
+	Name            string
+	Status          Status
+	Summary         string
+	URL             string
+	ActualStatus    int
+	ResponseExcerpt string
+}
+
 type ObservationRecord struct {
 	Provider         string
 	Repo             string
@@ -47,6 +56,7 @@ type ObservationRecord struct {
 	DeploymentStatus Status
 	Status           Status
 	Summary          string
+	Checks           []ObservationCheck
 	BlockingFindings []string
 	EvidenceLinks    []string
 	ObservedAt       time.Time

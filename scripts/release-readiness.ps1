@@ -781,6 +781,10 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         go test ./internal/runtime/llm -run "TestOpenAICompat.*Tool|TestOpenAICompatArkStyleFragmentedToolCallAccumulatesByIndex|TestOpenAICompatDoesNotEmitDuplicateToolCompleteAcrossUsageChunk" -count=1
         go test ./internal/runtime/agent -run "TestAgentFeedsToolResultsBackToNextTurn|TestAgentToolCallLoop" -count=1
     }
+    Invoke-Step "v1.1.1 runtime completion hardening smoke" {
+        go test ./internal/demandflow -run "TestRuntimeSummaryCountsToolTraces|TestImplementationEvidence|TestRenderImplementationRuntimeFinalizer|TestMaybeFinalizeRuntimeError|TestRunImplementationRecordsRuntimeCompletionEvent|TestImplementationPromptTellsRuntimeToStopAfterPassingTests" -count=1
+        go test ./internal/metrics -run "TestCollectProjectMetricsCountsRuntimeCompletionEvents|TestRenderProjectMetricsIncludesRuntimeEfficiency" -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

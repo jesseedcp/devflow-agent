@@ -53,3 +53,29 @@ func TestRenderRollbackDefaultsToPendingDecision(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderObservationIncludesHealthChecks(t *testing.T) {
+	body := RenderObservation("Release dogfood", ObservationRecord{
+		Provider:         "github_actions",
+		Repo:             "owner/repo",
+		RunID:            "123",
+		RunURL:           "https://github.com/owner/repo/actions/runs/123",
+		DeploymentStatus: StatusPassed,
+		Status:           StatusPassed,
+		Summary:          "deployment and health checks passed",
+		Checks: []ObservationCheck{
+			{Name: "http_health", Status: StatusPassed, Summary: "GET https://example.test/health returned 200 expected_status=200", URL: "https://example.test/health"},
+		},
+	})
+
+	for _, want := range []string{
+		"## Provider Checks",
+		"Name: `http_health`",
+		"Status: `passed`",
+		"https://example.test/health",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("observation body missing %q:\n%s", want, body)
+		}
+	}
+}

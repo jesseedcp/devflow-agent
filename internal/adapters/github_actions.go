@@ -29,6 +29,7 @@ type DeploymentRef struct {
 	Environment string
 	BaseURL     string
 	Token       string
+	Inputs      map[string]string
 }
 
 type DeploymentResult struct {
@@ -53,7 +54,9 @@ type DeploymentAdapter interface {
 }
 
 type GitHubActionsAdapter struct {
-	Client *http.Client
+	Client       *http.Client
+	PollInterval time.Duration
+	Now          func() time.Time
 }
 
 type githubWorkflowRunsResponse struct {
@@ -79,10 +82,11 @@ func (a GitHubActionsAdapter) TriggerDeployment(ctx context.Context, ref Deploym
 	if err != nil {
 		return DeploymentResult{}, err
 	}
+	startedAt := a.now().Add(-5 * time.Second)
 	if err := a.dispatchWorkflow(ctx, baseURL, token, ref); err != nil {
 		return DeploymentResult{}, err
 	}
-	return a.fetchNewestRun(ctx, baseURL, token, ref)
+	return a.fetchNewestRunAfter(ctx, baseURL, token, ref, startedAt)
 }
 
 func (a GitHubActionsAdapter) GetDeployment(ctx context.Context, ref DeploymentRef) (DeploymentResult, error) {
@@ -127,16 +131,23 @@ func deploymentEndpointConfig(ref DeploymentRef) (string, string, error) {
 
 func (a GitHubActionsAdapter) dispatchWorkflow(ctx context.Context, baseURL, token string, ref DeploymentRef) error {
 	client := a.client()
-	var bodyBytes []byte
-	var err error
-	if strings.TrimSpace(ref.Environment) != "" {
-		bodyBytes, err = json.Marshal(map[string]any{
-			"ref":    ref.Ref,
-			"inputs": map[string]string{"environment": ref.Environment},
-		})
-	} else {
-		bodyBytes, err = json.Marshal(map[string]string{"ref": ref.Ref})
+	inputs := map[string]string{}
+	for key, value := range ref.Inputs {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		inputs[key] = value
 	}
+	if strings.TrimSpace(ref.Environment) != "" {
+		inputs["environment"] = ref.Environment
+	}
+
+	payload := map[string]any{"ref": ref.Ref}
+	if len(inputs) > 0 {
+		payload["inputs"] = inputs
+	}
+	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encode dispatch body: %w", err)
 	}
@@ -163,6 +174,11 @@ func (a GitHubActionsAdapter) dispatchWorkflow(ctx context.Context, baseURL, tok
 }
 
 func (a GitHubActionsAdapter) fetchNewestRun(ctx context.Context, baseURL, token string, ref DeploymentRef) (DeploymentResult, error) {
+	result, _, err := a.fetchNewestRunWithRaw(ctx, baseURL, token, ref)
+	return result, err
+}
+
+func (a GitHubActionsAdapter) fetchNewestRunWithRaw(ctx context.Context, baseURL, token string, ref DeploymentRef) (DeploymentResult, githubWorkflowRun, error) {
 	client := a.client()
 	runsURL := baseURL + "/repos/" + githubRepoPath(ref.Repo) + "/actions/workflows/" + url.PathEscape(ref.WorkflowID) + "/runs"
 	query := url.Values{}
@@ -173,7 +189,7 @@ func (a GitHubActionsAdapter) fetchNewestRun(ctx context.Context, baseURL, token
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, runsURL, nil)
 	if err != nil {
-		return DeploymentResult{}, err
+		return DeploymentResult{}, githubWorkflowRun{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
@@ -181,19 +197,19 @@ func (a GitHubActionsAdapter) fetchNewestRun(ctx context.Context, baseURL, token
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return DeploymentResult{}, fmt.Errorf("fetch github actions runs: %w", err)
+		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("fetch github actions runs: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return DeploymentResult{}, fmt.Errorf("github runs returned %d", resp.StatusCode)
+		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("github runs returned %d", resp.StatusCode)
 	}
 
 	var runsResponse githubWorkflowRunsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&runsResponse); err != nil {
-		return DeploymentResult{}, fmt.Errorf("decode github runs response: %w", err)
+		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("decode github runs response: %w", err)
 	}
 	if len(runsResponse.WorkflowRuns) == 0 {
-		return DeploymentResult{}, fmt.Errorf("no github actions runs found for workflow %s ref %s", ref.WorkflowID, ref.Ref)
+		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("no github actions runs found for workflow %s ref %s", ref.WorkflowID, ref.Ref)
 	}
 
 	run := selectNewestRun(runsResponse.WorkflowRuns, ref.Ref)
@@ -212,7 +228,27 @@ func (a GitHubActionsAdapter) fetchNewestRun(ctx context.Context, baseURL, token
 		CreatedAt:   run.CreatedAt,
 		UpdatedAt:   run.UpdatedAt,
 		Message:     deploymentMessage(status),
-	}, nil
+	}, run, nil
+}
+
+func (a GitHubActionsAdapter) fetchNewestRunAfter(ctx context.Context, baseURL, token string, ref DeploymentRef, after time.Time) (DeploymentResult, error) {
+	ticker := time.NewTicker(a.pollInterval())
+	defer ticker.Stop()
+
+	for {
+		result, run, err := a.fetchNewestRunWithRaw(ctx, baseURL, token, ref)
+		if err != nil {
+			return DeploymentResult{}, err
+		}
+		if !run.CreatedAt.Before(after) {
+			return result, nil
+		}
+		select {
+		case <-ctx.Done():
+			return DeploymentResult{}, fmt.Errorf("wait for newly dispatched github actions run: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 func (a GitHubActionsAdapter) client() *http.Client {
@@ -220,6 +256,20 @@ func (a GitHubActionsAdapter) client() *http.Client {
 		return a.Client
 	}
 	return http.DefaultClient
+}
+
+func (a GitHubActionsAdapter) now() time.Time {
+	if a.Now != nil {
+		return a.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+func (a GitHubActionsAdapter) pollInterval() time.Duration {
+	if a.PollInterval > 0 {
+		return a.PollInterval
+	}
+	return 2 * time.Second
 }
 
 func selectNewestRun(runs []githubWorkflowRun, ref string) githubWorkflowRun {

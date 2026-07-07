@@ -1,0 +1,73 @@
+name: Release Marker
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment label for Devflow release-control dogfood"
+        required: false
+        default: "dogfood"
+      demand_id:
+        description: "Devflow demand id that triggered this release"
+        required: false
+        default: "manual"
+      release_note:
+        description: "Short release note recorded in the marker artifact"
+        required: false
+        default: "manual release marker"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release-marker:
+    name: Safe release marker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./... -count=1 -timeout 5m
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Build CLI
+        run: go build -o dist/devflow ./cmd/devflow
+
+      - name: Write release marker
+        shell: bash
+        run: |
+          mkdir -p dist
+          cat > dist/release-marker.json <<'JSON'
+          {
+            "workflow": "release.yml",
+            "environment": "${{ inputs.environment }}",
+            "demand_id": "${{ inputs.demand_id }}",
+            "release_note": "${{ inputs.release_note }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref_name }}",
+            "run_id": "${{ github.run_id }}",
+            "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          JSON
+          cat dist/release-marker.json
+
+      - name: Upload release marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: devflow-release-marker
+          path: dist/release-marker.json
+          if-no-files-found: error

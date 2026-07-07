@@ -529,3 +529,32 @@ If `devflow run --stage implementation` reaches the runtime iteration limit afte
 Devflow does not finalize empty runs, read-only runs, or runs with failing tests. Those remain errors and should be retried or investigated.
 
 Runtime completion events appear in `events.jsonl` and feed `devflow metrics report` runtime efficiency counts.
+
+
+### Live GitHub Actions Release Workflow
+
+Devflow does not deploy production directly. It can trigger a real GitHub Actions workflow and record the resulting run as deployment evidence.
+
+```powershell
+devflow deploy trigger `
+  --demand add-coupon-eligibility-check `
+  --provider github `
+  --github-repo "owner/repo" `
+  --workflow "release.yml" `
+  --ref "main" `
+  --environment "dogfood" `
+  --github-input "demand_id=add-coupon-eligibility-check" `
+  --github-input "release_note=safe release marker"
+```
+
+After deployment passes, observation can include an HTTP health check:
+
+```powershell
+devflow observe refresh `
+  --demand add-coupon-eligibility-check `
+  --health-url "https://example.test/health" `
+  --expect-status 200 `
+  --expect-contains "ok"
+```
+
+If the health check fails, Devflow records `observation.md`, writes rollback recommendation material, and blocks for a human release decision.

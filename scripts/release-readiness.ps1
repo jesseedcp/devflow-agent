@@ -663,7 +663,7 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
                         $context.Response.ContentLength64 = 0
                         $context.Response.Close()
                     } else {
-                        $body = '{"workflow_runs":[{"id":123,"html_url":"https://github.example/owner/repo/actions/runs/123","head_sha":"abc123","head_branch":"main","status":"completed","conclusion":"success","created_at":"2026-07-05T10:00:00Z","updated_at":"2026-07-05T10:02:00Z"}]}'
+                        $body = '{"workflow_runs":[{"id":123,"html_url":"https://github.example/owner/repo/actions/runs/123","head_sha":"abc123","head_branch":"main","status":"completed","conclusion":"success","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:02:00Z"}]}'
                         $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
                         $context.Response.StatusCode = 200
                         $context.Response.ContentType = 'application/json; charset=utf-8'
@@ -784,6 +784,11 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
     Invoke-Step "v1.1.1 runtime completion hardening smoke" {
         go test ./internal/demandflow -run "TestRuntimeSummaryCountsToolTraces|TestImplementationEvidence|TestRenderImplementationRuntimeFinalizer|TestMaybeFinalizeRuntimeError|TestRunImplementationRecordsRuntimeCompletionEvent|TestImplementationPromptTellsRuntimeToStopAfterPassingTests" -count=1
         go test ./internal/metrics -run "TestCollectProjectMetricsCountsRuntimeCompletionEvents|TestRenderProjectMetricsIncludesRuntimeEfficiency" -count=1
+    }
+    Invoke-Step "v1.2 release workflow health smoke" {
+        go test ./internal/adapters -run "TestGitHubActionsDispatchSendsInputs|TestGitHubActionsDispatchPollsUntilNewRunAppears" -count=1
+        go test ./internal/releasecontrol -run "TestRenderObservationIncludesHealthChecks|TestObservationFromHealthResult" -count=1
+        go test ./internal/cli -run "TestDeployTriggerPassesGitHubInputs|TestObserveRefresh.*HTTPHealth" -count=1
     }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference

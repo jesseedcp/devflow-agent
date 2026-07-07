@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: devflow-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: devflow
+      MYSQL_DATABASE: devflow
+      MYSQL_USER: devflow
+      MYSQL_PASSWORD: devflow
+    ports:
+      - "3316:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-udevflow", "-pdevflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

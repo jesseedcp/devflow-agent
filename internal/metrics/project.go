@@ -40,6 +40,9 @@ func CollectProject(root string) (ProjectMetrics, error) {
 		metrics := CollectDemand(demand, events)
 		out.Demands = append(out.Demands, metrics)
 		applyDemandMetrics(&out, metrics)
+		for _, event := range events {
+			applyRuntimeEvent(&out, event)
+		}
 	}
 	return out, nil
 }
@@ -70,4 +73,10 @@ func applyDemandMetrics(out *ProjectMetrics, demand DemandMetrics) {
 
 func ApplyForCLI(out *ProjectMetrics, demand DemandMetrics) {
 	applyDemandMetrics(out, demand)
+}
+
+func ApplyRuntimeEvents(out *ProjectMetrics, events []artifacts.Event) {
+	for _, event := range events {
+		applyRuntimeEvent(out, event)
+	}
 }

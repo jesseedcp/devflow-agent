@@ -134,3 +134,76 @@ func TestRuntimeAgentErrorIncludesToolSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectRuntimeTraceUseRecordsDescriptions(t *testing.T) {
+	descs := map[string]string{}
+
+	collectRuntimeTraceUse(descs, agent.ToolUseEvent{
+		ToolID:   "edit1",
+		ToolName: "EditFile",
+		Args: map[string]any{
+			"file_path": "internal/weather/service.go",
+		},
+	})
+	collectRuntimeTraceUse(descs, agent.ToolUseEvent{
+		ToolID:   "bash1",
+		ToolName: "Bash",
+		Args: map[string]any{
+			"command": "go test ./...",
+		},
+	})
+
+	if descs["edit1"] != "internal/weather/service.go" {
+		t.Fatalf("edit desc = %q", descs["edit1"])
+	}
+	if descs["bash1"] != "go test ./..." {
+		t.Fatalf("bash desc = %q", descs["bash1"])
+	}
+}
+
+func TestCollectRuntimeTraceResultBuildsTrace(t *testing.T) {
+	descs := map[string]string{"bash1": "go test ./..."}
+	trace := collectRuntimeTraceResult(descs, agent.ToolResultEvent{
+		ToolID:   "bash1",
+		ToolName: "Bash",
+		Output:   "ok",
+		IsError:  false,
+	})
+
+	if trace.ToolID != "bash1" || trace.ToolName != "Bash" || trace.Desc != "go test ./..." || trace.Output != "ok" {
+		t.Fatalf("trace = %+v", trace)
+	}
+}
+
+func TestMaybeFinalizeRuntimeErrorReturnsProgressForSafeImplementationMaxIterations(t *testing.T) {
+	req := RunnerRequest{Stage: StageImplementation}
+	traces := []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok", IsError: false},
+	}
+
+	body, summary, ok := maybeFinalizeRuntimeError(req, "glm-5.2", 20, traces, "Agent reached maximum iterations (20)")
+	if !ok {
+		t.Fatal("maybeFinalizeRuntimeError ok = false, want true")
+	}
+	if !strings.Contains(body, "deterministic runtime finalizer") {
+		t.Fatalf("body missing finalizer marker:\n%s", body)
+	}
+	if summary.CompletionMode != RuntimeCompletionDeterministicFinalizer {
+		t.Fatalf("CompletionMode = %s", summary.CompletionMode)
+	}
+	if !summary.MaxIterationsHit {
+		t.Fatal("MaxIterationsHit = false")
+	}
+}
+
+func TestMaybeFinalizeRuntimeErrorRejectsNonImplementationMaxIterations(t *testing.T) {
+	req := RunnerRequest{Stage: StagePlan}
+	_, _, ok := maybeFinalizeRuntimeError(req, "glm-5.2", 20, []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "plan.md", Output: "edited"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok"},
+	}, "Agent reached maximum iterations (20)")
+	if ok {
+		t.Fatal("plan stage should not use implementation finalizer")
+	}
+}

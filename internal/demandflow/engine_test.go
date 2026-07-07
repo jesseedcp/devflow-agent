@@ -745,3 +745,74 @@ func TestEngineImplementationRejectsInvalidProgressBeforeQualityGate(t *testing.
 		t.Fatalf("state = %s, want implementation", demand.State)
 	}
 }
+
+func TestRunImplementationRecordsRuntimeCompletionEvent(t *testing.T) {
+	root := t.TempDir()
+	engine := NewEngine(root)
+	store := engine.Store
+	demand := artifacts.Demand{
+		ID:          "runtime-event",
+		Title:       "Runtime Event",
+		Description: "Record runtime completion event",
+		Source:      "test",
+		State:       string(workflow.Implementation),
+	}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.RequirementsFile, "requirements"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteArtifact(demand.ID, artifacts.PlanFile, "plan"); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &StaticRunner{Responses: map[Stage]RunnerResponse{
+		StageImplementation: {
+			Text: "## \u5b9e\u73b0\u6458\u8981\n\nimplemented\n\n## \u4ee3\u7801\u6539\u52a8\n\n- tools.go\n\n## \u6d4b\u8bd5\u4e0e\u9a8c\u8bc1\n\n- go test ./...\n\n## \u9057\u7559\u95ee\u9898\n\nnone\n",
+			Runtime: RuntimeSummary{
+				Stage:            StageImplementation,
+				Model:            "glm-5.2",
+				CompletionMode:   RuntimeCompletionDeterministicFinalizer,
+				MaxIterationsHit: true,
+				ToolCalls:        21,
+				ChangedFiles:     []string{"tools.go"},
+				TestCommands:     []string{"go test ./..."},
+			},
+		},
+	}}
+
+	_, err := engine.RunDetailed(context.Background(), Options{
+		Root:     root,
+		DemandID: demand.ID,
+		Stage:    StageImplementation,
+		Runner:   runner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := store.ReadEvents(demand.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, event := range events {
+		if event.Type != "runtime.stage_completed" {
+			continue
+		}
+		found = true
+		if event.Data["completion_mode"] != string(RuntimeCompletionDeterministicFinalizer) {
+			t.Fatalf("completion_mode = %q", event.Data["completion_mode"])
+		}
+		if event.Data["tool_calls"] != "21" {
+			t.Fatalf("tool_calls = %q", event.Data["tool_calls"])
+		}
+		if event.Data["max_iterations_hit"] != "true" {
+			t.Fatalf("max_iterations_hit = %q", event.Data["max_iterations_hit"])
+		}
+	}
+	if !found {
+		t.Fatalf("missing runtime.stage_completed event: %#v", events)
+	}
+}

@@ -115,19 +115,43 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 
 	var textParts []string
 	var toolSummary []string
+	var traces []RuntimeToolTrace
+	toolDescs := map[string]string{}
 	var agentErr error
+	maxIterationsHit := false
+	var finalizedText string
+	var finalizedRuntime RuntimeSummary
 	for ev := range ag.Run(ctx, conv) {
 		switch e := ev.(type) {
 		case agent.StreamText:
 			textParts = append(textParts, e.Text)
+		case agent.ToolUseEvent:
+			collectRuntimeTraceUse(toolDescs, e)
 		case agent.ToolResultEvent:
 			toolSummary = append(toolSummary, e.ToolName)
+			traces = append(traces, collectRuntimeTraceResult(toolDescs, e))
 		case agent.PermissionRequestEvent:
 			e.ResponseCh <- runtimePermissionResponse(req, mode, e)
 		case agent.ErrorEvent:
+			if strings.Contains(e.Message, "maximum iterations") {
+				maxIterationsHit = true
+			}
+			if body, summary, ok := maybeFinalizeRuntimeError(req, provider.Model, maxIterations, traces, e.Message); ok {
+				finalizedText = body
+				finalizedRuntime = summary
+				agentErr = nil
+				continue
+			}
 			agentErr = runtimeAgentError(req.Stage, provider.Model, maxIterations, toolSummary, e.Message)
 		case agent.LoopComplete:
 		}
+	}
+	if strings.TrimSpace(finalizedText) != "" {
+		return RunnerResponse{
+			Text:        strings.TrimSpace(finalizedText),
+			ToolSummary: toolSummary,
+			Runtime:     finalizedRuntime,
+		}, nil
 	}
 	if agentErr != nil {
 		return RunnerResponse{}, agentErr
@@ -141,6 +165,14 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 	return RunnerResponse{
 		Text:        text,
 		ToolSummary: toolSummary,
+		Runtime: summarizeRuntimeTraces(
+			req.Stage,
+			provider.Model,
+			RuntimeCompletionModelText,
+			maxIterationsHit,
+			traces,
+			changedFilesFromRuntimeTraces(req.Root, traces),
+		),
 	}, nil
 }
 
@@ -168,4 +200,52 @@ func lastRuntimeTools(values []string, limit int) []string {
 		return values
 	}
 	return values[len(values)-limit:]
+}
+
+func maybeFinalizeRuntimeError(req RunnerRequest, model string, maxIterations int, traces []RuntimeToolTrace, message string) (string, RuntimeSummary, bool) {
+	if !strings.Contains(message, "maximum iterations") {
+		return "", RuntimeSummary{}, false
+	}
+	if !shouldFinalizeImplementationAfterMaxIterations(req, traces) {
+		return "", RuntimeSummary{}, false
+	}
+	changedFiles := changedFilesFromRuntimeTraces(req.Root, traces)
+	body := renderImplementationRuntimeFinalizer(model, maxIterations, traces, changedFiles)
+	summary := summarizeRuntimeTraces(
+		req.Stage,
+		model,
+		RuntimeCompletionDeterministicFinalizer,
+		true,
+		traces,
+		changedFiles,
+	)
+	return body, summary, true
+}
+
+func collectRuntimeTraceUse(descs map[string]string, ev agent.ToolUseEvent) {
+	desc := ""
+	switch ev.ToolName {
+	case "Bash":
+		desc, _ = ev.Args["command"].(string)
+	case "ReadFile", "WriteFile", "EditFile":
+		desc, _ = ev.Args["file_path"].(string)
+	case "Glob", "Grep":
+		desc, _ = ev.Args["pattern"].(string)
+	case "ToolSearch":
+		desc, _ = ev.Args["query"].(string)
+	}
+	if strings.TrimSpace(desc) != "" {
+		descs[ev.ToolID] = strings.TrimSpace(desc)
+	}
+}
+
+func collectRuntimeTraceResult(descs map[string]string, ev agent.ToolResultEvent) RuntimeToolTrace {
+	return RuntimeToolTrace{
+		ToolID:   ev.ToolID,
+		ToolName: ev.ToolName,
+		Desc:     descs[ev.ToolID],
+		Output:   ev.Output,
+		IsError:  ev.IsError,
+		Elapsed:  ev.Elapsed,
+	}
 }

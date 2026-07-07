@@ -281,6 +281,12 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 	}
 	result.Artifacts = append(result.Artifacts, artifacts.ProgressFile)
 
+	if resp.Runtime.CompletionMode != RuntimeCompletionUnknown {
+		if err := e.Store.AppendEvent(opts.DemandID, runtimeCompletionEvent(opts.Now(), resp.Runtime)); err != nil {
+			return err
+		}
+	}
+
 	if len(opts.QualityCommands) > 0 {
 		gateResult := e.Gate.Run(ctx, qualityRoot(opts), opts.QualityCommands...)
 		passed := gateResult.Passed
@@ -343,6 +349,27 @@ func (e Engine) runImplementation(ctx context.Context, opts Options, result *Run
 	}
 	result.Message = "implementation completed and quality gate passed"
 	return e.advance(&demand, workflow.MRReview)
+}
+
+func runtimeCompletionEvent(now time.Time, summary RuntimeSummary) artifacts.Event {
+	data := map[string]string{
+		"stage":              string(summary.Stage),
+		"model":              summary.Model,
+		"completion_mode":    string(summary.CompletionMode),
+		"max_iterations_hit": strconv.FormatBool(summary.MaxIterationsHit),
+		"tool_calls":         strconv.Itoa(summary.ToolCalls),
+		"edit_calls":         strconv.Itoa(summary.EditCalls),
+		"bash_calls":         strconv.Itoa(summary.BashCalls),
+		"error_calls":        strconv.Itoa(summary.ErrorCalls),
+		"changed_files":      strings.Join(summary.ChangedFiles, ","),
+		"test_commands":      strings.Join(summary.TestCommands, " | "),
+	}
+	return artifacts.Event{
+		Time:    now,
+		Type:    "runtime.stage_completed",
+		Message: fmt.Sprintf("runtime %s completed via %s with %d tool calls", summary.Stage, summary.CompletionMode, summary.ToolCalls),
+		Data:    data,
+	}
 }
 
 func (e Engine) runVerification(ctx context.Context, opts Options, result *RunResult) error {

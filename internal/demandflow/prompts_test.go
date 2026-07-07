@@ -136,3 +136,17 @@ func TestImplementationPromptRequiresChangedFilesAndCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestImplementationPromptTellsRuntimeToStopAfterPassingTests(t *testing.T) {
+	prompt := implementationPrompt(ContextSnapshot{Demand: artifacts.Demand{Title: "Weather", Description: "Rainy indoor"}})
+
+	for _, want := range []string{
+		"Once code changes are complete and tests pass, stop using tools",
+		"return the progress.md body immediately",
+		"Do not keep exploring after successful tests",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("implementation prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}

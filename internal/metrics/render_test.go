@@ -67,3 +67,25 @@ func TestRenderProjectMetricsIncludesPartialDataCaveats(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderProjectMetricsIncludesRuntimeEfficiency(t *testing.T) {
+	body := RenderProject(ProjectMetrics{
+		DemandCount:                   1,
+		RuntimeStageCount:             2,
+		RuntimeToolCallCount:          30,
+		RuntimeFinalizedCount:         1,
+		RuntimeMaxIterationFinalizers: 1,
+	})
+
+	for _, want := range []string{
+		"## Runtime Efficiency",
+		"- Runtime stages: 2",
+		"- Runtime tool calls: 30",
+		"- Deterministic finalizers: 1",
+		"- Max-iteration finalizers: 1",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics body missing %q:\n%s", want, body)
+		}
+	}
+}

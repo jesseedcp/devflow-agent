@@ -49,3 +49,53 @@ func TestRuntimeToolTraceRedactedExcerpt(t *testing.T) {
 		}
 	}
 }
+
+func TestImplementationEvidenceDetectsMutationAndPassingTests(t *testing.T) {
+	traces := []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+		{ToolName: "WriteFile", Desc: "main_test.go", Output: "Successfully wrote to main_test.go"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok   weather-agent 0.123s", IsError: false},
+	}
+
+	evidence := implementationEvidenceFromTraces("", traces)
+
+	if !evidence.HasMutation {
+		t.Fatal("HasMutation = false, want true")
+	}
+	if !evidence.HasPassingTestCommand {
+		t.Fatal("HasPassingTestCommand = false, want true")
+	}
+	if len(evidence.ChangedFiles) != 2 {
+		t.Fatalf("ChangedFiles = %#v, want two files", evidence.ChangedFiles)
+	}
+	if evidence.TestCommands[0] != "go test ./..." {
+		t.Fatalf("TestCommands = %#v", evidence.TestCommands)
+	}
+}
+
+func TestShouldFinalizeImplementationAfterMaxIterationsRequiresMutationAndPassingTest(t *testing.T) {
+	req := RunnerRequest{Stage: StageImplementation}
+
+	ok := shouldFinalizeImplementationAfterMaxIterations(req, []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok", IsError: false},
+	})
+	if !ok {
+		t.Fatal("shouldFinalizeImplementationAfterMaxIterations = false, want true")
+	}
+
+	noMutation := shouldFinalizeImplementationAfterMaxIterations(req, []RuntimeToolTrace{
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok", IsError: false},
+	})
+	if noMutation {
+		t.Fatal("finalized without mutation")
+	}
+
+	noPassingTest := shouldFinalizeImplementationAfterMaxIterations(req, []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "FAIL", IsError: true},
+	})
+	if noPassingTest {
+		t.Fatal("finalized without passing test command")
+	}
+}

@@ -1,6 +1,7 @@
 package demandflow
 
 import (
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -63,5 +64,79 @@ func changedFilesFromRuntimeTraces(root string, traces []RuntimeToolTrace) []str
 			files = append(files, trace.Desc)
 		}
 	}
+	files = append(files, changedFilesFromGit(root)...)
 	return uniqueStrings(files)
+}
+
+func changedFilesFromGit(root string) []string {
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	cmd := exec.Command("git", "-C", root, "diff", "--name-only", "HEAD", "--")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, line := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			files = append(files, trimmed)
+		}
+	}
+	return uniqueStrings(files)
+}
+
+type runtimeImplementationEvidence struct {
+	HasMutation            bool
+	HasPassingTestCommand  bool
+	ChangedFiles           []string
+	TestCommands           []string
+	PassingCommandExcerpts []string
+}
+
+func implementationEvidenceFromTraces(root string, traces []RuntimeToolTrace) runtimeImplementationEvidence {
+	evidence := runtimeImplementationEvidence{}
+	for _, trace := range traces {
+		switch trace.ToolName {
+		case "WriteFile", "EditFile":
+			if strings.TrimSpace(trace.Desc) != "" && !trace.IsError {
+				evidence.HasMutation = true
+				evidence.ChangedFiles = append(evidence.ChangedFiles, trace.Desc)
+			}
+		case "Bash":
+			command := strings.TrimSpace(trace.Desc)
+			if command == "" {
+				continue
+			}
+			if looksLikeTestCommand(command) {
+				evidence.TestCommands = append(evidence.TestCommands, command)
+				if !trace.IsError {
+					evidence.HasPassingTestCommand = true
+					evidence.PassingCommandExcerpts = append(evidence.PassingCommandExcerpts, trace.RedactedOutputExcerpt(512))
+				}
+			}
+		}
+	}
+	evidence.ChangedFiles = uniqueStrings(append(evidence.ChangedFiles, changedFilesFromRuntimeTraces(root, traces)...))
+	evidence.TestCommands = uniqueStrings(evidence.TestCommands)
+	evidence.PassingCommandExcerpts = uniqueStrings(evidence.PassingCommandExcerpts)
+	return evidence
+}
+
+func looksLikeTestCommand(command string) bool {
+	lower := strings.ToLower(strings.TrimSpace(command))
+	return strings.Contains(lower, "go test") ||
+		strings.Contains(lower, "npm test") ||
+		strings.Contains(lower, "pnpm test") ||
+		strings.Contains(lower, "yarn test") ||
+		strings.Contains(lower, "pytest") ||
+		strings.Contains(lower, "cargo test")
+}
+
+func shouldFinalizeImplementationAfterMaxIterations(req RunnerRequest, traces []RuntimeToolTrace) bool {
+	if req.Stage != StageImplementation {
+		return false
+	}
+	evidence := implementationEvidenceFromTraces(req.Root, traces)
+	return evidence.HasMutation && evidence.HasPassingTestCommand
 }

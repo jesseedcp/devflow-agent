@@ -1,6 +1,9 @@
 package demandflow
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type RunnerRequest struct {
 	Stage    Stage
@@ -19,9 +22,42 @@ const (
 	ToolModeEditAndShell ToolMode = "edit-and-shell"
 )
 
+type RuntimeCompletionMode string
+
+const (
+	RuntimeCompletionUnknown                RuntimeCompletionMode = ""
+	RuntimeCompletionModelText              RuntimeCompletionMode = "model_text"
+	RuntimeCompletionDeterministicFinalizer RuntimeCompletionMode = "deterministic_finalizer"
+	RuntimeCompletionFailed                 RuntimeCompletionMode = "failed"
+)
+
+type RuntimeToolTrace struct {
+	ToolID   string
+	ToolName string
+	Desc     string
+	Output   string
+	IsError  bool
+	Elapsed  time.Duration
+}
+
+type RuntimeSummary struct {
+	Stage            Stage
+	Model            string
+	CompletionMode   RuntimeCompletionMode
+	MaxIterationsHit bool
+	ToolCalls        int
+	EditCalls        int
+	BashCalls        int
+	ErrorCalls       int
+	LastTools        []string
+	ChangedFiles     []string
+	TestCommands     []string
+}
+
 type RunnerResponse struct {
 	Text        string
 	ToolSummary []string
+	Runtime     RuntimeSummary
 }
 
 type Runner interface {

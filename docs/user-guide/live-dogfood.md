@@ -96,3 +96,28 @@ devflow rollback confirm --demand add-coupon-eligibility-check --decision risk_a
 ```
 
 v0.9.0 records rollback decisions only; it does not execute rollback. The default release-readiness gate covers release control through a local fake GitHub API and does not require a token.
+
+
+## Live GitHub Actions Release Dogfood
+
+This dogfood dispatches a real GitHub Actions workflow. Use a disposable workflow or the safe `release.yml` marker workflow. Required:
+
+- `GITHUB_TOKEN` or `gh auth token` with workflow dispatch access.
+- A demand in `deployment` state.
+- A workflow with `workflow_dispatch`.
+
+Recommended command:
+
+```powershell
+devflow deploy trigger `
+  --demand release-workflow-dogfood `
+  --provider github `
+  --github-repo "jesseedcp/devflow-agent" `
+  --workflow "release.yml" `
+  --ref "main" `
+  --environment "dogfood" `
+  --github-input "demand_id=release-workflow-dogfood" `
+  --github-input "release_note=v1.2 live release workflow dogfood"
+```
+
+Then refresh observation with the recorded GitHub Actions run URL as HTTP evidence.

@@ -663,7 +663,7 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
                         $context.Response.ContentLength64 = 0
                         $context.Response.Close()
                     } else {
-                        $body = '{"workflow_runs":[{"id":123,"html_url":"https://github.example/owner/repo/actions/runs/123","head_sha":"abc123","head_branch":"main","status":"completed","conclusion":"success","created_at":"2026-07-05T10:00:00Z","updated_at":"2026-07-05T10:02:00Z"}]}'
+                        $body = '{"workflow_runs":[{"id":123,"html_url":"https://github.example/owner/repo/actions/runs/123","head_sha":"abc123","head_branch":"main","status":"completed","conclusion":"success","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:02:00Z"}]}'
                         $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
                         $context.Response.StatusCode = 200
                         $context.Response.ContentType = 'application/json; charset=utf-8'

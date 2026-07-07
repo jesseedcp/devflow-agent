@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -219,6 +220,53 @@ func TestDeployTriggerMissingFlags(t *testing.T) {
 		err := Run(args, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil {
 			t.Fatalf("expected error for args %v", args)
+		}
+	}
+}
+
+func TestDeployTriggerPassesGitHubInputs(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "release-inputs", Title: "Release inputs", State: string(workflow.Deployment)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+
+	var captured string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/dispatches"):
+			body, _ := io.ReadAll(r.Body)
+			captured = string(body)
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/runs"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"workflow_runs":[{"id":125,"html_url":"https://example/runs/125","head_sha":"abc125","head_branch":"main","status":"completed","conclusion":"success","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:02:00Z"}]}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := Run([]string{
+		"deploy", "trigger",
+		"--root", root,
+		"--demand", demand.ID,
+		"--provider", "github",
+		"--github-repo", "owner/repo",
+		"--workflow", "release.yml",
+		"--ref", "main",
+		"--github-base-url", server.URL,
+		"--github-token", "fake",
+		"--github-input", "demand_id=release-inputs",
+		"--github-input", "release_note=safe marker",
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("deploy trigger returned error: %v", err)
+	}
+	for _, want := range []string{`"demand_id":"release-inputs"`, `"release_note":"safe marker"`} {
+		if !strings.Contains(captured, want) {
+			t.Fatalf("dispatch body missing %q: %s", want, captured)
 		}
 	}
 }

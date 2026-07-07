@@ -29,6 +29,7 @@ type DeploymentRef struct {
 	Environment string
 	BaseURL     string
 	Token       string
+	Inputs      map[string]string
 }
 
 type DeploymentResult struct {
@@ -127,16 +128,23 @@ func deploymentEndpointConfig(ref DeploymentRef) (string, string, error) {
 
 func (a GitHubActionsAdapter) dispatchWorkflow(ctx context.Context, baseURL, token string, ref DeploymentRef) error {
 	client := a.client()
-	var bodyBytes []byte
-	var err error
-	if strings.TrimSpace(ref.Environment) != "" {
-		bodyBytes, err = json.Marshal(map[string]any{
-			"ref":    ref.Ref,
-			"inputs": map[string]string{"environment": ref.Environment},
-		})
-	} else {
-		bodyBytes, err = json.Marshal(map[string]string{"ref": ref.Ref})
+	inputs := map[string]string{}
+	for key, value := range ref.Inputs {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		inputs[key] = value
 	}
+	if strings.TrimSpace(ref.Environment) != "" {
+		inputs["environment"] = ref.Environment
+	}
+
+	payload := map[string]any{"ref": ref.Ref}
+	if len(inputs) > 0 {
+		payload["inputs"] = inputs
+	}
+	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encode dispatch body: %w", err)
 	}

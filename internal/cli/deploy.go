@@ -39,6 +39,20 @@ type deployOptions struct {
 	environment string
 	baseURL     string
 	token       string
+	inputs      stringListFlag
+}
+
+func parseWorkflowInputs(values []string) (map[string]string, error) {
+	inputs := map[string]string{}
+	for _, raw := range values {
+		key, value, ok := strings.Cut(raw, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			return nil, fmt.Errorf("--github-input must be key=value, got %q", raw)
+		}
+		inputs[key] = strings.TrimSpace(value)
+	}
+	return inputs, nil
 }
 
 func parseDeployOptions(args []string, stderr io.Writer) (deployOptions, error) {
@@ -54,6 +68,7 @@ func parseDeployOptions(args []string, stderr io.Writer) (deployOptions, error) 
 	fs.StringVar(&opts.environment, "environment", "", "deployment environment")
 	fs.StringVar(&opts.baseURL, "github-base-url", "", "GitHub API base url override")
 	fs.StringVar(&opts.token, "github-token", "", "GitHub token override")
+	fs.Var(&opts.inputs, "github-input", "GitHub workflow input in key=value form; repeatable")
 	if err := fs.Parse(args); err != nil {
 		return deployOptions{}, err
 	}
@@ -81,10 +96,14 @@ func parseDeployOptions(args []string, stderr io.Writer) (deployOptions, error) 
 	if opts.ref == "" {
 		return deployOptions{}, fmt.Errorf("--ref is required")
 	}
+	if _, err := parseWorkflowInputs(opts.inputs); err != nil {
+		return deployOptions{}, err
+	}
 	return opts, nil
 }
 
 func (opts deployOptions) deploymentRef() adapters.DeploymentRef {
+	inputs, _ := parseWorkflowInputs(opts.inputs)
 	return adapters.DeploymentRef{
 		Repo:        opts.repo,
 		WorkflowID:  opts.workflowID,
@@ -92,6 +111,7 @@ func (opts deployOptions) deploymentRef() adapters.DeploymentRef {
 		Environment: opts.environment,
 		BaseURL:     opts.baseURL,
 		Token:       opts.token,
+		Inputs:      inputs,
 	}
 }
 

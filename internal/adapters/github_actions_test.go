@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -149,5 +150,49 @@ func TestGitHubActionsRejectsInvalidRepo(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid repo")
+	}
+}
+
+func TestGitHubActionsDispatchSendsInputs(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/actions/workflows/release.yml/dispatches":
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/actions/workflows/release.yml/runs":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"workflow_runs":[{"id":124,"html_url":"https://example/runs/124","head_sha":"abc124","head_branch":"main","status":"completed","conclusion":"success","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:02:00Z"}]}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := (GitHubActionsAdapter{Client: server.Client()}).TriggerDeployment(context.Background(), DeploymentRef{
+		Repo:       "owner/repo",
+		WorkflowID: "release.yml",
+		Ref:        "main",
+		BaseURL:    server.URL,
+		Token:      "secret-token",
+		Inputs: map[string]string{
+			"demand_id":    "release-dogfood",
+			"release_note": "safe marker",
+		},
+	})
+	if err != nil {
+		t.Fatalf("TriggerDeployment returned error: %v", err)
+	}
+	if captured["ref"] != "main" {
+		t.Fatalf("ref = %#v", captured["ref"])
+	}
+	inputs, ok := captured["inputs"].(map[string]any)
+	if !ok {
+		t.Fatalf("inputs = %#v", captured["inputs"])
+	}
+	if inputs["demand_id"] != "release-dogfood" || inputs["release_note"] != "safe marker" {
+		t.Fatalf("inputs = %#v", inputs)
 	}
 }

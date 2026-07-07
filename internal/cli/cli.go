@@ -85,8 +85,10 @@ Usage:
   devflow workbench
   devflow chat
   devflow tui
+  devflow server --addr <addr> --root <path> [--database-dsn <dsn>]
 
 Commands:
+  server    Start the platform API server (MySQL-backed)
   help      Show this help text
   version   Show build version and platform metadata
   start     Create a new demand workspace
@@ -210,6 +212,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runLiveDogfood(args[1:], stdout, stderr)
 	case "workbench":
 		return runWorkbench(args[1:], stdout, stderr)
+	case "server":
+		return runServer(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], helpText)
 	}

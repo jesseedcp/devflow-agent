@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/releasecontrol"
@@ -233,5 +234,76 @@ func TestObserveRefreshBlocksWhenHTTPHealthFails(t *testing.T) {
 	}
 	if updated.State != string(workflow.BlockedNeedReleaseDecision) {
 		t.Fatalf("state = %s, want blocked_need_release_decision", updated.State)
+	}
+}
+
+func TestObserveRefreshBlockedHTTPHealthShowsProxyHintAndRedactsURL(t *testing.T) {
+	oldTimeout := observeHealthTimeout
+	observeHealthTimeout = 10 * time.Millisecond
+	t.Cleanup(func() { observeHealthTimeout = oldTimeout })
+
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "observe-health-blocked", Title: "Observe health blocked", State: string(workflow.Observation)}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	deployment := releasecontrol.RenderDeployment(demand.Title, releasecontrol.DeploymentRecord{
+		Provider:   "github_actions",
+		Repo:       "owner/repo",
+		RunID:      "789",
+		Status:     releasecontrol.StatusPassed,
+		Conclusion: "success",
+	})
+	if err := store.WriteArtifact(demand.ID, artifacts.DeploymentFile, deployment); err != nil {
+		t.Fatal(err)
+	}
+	health := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer health.Close()
+
+	var stdout bytes.Buffer
+	err := Run([]string{
+		"observe", "refresh",
+		"--root", root,
+		"--demand", demand.ID,
+		"--health-url", health.URL + "/health?token=abc",
+		"--expect-status", "200",
+	}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("observe refresh returned error: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(store.DemandDir(demand.ID), artifacts.ObservationFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "Status: `blocked`") {
+		t.Fatalf("observation.md should be blocked:\n%s", string(body))
+	}
+	rollback, err := os.ReadFile(filepath.Join(store.DemandDir(demand.ID), artifacts.RollbackFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(rollback), "Decision: `pending`") {
+		t.Fatalf("rollback.md missing pending decision:\n%s", string(rollback))
+	}
+	updated, err := store.LoadDemand(demand.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.State != string(workflow.BlockedNeedReleaseDecision) {
+		t.Fatalf("state = %s, want blocked_need_release_decision", updated.State)
+	}
+	output := stdout.String()
+	for _, want := range []string{"observation blocked", "HTTPS_PROXY", "HTTP_PROXY"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "token=abc") || strings.Contains(string(body), "token=abc") {
+		t.Fatalf("health URL token leaked\nstdout:\n%s\nbody:\n%s", output, string(body))
 	}
 }

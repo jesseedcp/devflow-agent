@@ -29,6 +29,8 @@ func runObserve(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 }
 
+var observeHealthTimeout = 10 * time.Second
+
 func runObserveRefresh(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("observe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -81,6 +83,7 @@ func runObserveRefresh(args []string, stdout io.Writer, stderr io.Writer) error 
 				Headers:        []string(healthHeaders),
 				ExpectStatus:   expectStatus,
 				ExpectContains: expectContains,
+				Timeout:        observeHealthTimeout,
 			})
 			healthRecord := releasecontrol.ObservationFromHealthResult(result)
 			healthRecord.Provider = deployment.Provider
@@ -114,10 +117,18 @@ func runObserveRefresh(args []string, stdout io.Writer, stderr io.Writer) error 
 			if err := store.WriteArtifact(demandID, artifacts.ObservationFile, releasecontrol.RenderObservation(demand.Title, healthRecord)); err != nil {
 				return err
 			}
+			eventType := "observation.failed"
+			outputMessage := "observation failed"
+			eventMessage := "observation failed HTTP health check"
+			if healthRecord.Status == releasecontrol.StatusBlocked {
+				eventType = "observation.blocked"
+				outputMessage = observationProxyHint("observation blocked")
+				eventMessage = observationProxyHint("observation blocked HTTP health check")
+			}
 			if err := store.AppendEvent(demandID, artifacts.Event{
 				Time:    time.Now().UTC(),
-				Type:    "observation.failed",
-				Message: "observation failed HTTP health check",
+				Type:    eventType,
+				Message: eventMessage,
 				Data: map[string]string{
 					"health_url": result.URL,
 					"status":     result.Status,
@@ -134,7 +145,7 @@ func runObserveRefresh(args []string, stdout io.Writer, stderr io.Writer) error 
 			if err := advanceDemandState(store, demandID, workflow.Observation, workflow.BlockedNeedReleaseDecision); err != nil {
 				return err
 			}
-			fmt.Fprintln(stdout, "observation failed")
+			fmt.Fprintln(stdout, outputMessage)
 			return nil
 		}
 		record := releasecontrol.ObservationRecord{

@@ -99,3 +99,37 @@ func TestShouldFinalizeImplementationAfterMaxIterationsRequiresMutationAndPassin
 		t.Fatal("finalized without passing test command")
 	}
 }
+
+func TestRenderImplementationRuntimeFinalizerProducesValidProgress(t *testing.T) {
+	body := renderImplementationRuntimeFinalizer("glm-5.2", 20, []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok   weather-agent 0.123s", IsError: false},
+	}, []string{"tools.go", "main_test.go"})
+
+	for _, want := range []string{"## 实现摘要", "## 代码改动", "## 测试与验证", "## 遗留问题", "deterministic runtime finalizer", "glm-5.2", "go test ./...", "tools.go"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body missing %q:\n%s", want, body)
+		}
+	}
+	if err := ValidateStageArtifact(StageImplementation, body); err != nil {
+		t.Fatalf("finalizer artifact invalid: %v\n%s", err, body)
+	}
+}
+
+func TestRenderImplementationRuntimeFinalizerRedactsSecrets(t *testing.T) {
+	body := renderImplementationRuntimeFinalizer("glm-5.2", 20, []RuntimeToolTrace{
+		{
+			ToolName: "Bash",
+			Desc:     "go test ./...",
+			Output:   `Authorization: Bearer secret-token {"password":"pw"}`,
+			IsError:  false,
+		},
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+	}, []string{"tools.go"})
+
+	for _, leaked := range []string{"secret-token", `"password":"pw"`} {
+		if strings.Contains(body, leaked) {
+			t.Fatalf("finalizer leaked %q:\n%s", leaked, body)
+		}
+	}
+}

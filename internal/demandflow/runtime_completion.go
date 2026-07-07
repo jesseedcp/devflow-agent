@@ -1,6 +1,7 @@
 package demandflow
 
 import (
+	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
@@ -139,4 +140,55 @@ func shouldFinalizeImplementationAfterMaxIterations(req RunnerRequest, traces []
 	}
 	evidence := implementationEvidenceFromTraces(req.Root, traces)
 	return evidence.HasMutation && evidence.HasPassingTestCommand
+}
+
+func renderImplementationRuntimeFinalizer(model string, maxIterations int, traces []RuntimeToolTrace, changedFiles []string) string {
+	evidence := implementationEvidenceFromTraces("", traces)
+	files := uniqueStrings(append(changedFiles, evidence.ChangedFiles...))
+	commands := evidence.TestCommands
+
+	var b strings.Builder
+	b.WriteString("## 实现摘要\n\n")
+	b.WriteString("- Devflow deterministic runtime finalizer generated this progress summary because the implementation runtime reached the max-iteration limit after useful tool work.\n")
+	b.WriteString(fmt.Sprintf("- Model: %s\n", model))
+	b.WriteString(fmt.Sprintf("- Max iterations: %d\n", maxIterations))
+	b.WriteString(fmt.Sprintf("- Tool calls observed: %d\n", len(traces)))
+	b.WriteString("- Existing quality gates and implementation review must still decide whether the work is acceptable.\n\n")
+
+	b.WriteString("## 代码改动\n\n")
+	if len(files) == 0 {
+		b.WriteString("- No changed files were detected by tool traces or git diff.\n")
+	} else {
+		for _, file := range files {
+			b.WriteString("- ")
+			b.WriteString(file)
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteByte('\n')
+
+	b.WriteString("## 测试与验证\n\n")
+	if len(commands) == 0 {
+		b.WriteString("- No passing test-like command was detected in runtime tool output.\n")
+	} else {
+		for _, command := range commands {
+			b.WriteString("- PASS: `")
+			b.WriteString(evidenceadapter.Redact(command))
+			b.WriteString("`\n")
+		}
+	}
+	for _, excerpt := range evidence.PassingCommandExcerpts {
+		if strings.TrimSpace(excerpt) == "" {
+			continue
+		}
+		b.WriteString("\n```text\n")
+		b.WriteString(excerpt)
+		b.WriteString("\n```\n")
+		break
+	}
+	b.WriteByte('\n')
+
+	b.WriteString("## 遗留问题\n\n")
+	b.WriteString("- Runtime reached max iterations before the model returned normal final artifact text; this summary is deterministic and should be reviewed with implementation-review.\n")
+	return b.String()
 }

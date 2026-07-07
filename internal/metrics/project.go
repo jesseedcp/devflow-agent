@@ -40,6 +40,9 @@ func CollectProject(root string) (ProjectMetrics, error) {
 		metrics := CollectDemand(demand, events)
 		out.Demands = append(out.Demands, metrics)
 		applyDemandMetrics(&out, metrics)
+		for _, event := range events {
+			applyRuntimeEvent(&out, event)
+		}
 	}
 	return out, nil
 }

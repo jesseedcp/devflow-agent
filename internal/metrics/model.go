@@ -48,22 +48,26 @@ func (m DemandMetrics) WikiDecisionRate() float64 {
 }
 
 type ProjectMetrics struct {
-	DemandCount               int
-	CompletedCount            int
-	BlockedCount              int
-	TotalHumanConfirmations   int
-	TotalReviewReturns        int
-	TotalVerificationRuns     int
-	TotalVerificationPasses   int
-	TotalVerificationFailures int
-	TotalAcceptancePasses     int
-	TotalAcceptanceFailures   int
-	TotalAcceptanceBlocked    int
-	TotalWikiCandidates       int
-	TotalWikiPromoted         int
-	TotalWikiRejected         int
-	Demands                   []DemandMetrics
-	PartialDemandCount        int
+	DemandCount                   int
+	CompletedCount                int
+	BlockedCount                  int
+	TotalHumanConfirmations       int
+	TotalReviewReturns            int
+	TotalVerificationRuns         int
+	TotalVerificationPasses       int
+	TotalVerificationFailures     int
+	TotalAcceptancePasses         int
+	TotalAcceptanceFailures       int
+	TotalAcceptanceBlocked        int
+	TotalWikiCandidates           int
+	TotalWikiPromoted             int
+	TotalWikiRejected             int
+	Demands                       []DemandMetrics
+	PartialDemandCount            int
+	RuntimeStageCount             int
+	RuntimeToolCallCount          int
+	RuntimeFinalizedCount         int
+	RuntimeMaxIterationFinalizers int
 }
 
 func (m ProjectMetrics) VerificationPassRate() float64 {

@@ -132,3 +132,21 @@ func demandCaveats(out DemandMetrics, events []artifacts.Event) []string {
 	}
 	return caveats
 }
+
+func applyRuntimeEvent(out *ProjectMetrics, event artifacts.Event) {
+	switch event.Type {
+	case "runtime.stage_completed":
+		out.RuntimeStageCount++
+		if raw := strings.TrimSpace(event.Data["tool_calls"]); raw != "" {
+			if count, err := strconv.Atoi(raw); err == nil {
+				out.RuntimeToolCallCount += count
+			}
+		}
+		if event.Data["completion_mode"] == "deterministic_finalizer" {
+			out.RuntimeFinalizedCount++
+		}
+		if event.Data["completion_mode"] == "deterministic_finalizer" && event.Data["max_iterations_hit"] == "true" {
+			out.RuntimeMaxIterationFinalizers++
+		}
+	}
+}

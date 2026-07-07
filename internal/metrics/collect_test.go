@@ -86,3 +86,40 @@ func TestCollectDemandMetricsMarksPartialHistoricalData(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectProjectMetricsCountsRuntimeCompletionEvents(t *testing.T) {
+	root := t.TempDir()
+	store := artifacts.NewStore(root)
+	demand := artifacts.Demand{ID: "runtime-metrics", Title: "Runtime Metrics", Description: "metrics", Source: "test", State: "completed"}
+	if err := store.CreateDemand(demand); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendEvent(demand.ID, artifacts.Event{
+		Time: time.Now(),
+		Type: "runtime.stage_completed",
+		Data: map[string]string{
+			"tool_calls":         "21",
+			"completion_mode":    "deterministic_finalizer",
+			"max_iterations_hit": "true",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := CollectProject(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RuntimeStageCount != 1 {
+		t.Fatalf("RuntimeStageCount = %d, want 1", got.RuntimeStageCount)
+	}
+	if got.RuntimeToolCallCount != 21 {
+		t.Fatalf("RuntimeToolCallCount = %d, want 21", got.RuntimeToolCallCount)
+	}
+	if got.RuntimeFinalizedCount != 1 {
+		t.Fatalf("RuntimeFinalizedCount = %d, want 1", got.RuntimeFinalizedCount)
+	}
+	if got.RuntimeMaxIterationFinalizers != 1 {
+		t.Fatalf("RuntimeMaxIterationFinalizers = %d, want 1", got.RuntimeMaxIterationFinalizers)
+	}
+}

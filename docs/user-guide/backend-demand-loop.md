@@ -558,3 +558,11 @@ devflow observe refresh `
 ```
 
 If the health check fails, Devflow records `observation.md`, writes rollback recommendation material, and blocks for a human release decision.
+
+If the health URL works in a browser but `devflow observe refresh` times out, set proxy environment variables for the shell running Devflow. Go CLI processes read `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`; they do not automatically inherit every browser or Windows system proxy setting.
+
+```powershell
+$env:HTTPS_PROXY="http://127.0.0.1:21882"
+$env:HTTP_PROXY="http://127.0.0.1:21882"
+devflow doctor --observation-url "https://github.com"
+```

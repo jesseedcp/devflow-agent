@@ -790,6 +790,9 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         go test ./internal/releasecontrol -run "TestRenderObservationIncludesHealthChecks|TestObservationFromHealthResult" -count=1
         go test ./internal/cli -run "TestDeployTriggerPassesGitHubInputs|TestObserveRefresh.*HTTPHealth" -count=1
     }
+    Invoke-Step "v1.2.1 release observation hardening smoke" {
+        go test ./internal/cli -run "TestDoctorObservationURL|TestObserveRefreshBlockedHTTPHealthShowsProxyHintAndRedactsURL" -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

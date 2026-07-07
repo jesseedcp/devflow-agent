@@ -121,3 +121,11 @@ devflow deploy trigger `
 ```
 
 Then refresh observation with the recorded GitHub Actions run URL as HTTP evidence.
+
+If the run URL opens in a browser but Devflow reports `context deadline exceeded`, configure the shell proxy before running `observe refresh`. Go's HTTP client reads `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`; browser proxy settings alone may not be visible to the CLI.
+
+```powershell
+$env:HTTPS_PROXY="http://127.0.0.1:21882"
+$env:HTTP_PROXY="http://127.0.0.1:21882"
+devflow doctor --observation-url "https://github.com"
+```

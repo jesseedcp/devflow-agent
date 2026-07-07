@@ -43,6 +43,7 @@ func runMetricsReport(args []string, stdout io.Writer, stderr io.Writer) error {
 		demandMetrics := metrics.CollectDemand(demand, events)
 		report.Demands = []metrics.DemandMetrics{demandMetrics}
 		metrics.ApplyForCLI(&report, demandMetrics)
+		metrics.ApplyRuntimeEvents(&report, events)
 	} else {
 		collected, err := metrics.CollectProject(*root)
 		if err != nil {

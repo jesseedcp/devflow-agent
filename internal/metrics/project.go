@@ -74,3 +74,9 @@ func applyDemandMetrics(out *ProjectMetrics, demand DemandMetrics) {
 func ApplyForCLI(out *ProjectMetrics, demand DemandMetrics) {
 	applyDemandMetrics(out, demand)
 }
+
+func ApplyRuntimeEvents(out *ProjectMetrics, events []artifacts.Event) {
+	for _, event := range events {
+		applyRuntimeEvent(out, event)
+	}
+}

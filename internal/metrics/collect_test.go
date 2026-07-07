@@ -123,3 +123,27 @@ func TestCollectProjectMetricsCountsRuntimeCompletionEvents(t *testing.T) {
 		t.Fatalf("RuntimeMaxIterationFinalizers = %d, want 1", got.RuntimeMaxIterationFinalizers)
 	}
 }
+
+func TestApplyRuntimeEventsCountsRuntimeCompletionEvents(t *testing.T) {
+	var out ProjectMetrics
+	events := []artifacts.Event{
+		{Type: "runtime.stage_completed", Data: map[string]string{
+			"tool_calls":         "30",
+			"completion_mode":    "deterministic_finalizer",
+			"max_iterations_hit": "true",
+		}},
+	}
+	ApplyRuntimeEvents(&out, events)
+	if out.RuntimeStageCount != 1 {
+		t.Fatalf("RuntimeStageCount = %d, want 1", out.RuntimeStageCount)
+	}
+	if out.RuntimeToolCallCount != 30 {
+		t.Fatalf("RuntimeToolCallCount = %d, want 30", out.RuntimeToolCallCount)
+	}
+	if out.RuntimeFinalizedCount != 1 {
+		t.Fatalf("RuntimeFinalizedCount = %d, want 1", out.RuntimeFinalizedCount)
+	}
+	if out.RuntimeMaxIterationFinalizers != 1 {
+		t.Fatalf("RuntimeMaxIterationFinalizers = %d, want 1", out.RuntimeMaxIterationFinalizers)
+	}
+}

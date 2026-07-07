@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -178,6 +179,8 @@ func (a GitHubActionsAdapter) fetchNewestRun(ctx context.Context, baseURL, token
 	return result, err
 }
 
+var errNoWorkflowRuns = errors.New("no github actions runs found for workflow")
+
 func (a GitHubActionsAdapter) fetchNewestRunWithRaw(ctx context.Context, baseURL, token string, ref DeploymentRef) (DeploymentResult, githubWorkflowRun, error) {
 	client := a.client()
 	runsURL := baseURL + "/repos/" + githubRepoPath(ref.Repo) + "/actions/workflows/" + url.PathEscape(ref.WorkflowID) + "/runs"
@@ -209,7 +212,7 @@ func (a GitHubActionsAdapter) fetchNewestRunWithRaw(ctx context.Context, baseURL
 		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("decode github runs response: %w", err)
 	}
 	if len(runsResponse.WorkflowRuns) == 0 {
-		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("no github actions runs found for workflow %s ref %s", ref.WorkflowID, ref.Ref)
+		return DeploymentResult{}, githubWorkflowRun{}, fmt.Errorf("no github actions runs found for workflow %s ref %s: %w", ref.WorkflowID, ref.Ref, errNoWorkflowRuns)
 	}
 
 	run := selectNewestRun(runsResponse.WorkflowRuns, ref.Ref)
@@ -238,6 +241,14 @@ func (a GitHubActionsAdapter) fetchNewestRunAfter(ctx context.Context, baseURL, 
 	for {
 		result, run, err := a.fetchNewestRunWithRaw(ctx, baseURL, token, ref)
 		if err != nil {
+			if errors.Is(err, errNoWorkflowRuns) {
+				select {
+				case <-ctx.Done():
+					return DeploymentResult{}, fmt.Errorf("wait for newly dispatched github actions run: %w", ctx.Err())
+				case <-ticker.C:
+				}
+				continue
+			}
 			return DeploymentResult{}, err
 		}
 		if !run.CreatedAt.Before(after) {

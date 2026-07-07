@@ -242,3 +242,47 @@ func TestGitHubActionsDispatchPollsUntilNewRunAppears(t *testing.T) {
 		t.Fatalf("getCount = %d, want polling", getCount)
 	}
 }
+
+func TestGitHubActionsDispatchRetriesWhenNoRunsYet(t *testing.T) {
+	var getCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/dispatches"):
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/runs"):
+			getCount++
+			w.Header().Set("Content-Type", "application/json")
+			if getCount == 1 {
+				fmt.Fprint(w, `{"workflow_runs":[]}`)
+				return
+			}
+			fmt.Fprint(w, `{"workflow_runs":[{"id":300,"html_url":"https://example/runs/300","head_sha":"new","head_branch":"main","status":"completed","conclusion":"success","created_at":"2026-07-07T10:00:02Z","updated_at":"2026-07-07T10:01:00Z"}]}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	result, err := (GitHubActionsAdapter{
+		Client:       server.Client(),
+		PollInterval: time.Millisecond,
+		Now: func() time.Time {
+			return time.Date(2026, 7, 7, 10, 0, 0, 0, time.UTC)
+		},
+	}).TriggerDeployment(context.Background(), DeploymentRef{
+		Repo:       "owner/repo",
+		WorkflowID: "release.yml",
+		Ref:        "main",
+		BaseURL:    server.URL,
+		Token:      "secret-token",
+	})
+	if err != nil {
+		t.Fatalf("TriggerDeployment returned error: %v", err)
+	}
+	if result.RunID != "300" {
+		t.Fatalf("RunID = %s, want 300", result.RunID)
+	}
+	if getCount < 2 {
+		t.Fatalf("getCount = %d, want retry after empty runs", getCount)
+	}
+}

@@ -59,7 +59,7 @@ func New(cfg Config, st Store) *Server {
 }
 
 // Handler returns the routed HTTP handler, primarily for testing.
-func (s *Server) Handler() http.Handler { return s.mux }
+func (s *Server) Handler() http.Handler { return corsMiddleware(s.mux) }
 
 // Start listens on the configured address and serves until interrupted.
 func (s *Server) Start() error {
@@ -68,7 +68,7 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.cfg.Logger.Printf("listening on %s", ln.Addr())
-	srv := &http.Server{Handler: s.mux}
+	srv := &http.Server{Handler: s.Handler()}
 	return srv.Serve(ln)
 }
 

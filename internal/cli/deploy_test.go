@@ -32,7 +32,7 @@ func newFakeGitHubActionsServer(t *testing.T, outcome string) *httptest.Server {
 			case "pending":
 				status, conclusion = "in_progress", ""
 			}
-			fmt.Fprintf(w, `{"workflow_runs":[{"id":123,"html_url":"https://example/runs/123","head_sha":"abc123","head_branch":"main","status":"%s","conclusion":"%s","created_at":"2026-07-05T10:00:00Z","updated_at":"2026-07-05T10:02:00Z"}]}`, status, conclusion)
+			fmt.Fprintf(w, `{"workflow_runs":[{"id":123,"html_url":"https://example/runs/123","head_sha":"abc123","head_branch":"main","status":"%s","conclusion":"%s","created_at":"2099-01-01T00:00:00Z","updated_at":"2026-07-05T10:02:00Z"}]}`, status, conclusion)
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}

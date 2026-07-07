@@ -54,3 +54,14 @@ func uniqueStrings(values []string) []string {
 	sort.Strings(out)
 	return out
 }
+
+func changedFilesFromRuntimeTraces(root string, traces []RuntimeToolTrace) []string {
+	var files []string
+	for _, trace := range traces {
+		switch trace.ToolName {
+		case "WriteFile", "EditFile":
+			files = append(files, trace.Desc)
+		}
+	}
+	return uniqueStrings(files)
+}

@@ -115,16 +115,25 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 
 	var textParts []string
 	var toolSummary []string
+	var traces []RuntimeToolTrace
+	toolDescs := map[string]string{}
 	var agentErr error
+	maxIterationsHit := false
 	for ev := range ag.Run(ctx, conv) {
 		switch e := ev.(type) {
 		case agent.StreamText:
 			textParts = append(textParts, e.Text)
+		case agent.ToolUseEvent:
+			collectRuntimeTraceUse(toolDescs, e)
 		case agent.ToolResultEvent:
 			toolSummary = append(toolSummary, e.ToolName)
+			traces = append(traces, collectRuntimeTraceResult(toolDescs, e))
 		case agent.PermissionRequestEvent:
 			e.ResponseCh <- runtimePermissionResponse(req, mode, e)
 		case agent.ErrorEvent:
+			if strings.Contains(e.Message, "maximum iterations") {
+				maxIterationsHit = true
+			}
 			agentErr = runtimeAgentError(req.Stage, provider.Model, maxIterations, toolSummary, e.Message)
 		case agent.LoopComplete:
 		}
@@ -141,6 +150,14 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 	return RunnerResponse{
 		Text:        text,
 		ToolSummary: toolSummary,
+		Runtime: summarizeRuntimeTraces(
+			req.Stage,
+			provider.Model,
+			RuntimeCompletionModelText,
+			maxIterationsHit,
+			traces,
+			changedFilesFromRuntimeTraces(req.Root, traces),
+		),
 	}, nil
 }
 
@@ -168,4 +185,32 @@ func lastRuntimeTools(values []string, limit int) []string {
 		return values
 	}
 	return values[len(values)-limit:]
+}
+
+func collectRuntimeTraceUse(descs map[string]string, ev agent.ToolUseEvent) {
+	desc := ""
+	switch ev.ToolName {
+	case "Bash":
+		desc, _ = ev.Args["command"].(string)
+	case "ReadFile", "WriteFile", "EditFile":
+		desc, _ = ev.Args["file_path"].(string)
+	case "Glob", "Grep":
+		desc, _ = ev.Args["pattern"].(string)
+	case "ToolSearch":
+		desc, _ = ev.Args["query"].(string)
+	}
+	if strings.TrimSpace(desc) != "" {
+		descs[ev.ToolID] = strings.TrimSpace(desc)
+	}
+}
+
+func collectRuntimeTraceResult(descs map[string]string, ev agent.ToolResultEvent) RuntimeToolTrace {
+	return RuntimeToolTrace{
+		ToolID:   ev.ToolID,
+		ToolName: ev.ToolName,
+		Desc:     descs[ev.ToolID],
+		Output:   ev.Output,
+		IsError:  ev.IsError,
+		Elapsed:  ev.Elapsed,
+	}
 }

@@ -134,3 +134,43 @@ func TestRuntimeAgentErrorIncludesToolSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectRuntimeTraceUseRecordsDescriptions(t *testing.T) {
+	descs := map[string]string{}
+
+	collectRuntimeTraceUse(descs, agent.ToolUseEvent{
+		ToolID:   "edit1",
+		ToolName: "EditFile",
+		Args: map[string]any{
+			"file_path": "internal/weather/service.go",
+		},
+	})
+	collectRuntimeTraceUse(descs, agent.ToolUseEvent{
+		ToolID:   "bash1",
+		ToolName: "Bash",
+		Args: map[string]any{
+			"command": "go test ./...",
+		},
+	})
+
+	if descs["edit1"] != "internal/weather/service.go" {
+		t.Fatalf("edit desc = %q", descs["edit1"])
+	}
+	if descs["bash1"] != "go test ./..." {
+		t.Fatalf("bash desc = %q", descs["bash1"])
+	}
+}
+
+func TestCollectRuntimeTraceResultBuildsTrace(t *testing.T) {
+	descs := map[string]string{"bash1": "go test ./..."}
+	trace := collectRuntimeTraceResult(descs, agent.ToolResultEvent{
+		ToolID:   "bash1",
+		ToolName: "Bash",
+		Output:   "ok",
+		IsError:  false,
+	})
+
+	if trace.ToolID != "bash1" || trace.ToolName != "Bash" || trace.Desc != "go test ./..." || trace.Output != "ok" {
+		t.Fatalf("trace = %+v", trace)
+	}
+}

@@ -119,6 +119,8 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 	toolDescs := map[string]string{}
 	var agentErr error
 	maxIterationsHit := false
+	var finalizedText string
+	var finalizedRuntime RuntimeSummary
 	for ev := range ag.Run(ctx, conv) {
 		switch e := ev.(type) {
 		case agent.StreamText:
@@ -134,9 +136,22 @@ func (r RuntimeRunner) Run(ctx context.Context, req RunnerRequest) (RunnerRespon
 			if strings.Contains(e.Message, "maximum iterations") {
 				maxIterationsHit = true
 			}
+			if body, summary, ok := maybeFinalizeRuntimeError(req, provider.Model, maxIterations, traces, e.Message); ok {
+				finalizedText = body
+				finalizedRuntime = summary
+				agentErr = nil
+				continue
+			}
 			agentErr = runtimeAgentError(req.Stage, provider.Model, maxIterations, toolSummary, e.Message)
 		case agent.LoopComplete:
 		}
+	}
+	if strings.TrimSpace(finalizedText) != "" {
+		return RunnerResponse{
+			Text:        strings.TrimSpace(finalizedText),
+			ToolSummary: toolSummary,
+			Runtime:     finalizedRuntime,
+		}, nil
 	}
 	if agentErr != nil {
 		return RunnerResponse{}, agentErr
@@ -185,6 +200,26 @@ func lastRuntimeTools(values []string, limit int) []string {
 		return values
 	}
 	return values[len(values)-limit:]
+}
+
+func maybeFinalizeRuntimeError(req RunnerRequest, model string, maxIterations int, traces []RuntimeToolTrace, message string) (string, RuntimeSummary, bool) {
+	if !strings.Contains(message, "maximum iterations") {
+		return "", RuntimeSummary{}, false
+	}
+	if !shouldFinalizeImplementationAfterMaxIterations(req, traces) {
+		return "", RuntimeSummary{}, false
+	}
+	changedFiles := changedFilesFromRuntimeTraces(req.Root, traces)
+	body := renderImplementationRuntimeFinalizer(model, maxIterations, traces, changedFiles)
+	summary := summarizeRuntimeTraces(
+		req.Stage,
+		model,
+		RuntimeCompletionDeterministicFinalizer,
+		true,
+		traces,
+		changedFiles,
+	)
+	return body, summary, true
 }
 
 func collectRuntimeTraceUse(descs map[string]string, ev agent.ToolUseEvent) {

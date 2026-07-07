@@ -174,3 +174,36 @@ func TestCollectRuntimeTraceResultBuildsTrace(t *testing.T) {
 		t.Fatalf("trace = %+v", trace)
 	}
 }
+
+func TestMaybeFinalizeRuntimeErrorReturnsProgressForSafeImplementationMaxIterations(t *testing.T) {
+	req := RunnerRequest{Stage: StageImplementation}
+	traces := []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "tools.go", Output: "Successfully edited tools.go"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok", IsError: false},
+	}
+
+	body, summary, ok := maybeFinalizeRuntimeError(req, "glm-5.2", 20, traces, "Agent reached maximum iterations (20)")
+	if !ok {
+		t.Fatal("maybeFinalizeRuntimeError ok = false, want true")
+	}
+	if !strings.Contains(body, "deterministic runtime finalizer") {
+		t.Fatalf("body missing finalizer marker:\n%s", body)
+	}
+	if summary.CompletionMode != RuntimeCompletionDeterministicFinalizer {
+		t.Fatalf("CompletionMode = %s", summary.CompletionMode)
+	}
+	if !summary.MaxIterationsHit {
+		t.Fatal("MaxIterationsHit = false")
+	}
+}
+
+func TestMaybeFinalizeRuntimeErrorRejectsNonImplementationMaxIterations(t *testing.T) {
+	req := RunnerRequest{Stage: StagePlan}
+	_, _, ok := maybeFinalizeRuntimeError(req, "glm-5.2", 20, []RuntimeToolTrace{
+		{ToolName: "EditFile", Desc: "plan.md", Output: "edited"},
+		{ToolName: "Bash", Desc: "go test ./...", Output: "ok"},
+	}, "Agent reached maximum iterations (20)")
+	if ok {
+		t.Fatal("plan stage should not use implementation finalizer")
+	}
+}

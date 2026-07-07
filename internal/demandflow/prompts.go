@@ -102,6 +102,9 @@ Description:
 # Output contract
 Implement the agreed changes in the repository using the available tools.
 After implementation, return the progress.md body to append.
+Once code changes are complete and tests pass, stop using tools and return the progress.md body immediately.
+Do not keep exploring after successful tests.
+If tests fail, fix the failure or record the blocker under ## 遗留问题.
 Use these headings exactly:
 - ## 实现摘要
 - ## 代码改动

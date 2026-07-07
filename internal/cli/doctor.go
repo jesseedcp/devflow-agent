@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	evidenceadapter "github.com/jesseedcp/devflow-agent/internal/evidence"
 	"github.com/jesseedcp/devflow-agent/internal/platform"
 	"github.com/jesseedcp/devflow-agent/internal/runtime/config"
 )
@@ -19,17 +22,24 @@ type doctorCheck struct {
 	Message string
 }
 
+var doctorObservationTimeout = 5 * time.Second
+
 func runDoctor(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var configPath string
 	var requireGitLab bool
 	var platformName string
+	var observationURL string
 	fs.StringVar(&configPath, "config", "", "config path")
 	fs.BoolVar(&requireGitLab, "require-gitlab", false, "require GITLAB_TOKEN for mr-review readiness")
 	fs.StringVar(&platformName, "platform", "", "platform to check: github, feishu, or all")
+	fs.StringVar(&observationURL, "observation-url", "", "HTTP URL to check for post-deploy observation reachability")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if strings.TrimSpace(observationURL) != "" {
+		return printDoctorChecks(stdout, []doctorCheck{checkObservationHTTP(context.Background(), observationURL)})
 	}
 	if strings.TrimSpace(platformName) != "" {
 		return printDoctorChecks(stdout, runPlatformDoctorChecks(platformName))
@@ -135,4 +145,27 @@ func checkGitLabToken() doctorCheck {
 		return doctorCheck{Name: "gitlab", OK: false, Message: "GITLAB_TOKEN is not set; mr-review requires it unless a token is passed by adapter code"}
 	}
 	return doctorCheck{Name: "gitlab", OK: true, Message: "GITLAB_TOKEN is set"}
+}
+
+func checkObservationHTTP(ctx context.Context, rawURL string) doctorCheck {
+	redactedURL := evidenceadapter.Redact(strings.TrimSpace(rawURL))
+	ctx, cancel := context.WithTimeout(ctx, doctorObservationTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(rawURL), nil)
+	if err != nil {
+		return doctorCheck{Name: "observation http", OK: false, Message: "invalid observation URL " + redactedURL + ": " + evidenceadapter.Redact(err.Error())}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return doctorCheck{Name: "observation http", OK: false, Message: observationProxyHint("request failed for " + redactedURL + ": " + evidenceadapter.Redact(err.Error()))}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 399 {
+		return doctorCheck{Name: "observation http", OK: false, Message: fmt.Sprintf("GET %s returned %d; expected 2xx/3xx", redactedURL, resp.StatusCode)}
+	}
+	return doctorCheck{Name: "observation http", OK: true, Message: fmt.Sprintf("GET %s returned %d", redactedURL, resp.StatusCode)}
+}
+
+func observationProxyHint(message string) string {
+	return message + "; if this URL works in a browser but not Devflow, set HTTPS_PROXY / HTTP_PROXY / NO_PROXY for the shell running Devflow"
 }

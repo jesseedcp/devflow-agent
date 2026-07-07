@@ -785,6 +785,11 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
         go test ./internal/demandflow -run "TestRuntimeSummaryCountsToolTraces|TestImplementationEvidence|TestRenderImplementationRuntimeFinalizer|TestMaybeFinalizeRuntimeError|TestRunImplementationRecordsRuntimeCompletionEvent|TestImplementationPromptTellsRuntimeToStopAfterPassingTests" -count=1
         go test ./internal/metrics -run "TestCollectProjectMetricsCountsRuntimeCompletionEvents|TestRenderProjectMetricsIncludesRuntimeEfficiency" -count=1
     }
+    Invoke-Step "v1.2 release workflow health smoke" {
+        go test ./internal/adapters -run "TestGitHubActionsDispatchSendsInputs|TestGitHubActionsDispatchPollsUntilNewRunAppears" -count=1
+        go test ./internal/releasecontrol -run "TestRenderObservationIncludesHealthChecks|TestObservationFromHealthResult" -count=1
+        go test ./internal/cli -run "TestDeployTriggerPassesGitHubInputs|TestObserveRefresh.*HTTPHealth" -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

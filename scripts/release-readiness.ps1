@@ -83,6 +83,35 @@ function Wait-LocalServerReadyFile {
     throw "local server did not become ready: $ReadyFile state=$($Job.State)"
 }
 
+function Wait-LocalServerHTTPReady {
+    param(
+        [System.Management.Automation.Job]$Job,
+        [string]$Url,
+        [int]$Milliseconds = 10000
+    )
+    $deadline = (Get-Date).AddMilliseconds($Milliseconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($Job.State -eq 'Failed') {
+            Receive-Job $Job
+            throw "local server job failed before HTTP readiness: $Url"
+        }
+        if ($Job.State -eq 'Completed') {
+            Receive-Job $Job
+            throw "local server job completed before HTTP readiness: $Url"
+        }
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 2 | Out-Null
+            return
+        } catch {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    if ($Job.State -eq 'Failed') {
+        Receive-Job $Job
+    }
+    throw "local server did not become HTTP-ready: $Url state=$($Job.State)"
+}
+
 function Invoke-LocalServerCommand {
     param(
         [scriptblock]$Command,
@@ -224,8 +253,8 @@ try {
         } -ArgumentList $prefix, $html, $readyFile
         try {
             Wait-LocalServerReadyFile -Job $serverJob -ReadyFile $readyFile
-            Start-Sleep -Milliseconds 500
             $url = $prefix + 'prd'
+            Wait-LocalServerHTTPReady -Job $serverJob -Url $url
             $urlOutput = Invoke-LocalServerCommand { .\dist\devflow-windows-amd64.exe intake --root $urlRoot --url $url }
             $urlOutput | Tee-Object -FilePath (Join-Path $urlRoot 'url-intake-output.txt') | Out-Host
             Wait-Job $serverJob -Timeout 10 | Out-Null

@@ -2,10 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDoctorReportsConfigFailureWithoutConfig(t *testing.T) {
@@ -162,5 +165,49 @@ func TestDoctorPlatformAllSkipsDefaultConfigRequirement(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestDoctorObservationURLReportsReachable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--observation-url", server.URL + "/health"}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("doctor returned error: %v\n%s", err, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "[OK] observation http:") {
+		t.Fatalf("stdout missing observation OK:\n%s", stdout.String())
+	}
+}
+
+func TestDoctorObservationURLTimeoutShowsProxyHintAndRedactsURL(t *testing.T) {
+	oldTimeout := doctorObservationTimeout
+	doctorObservationTimeout = 10 * time.Millisecond
+	t.Cleanup(func() { doctorObservationTimeout = oldTimeout })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	var stdout bytes.Buffer
+	err := Run([]string{"doctor", "--observation-url", server.URL + "/health?token=abc"}, &stdout, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("doctor returned nil error, want failing check")
+	}
+	output := stdout.String()
+	for _, want := range []string{"[FAIL] observation http:", "HTTPS_PROXY", "HTTP_PROXY"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "token=abc") {
+		t.Fatalf("doctor leaked URL token:\n%s", output)
 	}
 }

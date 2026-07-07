@@ -822,6 +822,9 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
     Invoke-Step "v1.2.1 release observation hardening smoke" {
         go test ./internal/cli -run "TestDoctorObservationURL|TestObserveRefreshBlockedHTTPHealthShowsProxyHintAndRedactsURL" -count=1
     }
+    Invoke-Step "v1.3 platform server smoke" {
+        go test ./internal/platform/... -count=1
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

@@ -73,6 +73,7 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "create workspace failed")
 		return
 	}
+	s.recordAudit(r, ws.ID, store.AuditConfigureWorkspace, "workspace", ws.ID, map[string]any{"name": ws.Name, "artifact_root": ws.ArtifactRoot})
 	writeJSON(w, http.StatusCreated, toAPIWorkspace(ws))
 }
 

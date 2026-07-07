@@ -67,3 +67,16 @@ type DemandDetail struct {
 	Evidence  EvidenceSummary   `json:"evidence"`
 	Release   ReleaseSummary    `json:"release"`
 }
+
+// AuditEvent is the API contract for a compliance audit record. Metadata is
+// parsed from the stored JSON so the frontend receives an object, not a string.
+type AuditEvent struct {
+	ID          string    `json:"id"`
+	WorkspaceID string    `json:"workspace_id"`
+	ActorUserID string    `json:"actor_user_id"`
+	Action      string    `json:"action"`
+	SubjectType string    `json:"subject_type"`
+	SubjectID   string    `json:"subject_id"`
+	Metadata    any       `json:"metadata,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}

@@ -15,7 +15,7 @@ func testDSN() string {
 	if v := os.Getenv("DEVFLOW_DATABASE_DSN"); v != "" {
 		return v
 	}
-	return "devflow:devflow@tcp(127.0.0.1:3306)/devflow?parseTime=true"
+	return "devflow:devflow@tcp(127.0.0.1:3316)/devflow?parseTime=true"
 }
 
 func openStore(t *testing.T) *Store {

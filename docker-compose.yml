@@ -9,7 +9,7 @@ services:
       MYSQL_USER: devflow
       MYSQL_PASSWORD: devflow
     ports:
-      - "3306:3306"
+      - "3316:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-udevflow", "-pdevflow"]
       interval: 5s

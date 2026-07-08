@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AppProvider } from '../context/AppContext';
 import { WorkspacesPage } from './WorkspacesPage';
@@ -37,6 +37,38 @@ describe('page smoke (mock client)', () => {
     expect(screen.getByText('At-least-once webhook delivery')).toBeInTheDocument();
   });
 
+
+  it('creates a workspace from the Workspaces page', async () => {
+    renderAt('/workspaces', <Route path="/workspaces" element={<WorkspacesPage />} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /新建工作区/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /新建工作区/ }));
+    fireEvent.change(screen.getByLabelText(/工作区 ID/), { target: { value: 'ws-new' } });
+    fireEvent.change(screen.getByLabelText(/名称/), { target: { value: 'New Workspace' } });
+    fireEvent.change(screen.getByLabelText(/Artifact Root/i), { target: { value: '/tmp/root' } });
+    fireEvent.click(screen.getByRole('button', { name: /^创建工作区$/ }));
+    expect(await screen.findByText('New Workspace')).toBeInTheDocument();
+  });
+
+  it('creates a demand from the Demands page and opens its detail', async () => {
+    renderAt(
+      '/workspaces/ws-demo/demands',
+      <>
+        <Route path="/workspaces/:workspaceId/demands" element={<DemandsPage />} />
+        <Route path="/workspaces/:workspaceId/demands/:demandKey" element={<DemandDetailPage />} />
+      </>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /新建需求/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /新建需求/ }));
+    fireEvent.change(screen.getByLabelText(/需求 Key/), { target: { value: 'coupon-from-page' } });
+    fireEvent.change(screen.getByLabelText(/标题/), { target: { value: 'Coupon from page' } });
+    fireEvent.change(screen.getByLabelText(/描述/), { target: { value: 'Inactive users must be blocked' } });
+    fireEvent.click(screen.getByRole('button', { name: /^创建需求$/ }));
+    expect(await screen.findByText('Coupon from page')).toBeInTheDocument();
+  });
   it('DemandDetailPage renders header, release line, and artifact tabs', async () => {
     renderAt(
       '/workspaces/ws-payments/demands/add-retry-backoff',

@@ -259,3 +259,90 @@ func TestCreateDemandRejectsMissingTitle(t *testing.T) {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
 }
+
+func TestConfirmDemandAdvancesRequirementsReview(t *testing.T) {
+	root := t.TempDir()
+	seedServerDemand(t, root, "coupon-confirm", "Coupon confirm", string(workflow.RequirementsReview))
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"stage":"requirements","summary":"Reviewed in Web UI"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands/coupon-confirm/confirm", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, raw)
+	}
+	var result api.ActionResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Demand.State != string(workflow.PlanDrafting) {
+		t.Fatalf("state = %q, want %s", result.Demand.State, workflow.PlanDrafting)
+	}
+	if result.NextState != string(workflow.PlanDrafting) {
+		t.Fatalf("next_state = %q, want %s", result.NextState, workflow.PlanDrafting)
+	}
+}
+
+func TestConfirmDemandRejectsWrongState(t *testing.T) {
+	root := t.TempDir()
+	seedServerDemand(t, root, "coupon-wrongstate", "Coupon wrong state", string(workflow.PlanDrafting))
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"stage":"requirements","summary":"Reviewed in Web UI"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands/coupon-wrongstate/confirm", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestAddDemandEvidence(t *testing.T) {
+	root := t.TempDir()
+	seedServerDemand(t, root, "coupon-evidence", "Coupon evidence", string(workflow.Verification))
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"type":"manual","criterion":"Inactive users blocked","status":"pass","summary":"POST /coupon/claim returned 403","source":"web"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands/coupon-evidence/evidence", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, raw)
+	}
+	var result api.ActionResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Demand.Evidence.Pass != 1 {
+		t.Fatalf("evidence pass = %d, want 1", result.Demand.Evidence.Pass)
+	}
+}
+
+func TestAddDemandEvidenceRejectsNonVerification(t *testing.T) {
+	root := t.TempDir()
+	seedServerDemand(t, root, "coupon-notverify", "Coupon not verify", string(workflow.RequirementsReview))
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"type":"manual","criterion":"x","status":"pass","summary":"y","source":"web"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands/coupon-notverify/evidence", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}

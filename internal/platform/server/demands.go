@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
+	"github.com/jesseedcp/devflow-agent/internal/demandflow"
 	"github.com/jesseedcp/devflow-agent/internal/platform/api"
 	"github.com/jesseedcp/devflow-agent/internal/platform/artifactbridge"
 	"github.com/jesseedcp/devflow-agent/internal/platform/store"
@@ -92,6 +93,83 @@ func (s *Server) handleGetDemand(w http.ResponseWriter, r *http.Request) {
 // interpreted in one place.
 func (s *Server) demandDetail(workspace store.Workspace, demandKey string) (api.DemandDetail, error) {
 	return artifactbridge.GetDemand(workspace.ArtifactRoot, demandKey)
+}
+
+func (s *Server) handleConfirmDemand(w http.ResponseWriter, r *http.Request) {
+	workspace, err := s.workspaceForRequest(r)
+	if err != nil {
+		s.writeWorkspaceError(w, err)
+		return
+	}
+	demandKey := r.PathValue("demandKey")
+	var req api.ConfirmDemandRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Stage) == "" {
+		writeError(w, http.StatusBadRequest, "stage is required")
+		return
+	}
+
+	result, err := demandflow.Confirm(demandflow.ConfirmOptions{
+		Root:     workspace.ArtifactRoot,
+		DemandID: demandKey,
+		Stage:    req.Stage,
+		By:       s.cfg.DevUserID,
+		Summary:  req.Summary,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.recordAudit(r, workspace.ID, store.AuditConfirmGate, "demand", demandKey, map[string]any{"stage": req.Stage, "next_state": string(result.CurrentState)})
+	detail, err := s.demandDetail(workspace, demandKey)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, api.ActionResult{Status: "confirmed", Message: "Demand confirmed", Demand: detail, NextState: string(result.CurrentState)})
+}
+
+func (s *Server) handleAddDemandEvidence(w http.ResponseWriter, r *http.Request) {
+	workspace, err := s.workspaceForRequest(r)
+	if err != nil {
+		s.writeWorkspaceError(w, err)
+		return
+	}
+	demandKey := r.PathValue("demandKey")
+	var req api.AddEvidenceRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if _, err := demandflow.AddEvidence(demandflow.AddEvidenceOptions{
+		Root:           workspace.ArtifactRoot,
+		DemandID:       demandKey,
+		Type:           req.Type,
+		Criterion:      req.Criterion,
+		Status:         req.Status,
+		Summary:        req.Summary,
+		Link:           req.Link,
+		By:             s.cfg.DevUserID,
+		Source:         req.Source,
+		Method:         req.Method,
+		URL:            req.URL,
+		ExpectedStatus: req.ExpectedStatus,
+		ActualStatus:   req.ActualStatus,
+		ExpectContains: req.ExpectContains,
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.recordAudit(r, workspace.ID, "add_evidence", "demand", demandKey, map[string]any{"type": req.Type, "criterion": req.Criterion, "status": req.Status})
+	detail, err := s.demandDetail(workspace, demandKey)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, api.ActionResult{Status: "recorded", Message: "Evidence recorded", Demand: detail})
 }
 
 func (s *Server) handleGetArtifact(w http.ResponseWriter, r *http.Request) {

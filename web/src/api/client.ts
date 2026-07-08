@@ -1,6 +1,10 @@
 import type {
   AcceptanceEvidence,
+  AddEvidenceInput,
   ArtifactSummary,
+  ConfirmDemandInput,
+  CreateDemandInput,
+  CreateWorkspaceInput,
   AuditEvent,
   CurrentUser,
   DemandDetail,
@@ -21,6 +25,10 @@ export interface ApiClient {
   listWorkspaces(): Promise<Workspace[]>;
   listDemands(workspaceId: string): Promise<DemandSummary[]>;
   getDemand(workspaceId: string, demandKey: string): Promise<DemandDetail>;
+  createWorkspace(input: CreateWorkspaceInput): Promise<Workspace>;
+  createDemand(workspaceId: string, input: CreateDemandInput): Promise<DemandDetail>;
+  confirmDemand(workspaceId: string, demandKey: string, input: ConfirmDemandInput): Promise<DemandDetail>;
+  addEvidence(workspaceId: string, demandKey: string, input: AddEvidenceInput): Promise<DemandDetail>;
   getArtifact(workspaceId: string, demandKey: string, artifactName: string): Promise<string>;
   listWikiEntries(workspaceId: string): Promise<WikiEntry[]>;
   listWikiCandidates(workspaceId: string): Promise<WikiCandidate[]>;

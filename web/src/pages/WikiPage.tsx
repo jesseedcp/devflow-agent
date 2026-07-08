@@ -7,7 +7,7 @@ import { formatDateTime, titleCase } from '../utils/format';
 
 export function WikiPage() {
   const { workspaceId = '' } = useParams();
-  const { client } = useApp();
+  const { client, isMock } = useApp();
   const { data, loading, error, reload } = useAsync(
     () => client.listWikiEntries(workspaceId),
     [client, workspaceId],
@@ -24,6 +24,9 @@ export function WikiPage() {
           </Link>
         }
       />
+      {!isMock && (
+        <p className="muted">当前 HTTP 后端暂未开放 Wiki 接口，请先使用 CLI 或 mock mode 演示。</p>
+      )}
       {loading && <Loading />}
       {error && <ErrorState message={error} onRetry={reload} />}
       {data && (

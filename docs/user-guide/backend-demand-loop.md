@@ -566,3 +566,7 @@ $env:HTTPS_PROXY="http://127.0.0.1:21882"
 $env:HTTP_PROXY="http://127.0.0.1:21882"
 devflow doctor --observation-url "https://github.com"
 ```
+
+## Platform Web UI Lifecycle
+
+The Web UI can now create platform workspaces, create demand artifact workspaces, show lifecycle facts from the backend, confirm supported manual gates, and record acceptance evidence in verification. Runtime generation stages such as plan drafting and implementation remain CLI/Agent-owned; the UI disables those actions and explains the required next step.

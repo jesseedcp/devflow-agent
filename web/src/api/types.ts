@@ -69,6 +69,9 @@ export interface QualityCheck {
 export interface QualitySummary {
   gate: GateStatus;
   checks: QualityCheck[];
+  stageSummary?: Record<string, string>;
+  blockers?: number;
+  warnings?: number;
 }
 
 export interface AcceptanceEvidence {
@@ -117,16 +120,26 @@ export interface ReleaseLine {
 
 export interface NextAction {
   label: string;
-  command: string;
-  reason: string;
+  command?: string;
+  reason?: string;
+  disabled?: boolean;
+}
+
+export interface EvidenceCounts {
+  pass: number;
+  fail: number;
+  blocked: number;
 }
 
 export interface DemandDetail extends DemandSummary {
+  description?: string;
+  source?: string;
   artifacts: ArtifactSummary[];
   releaseLine: ReleaseLine;
   quality: QualitySummary;
   acceptance: AcceptanceEvidence[];
   metrics: MetricsSummary;
+  evidence?: EvidenceCounts;
   nextActions: NextAction[];
 }
 
@@ -188,6 +201,33 @@ export interface PromoteWikiRequest {
 
 export interface RejectWikiRequest {
   reason: string;
+}
+
+export interface CreateWorkspaceInput {
+  id: string;
+  name: string;
+  artifactRoot: string;
+}
+
+export interface CreateDemandInput {
+  key: string;
+  title: string;
+  description: string;
+  source: string;
+}
+
+export interface ConfirmDemandInput {
+  stage: string;
+  summary: string;
+}
+
+export interface AddEvidenceInput {
+  type: 'manual' | 'api' | 'link';
+  criterion: string;
+  status: 'pass' | 'fail' | 'blocked';
+  summary: string;
+  source?: string;
+  link?: string;
 }
 
 export interface ApiError {

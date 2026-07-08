@@ -11,6 +11,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/workspaces", s.requireAction(store.ActionConfigureWorkspace, s.handleCreateWorkspace))
 
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/demands", s.handleListDemands)
+	s.mux.HandleFunc("POST /api/workspaces/{workspaceID}/demands", s.requireAction(store.ActionConfigureWorkspace, s.handleCreateDemand))
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/demands/{demandKey}", s.handleGetDemand)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/demands/{demandKey}/artifacts/{name}", s.handleGetArtifact)
 

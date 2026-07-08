@@ -200,3 +200,62 @@ func TestDemandDetailIncludesLifecycleFields(t *testing.T) {
 		t.Fatalf("expected requirements quality summary, got %#v", detail.Quality.StageSummary)
 	}
 }
+
+func TestCreateDemandCreatesRequirementsReviewDemand(t *testing.T) {
+	root := t.TempDir()
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"key":"coupon-from-ui","title":"Coupon from UI","description":"Inactive users must be blocked","source":"web"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, raw)
+	}
+	var result api.ActionResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Demand.DemandKey != "coupon-from-ui" {
+		t.Fatalf("created key = %q", result.Demand.DemandKey)
+	}
+	if result.Demand.State != string(workflow.RequirementsReview) {
+		t.Fatalf("state = %q", result.Demand.State)
+	}
+}
+
+func TestCreateDemandRejectsInvalidKey(t *testing.T) {
+	root := t.TempDir()
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"key":"../bad","title":"Bad","description":"Bad","source":"web"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestCreateDemandRejectsMissingTitle(t *testing.T) {
+	root := t.TempDir()
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	body := strings.NewReader(`{"key":"no-title","title":"","description":"Bad","source":"web"}`)
+	resp, err := http.Post(ts.URL+"/api/workspaces/ws-1/demands", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}

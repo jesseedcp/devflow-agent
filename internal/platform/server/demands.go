@@ -3,10 +3,14 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/platform/api"
 	"github.com/jesseedcp/devflow-agent/internal/platform/artifactbridge"
 	"github.com/jesseedcp/devflow-agent/internal/platform/store"
+	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
 func (s *Server) handleListDemands(w http.ResponseWriter, r *http.Request) {
@@ -21,6 +25,52 @@ func (s *Server) handleListDemands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, demands)
+}
+
+func (s *Server) handleCreateDemand(w http.ResponseWriter, r *http.Request) {
+	workspace, err := s.workspaceForRequest(r)
+	if err != nil {
+		s.writeWorkspaceError(w, err)
+		return
+	}
+
+	var req api.CreateDemandRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	req.Title = strings.TrimSpace(req.Title)
+	req.Description = strings.TrimSpace(req.Description)
+	if req.Source == "" {
+		req.Source = "web"
+	}
+	if req.Key == "" || req.Title == "" {
+		writeError(w, http.StatusBadRequest, "key and title are required")
+		return
+	}
+
+	now := time.Now().UTC()
+	if err := artifacts.NewStore(workspace.ArtifactRoot).CreateDemand(artifacts.Demand{
+		ID:          req.Key,
+		Title:       req.Title,
+		Description: req.Description,
+		Source:      req.Source,
+		State:       string(workflow.RequirementsReview),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s.recordAudit(r, workspace.ID, "create_demand", "demand", req.Key, map[string]any{"title": req.Title, "source": req.Source})
+	detail, err := s.demandDetail(workspace, req.Key)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, api.ActionResult{Status: "created", Message: "Demand created", Demand: detail})
 }
 
 func (s *Server) handleGetDemand(w http.ResponseWriter, r *http.Request) {

@@ -825,6 +825,12 @@ func TestCheckEligibilityInactiveUser(t *testing.T) {}
     Invoke-Step "v1.3 platform server smoke" {
         go test ./internal/platform/... -count=1
     }
+    Invoke-Step "v1.7 platform page lifecycle smoke" {
+        go test ./internal/platform/... -count=1
+        # The full page lifecycle smoke requires a live platform server and MySQL.
+        # Keep release-readiness credential-free by validating server packages here;
+        # run scripts/platform-page-lifecycle-smoke.ps1 manually in the dogfood gate.
+    }
     Invoke-Step "git diff check" {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'

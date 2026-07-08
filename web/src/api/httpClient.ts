@@ -1,7 +1,11 @@
 import type { ApiClient } from './client';
 import type {
+  AddEvidenceInput,
   ArtifactSummary,
   AuditEvent,
+  ConfirmDemandInput,
+  CreateDemandInput,
+  CreateWorkspaceInput,
   CurrentUser,
   DemandDetail,
   DemandState,
@@ -18,7 +22,13 @@ import type {
   Workspace,
 } from './types';
 
-const BASE = (import.meta.env.VITE_DEVFLOW_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+function normalizeBase(raw: string | undefined): string {
+  let base = (raw ?? '').replace(/\/+$/, '');
+  base = base.replace(/\/api$/, '');
+  return base;
+}
+
+const DEFAULT_BASE = normalizeBase(import.meta.env.VITE_DEVFLOW_API_BASE as string | undefined);
 
 // Raw backend response shapes. The backend is the API source of truth and uses
 // snake_case JSON; the frontend types use camelCase. The HttpApiClient maps the
@@ -53,9 +63,31 @@ interface RawRelease {
   rollback_decision: string;
   run_url: string;
 }
+interface RawQuality {
+  stage_summary?: Record<string, string>;
+  blockers?: number;
+  warnings?: number;
+}
+interface RawNextAction {
+  label: string;
+  command?: string;
+  disabled?: boolean;
+  reason?: string;
+}
 interface RawDemandDetail extends RawDemandSummary {
+  description?: string;
+  source?: string;
   evidence?: { pass: number; fail: number; blocked: number };
   release?: RawRelease;
+  quality?: RawQuality;
+  next_actions?: RawNextAction[];
+}
+interface RawActionResult {
+  status: string;
+  message: string;
+  demand: RawDemandDetail;
+  audit_id?: string;
+  next_state?: string;
 }
 interface RawAuditEvent {
   id: string;
@@ -93,10 +125,22 @@ function mapDemandSummary(r: RawDemandSummary, workspaceId: string): DemandSumma
   };
 }
 
+function mapNextAction(a: RawNextAction) {
+  return {
+    label: a.label,
+    command: a.command,
+    reason: a.reason,
+    disabled: a.disabled ?? false,
+  };
+}
+
 function mapDemandDetail(r: RawDemandDetail, workspaceId: string): DemandDetail {
   const release = r.release;
+  const quality = r.quality;
   return {
     ...mapDemandSummary(r, workspaceId),
+    description: r.description ?? '',
+    source: r.source ?? '',
     artifacts: (r.artifacts ?? []).map(mapArtifact),
     releaseLine: {
       deploymentStatus: (release?.deployment_status || 'not_started') as ReleaseControlStatus,
@@ -106,10 +150,17 @@ function mapDemandDetail(r: RawDemandDetail, workspaceId: string): DemandDetail 
       rollbackDecision: (release?.rollback_decision || 'pending') as RollbackDecision,
       rollbackNeeded: release?.rollback_decision === 'rollback_confirmed',
     },
-    quality: { gate: 'unknown' as GateStatus, checks: [] },
+    quality: {
+      gate: 'unknown' as GateStatus,
+      checks: [],
+      stageSummary: quality?.stage_summary ?? {},
+      blockers: quality?.blockers ?? 0,
+      warnings: quality?.warnings ?? 0,
+    },
     acceptance: [],
     metrics: { adapter: '', status: 'unknown' as GateStatus, metrics: [], summary: '' },
-    nextActions: [],
+    evidence: r.evidence ?? { pass: 0, fail: 0, blocked: 0 },
+    nextActions: (r.next_actions ?? []).map(mapNextAction),
   };
 }
 
@@ -139,8 +190,16 @@ async function parseError(res: Response): Promise<Error> {
 }
 
 export class HttpApiClient implements ApiClient {
+  private readonly base: string;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(base?: string, fetchImpl?: typeof fetch) {
+    this.base = base ?? DEFAULT_BASE;
+    this.fetchImpl = fetchImpl ?? fetch.bind(globalThis);
+  }
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await this.fetchImpl(`${this.base}${path}`, {
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       ...init,
     });
@@ -159,6 +218,18 @@ export class HttpApiClient implements ApiClient {
     return r.map(mapWorkspace);
   }
 
+  async createWorkspace(input: CreateWorkspaceInput): Promise<Workspace> {
+    const r = await this.request<RawWorkspace>('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: input.id,
+        name: input.name,
+        artifact_root: input.artifactRoot,
+      }),
+    });
+    return mapWorkspace(r);
+  }
+
   async listDemands(workspaceId: string): Promise<DemandSummary[]> {
     const r = await this.request<RawDemandSummary[]>(`/api/workspaces/${workspaceId}/demands`);
     return r.map((d) => mapDemandSummary(d, workspaceId));
@@ -171,9 +242,62 @@ export class HttpApiClient implements ApiClient {
     return mapDemandDetail(r, workspaceId);
   }
 
+  async createDemand(workspaceId: string, input: CreateDemandInput): Promise<DemandDetail> {
+    const r = await this.request<RawActionResult>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/demands`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          key: input.key,
+          title: input.title,
+          description: input.description,
+          source: input.source,
+        }),
+      },
+    );
+    return mapDemandDetail(r.demand, workspaceId);
+  }
+
+  async confirmDemand(
+    workspaceId: string,
+    demandKey: string,
+    input: ConfirmDemandInput,
+  ): Promise<DemandDetail> {
+    const r = await this.request<RawActionResult>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/demands/${encodeURIComponent(demandKey)}/confirm`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ stage: input.stage, summary: input.summary }),
+      },
+    );
+    return mapDemandDetail(r.demand, workspaceId);
+  }
+
+  async addEvidence(
+    workspaceId: string,
+    demandKey: string,
+    input: AddEvidenceInput,
+  ): Promise<DemandDetail> {
+    const r = await this.request<RawActionResult>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/demands/${encodeURIComponent(demandKey)}/evidence`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          type: input.type,
+          criterion: input.criterion,
+          status: input.status,
+          summary: input.summary,
+          source: input.source,
+          link: input.link,
+        }),
+      },
+    );
+    return mapDemandDetail(r.demand, workspaceId);
+  }
+
   async getArtifact(workspaceId: string, demandKey: string, artifactName: string): Promise<string> {
-    const res = await fetch(
-      `${BASE}/api/workspaces/${workspaceId}/demands/${demandKey}/artifacts/${artifactName}`,
+    const res = await this.fetchImpl(
+      `${this.base}/api/workspaces/${workspaceId}/demands/${demandKey}/artifacts/${artifactName}`,
       { headers: { Accept: 'text/plain, application/json' } },
     );
     if (!res.ok) throw await parseError(res);
@@ -181,7 +305,7 @@ export class HttpApiClient implements ApiClient {
   }
 
   // The wiki and release workflows are not implemented in the platform backend
-  // in v1.6. These pages remain mock-backed; in HTTP mode the client returns
+  // in v1.7. These pages remain mock-backed; in HTTP mode the client returns
   // empty defaults so the pages render empty states instead of erroring.
   async listWikiEntries(_workspaceId: string): Promise<WikiEntry[]> {
     return [];

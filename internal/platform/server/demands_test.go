@@ -11,6 +11,7 @@ import (
 	"github.com/jesseedcp/devflow-agent/internal/artifacts"
 	"github.com/jesseedcp/devflow-agent/internal/platform/api"
 	"github.com/jesseedcp/devflow-agent/internal/platform/store"
+	"github.com/jesseedcp/devflow-agent/internal/workflow"
 )
 
 func demandsTestServer(t *testing.T, root string) (*httptest.Server, *fakeStore) {
@@ -161,5 +162,41 @@ func TestGetArtifactRejectsUnknownName(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestDemandDetailIncludesLifecycleFields(t *testing.T) {
+	root := t.TempDir()
+	seedServerDemand(t, root, "coupon-lifecycle", "Coupon lifecycle", string(workflow.RequirementsReview))
+	ts, _ := demandsTestServer(t, root)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/workspaces/ws-1/demands/coupon-lifecycle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+
+	var detail api.DemandDetail
+	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if detail.DemandKey != "coupon-lifecycle" {
+		t.Fatalf("key = %q", detail.DemandKey)
+	}
+	if len(detail.Artifacts) == 0 {
+		t.Fatal("expected artifact summaries")
+	}
+	if len(detail.NextActions) == 0 {
+		t.Fatal("expected next actions")
+	}
+	if detail.Quality.StageSummary == nil {
+		t.Fatal("expected quality stage summary")
+	}
+	if result := detail.Quality.StageSummary["requirements"]; result == "" {
+		t.Fatalf("expected requirements quality summary, got %#v", detail.Quality.StageSummary)
 	}
 }

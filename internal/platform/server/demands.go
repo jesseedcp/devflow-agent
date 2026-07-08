@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/jesseedcp/devflow-agent/internal/platform/api"
 	"github.com/jesseedcp/devflow-agent/internal/platform/artifactbridge"
 	"github.com/jesseedcp/devflow-agent/internal/platform/store"
 )
@@ -28,12 +29,19 @@ func (s *Server) handleGetDemand(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkspaceError(w, err)
 		return
 	}
-	detail, err := artifactbridge.GetDemand(ws.ArtifactRoot, r.PathValue("demandKey"))
+	detail, err := s.demandDetail(ws, r.PathValue("demandKey"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "demand not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+// demandDetail is the single mapping path from a demandflow workspace summary
+// to the API demand detail. All demand handlers use it so lifecycle state is
+// interpreted in one place.
+func (s *Server) demandDetail(workspace store.Workspace, demandKey string) (api.DemandDetail, error) {
+	return artifactbridge.GetDemand(workspace.ArtifactRoot, demandKey)
 }
 
 func (s *Server) handleGetArtifact(w http.ResponseWriter, r *http.Request) {

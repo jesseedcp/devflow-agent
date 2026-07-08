@@ -60,13 +60,26 @@ func toDemandSummary(s demandflow.WorkspaceSummary) api.DemandSummary {
 }
 
 func toDemandDetail(s demandflow.WorkspaceSummary) api.DemandDetail {
+	stageSummary := make(map[string]string, len(s.Stages))
+	blockers, warnings := 0, 0
+	for _, stage := range s.Stages {
+		stageSummary[stage.Name] = stage.Status
+		switch stage.Status {
+		case "failed", "fail", "blocked", "needs_decision":
+			blockers++
+		case "pending", "drafting", "needs_confirmation", "needs_review", "needs_evidence", "needs_release", "needs_observation":
+			warnings++
+		}
+	}
 	return api.DemandDetail{
-		DemandKey: s.Demand.ID,
-		Title:     s.Demand.Title,
-		State:     s.Demand.State,
-		Attention: s.Attention,
-		UpdatedAt: s.Demand.UpdatedAt,
-		Artifacts: toAPIArtifacts(s.Artifacts),
+		DemandKey:   s.Demand.ID,
+		Title:       s.Demand.Title,
+		State:       s.Demand.State,
+		Attention:   s.Attention,
+		UpdatedAt:   s.Demand.UpdatedAt,
+		Description: s.Demand.Description,
+		Source:      s.Demand.Source,
+		Artifacts:   toAPIArtifacts(s.Artifacts),
 		Evidence: api.EvidenceSummary{
 			Pass:    s.Evidence.Pass,
 			Fail:    s.Evidence.Fail,
@@ -78,7 +91,21 @@ func toDemandDetail(s demandflow.WorkspaceSummary) api.DemandDetail {
 			RollbackDecision:  s.Release.RollbackDecision,
 			RunURL:            s.Release.RunURL,
 		},
+		Quality: api.QualitySummary{
+			StageSummary: stageSummary,
+			Blockers:     blockers,
+			Warnings:     warnings,
+		},
+		NextActions: toAPINextActions(s.Actions),
 	}
+}
+
+func toAPINextActions(actions []demandflow.NextAction) []api.NextAction {
+	out := make([]api.NextAction, 0, len(actions))
+	for _, a := range actions {
+		out = append(out, api.NextAction{Label: a.Label, Command: a.Command, Reason: a.Reason})
+	}
+	return out
 }
 
 func toAPIArtifacts(in []demandflow.ArtifactSummary) []api.ArtifactSummary {

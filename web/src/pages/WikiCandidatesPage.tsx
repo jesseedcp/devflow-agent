@@ -21,13 +21,15 @@ function CandidateCard({
   candidate,
   workspaceId,
   onChanged,
+  readOnly = false,
 }: {
   candidate: WikiCandidate;
   workspaceId: string;
   onChanged: () => void;
+  readOnly?: boolean;
 }) {
   const { client, role } = useApp();
-  const allowed = hasRole(role, 'Reviewer');
+  const allowed = hasRole(role, 'Reviewer') && !readOnly;
   const resolved = candidate.status !== 'pending';
 
   const [name, setName] = useState(slugify(candidate.text.slice(0, 24)) || `entry-${candidate.id}`);
@@ -140,7 +142,7 @@ function CandidateCard({
 
 export function WikiCandidatesPage() {
   const { workspaceId = '' } = useParams();
-  const { client } = useApp();
+  const { client, isMock } = useApp();
   const { data, loading, error, reload } = useAsync(
     () => client.listWikiCandidates(workspaceId),
     [client, workspaceId],
@@ -151,6 +153,9 @@ export function WikiCandidatesPage() {
       <PageHeader title="Wiki Candidates" subtitle="Review distilled knowledge before promotion." />
       {loading && <Loading />}
       {error && <ErrorState message={error} onRetry={reload} />}
+      {!isMock && (
+        <p className="muted">当前 HTTP 后端暂未开放 Wiki 候选审批接口，请先使用 CLI 或 mock mode 演示。</p>
+      )}
       {data && (
         <div className="candidate-list">
           {data.length === 0 && <p className="muted">No wiki candidates pending.</p>}
@@ -160,6 +165,7 @@ export function WikiCandidatesPage() {
               candidate={c}
               workspaceId={workspaceId}
               onChanged={reload}
+              readOnly={!isMock}
             />
           ))}
         </div>

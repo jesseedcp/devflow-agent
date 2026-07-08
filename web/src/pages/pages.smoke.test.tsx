@@ -6,11 +6,13 @@ import { AppProvider } from '../context/AppContext';
 import { WorkspacesPage } from './WorkspacesPage';
 import { DemandsPage } from './DemandsPage';
 import { DemandDetailPage } from './DemandDetailPage';
+import { ReleasePage } from './ReleasePage';
+import { WikiCandidatesPage } from './WikiCandidatesPage';
 
-function renderAt(path: string, routes: React.ReactNode) {
+function renderAt(path: string, routes: React.ReactNode, forceIsMock?: boolean) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <AppProvider>
+      <AppProvider forceIsMock={forceIsMock}>
         <Routes>{routes}</Routes>
       </AppProvider>
     </MemoryRouter>,
@@ -104,5 +106,34 @@ describe('page smoke (mock client)', () => {
     fireEvent.change(screen.getByLabelText(/证据摘要/), { target: { value: 'POST /coupon/claim returned 403' } });
     fireEvent.click(screen.getByRole('button', { name: /保存证据/ }));
     expect(await screen.findByText(/证据已记录/)).toBeInTheDocument();
+  });
+
+  it('keeps rollback interactive in mock mode when rollback is needed', async () => {
+    renderAt(
+      '/workspaces/ws-payments/release/add-retry-backoff',
+      <Route path="/workspaces/:workspaceId/release/:demandKey" element={<ReleasePage />} />,
+    );
+    const rollback = await screen.findByRole('button', { name: /回滚/ });
+    expect(rollback).not.toBeDisabled();
+  });
+
+  it('does not expose unsupported rollback as an active HTTP action', async () => {
+    renderAt(
+      '/workspaces/ws-payments/release/add-retry-backoff',
+      <Route path="/workspaces/:workspaceId/release/:demandKey" element={<ReleasePage />} />,
+      false,
+    );
+    const rollback = await screen.findByRole('button', { name: /回滚/ });
+    expect(rollback).toBeDisabled();
+    expect(screen.getByText(/后端暂未提供真实回滚执行接口/)).toBeInTheDocument();
+  });
+
+  it('shows wiki provider actions as local-only until backend routes exist', async () => {
+    renderAt(
+      '/workspaces/ws-payments/wiki/candidates',
+      <Route path="/workspaces/:workspaceId/wiki/candidates" element={<WikiCandidatesPage />} />,
+      false,
+    );
+    expect(await screen.findByText(/当前 HTTP 后端暂未开放 Wiki 候选审批接口/)).toBeInTheDocument();
   });
 });

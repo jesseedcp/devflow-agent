@@ -8,7 +8,7 @@ import { gateTone, hasRole, titleCase } from '../utils/format';
 
 export function ReleasePage() {
   const { workspaceId = '', demandKey = '' } = useParams();
-  const { client, role } = useApp();
+  const { client, role, isMock } = useApp();
   const release = useAsync(() => client.getRelease(workspaceId, demandKey), [client, workspaceId, demandKey]);
   const demand = useAsync(() => client.getDemand(workspaceId, demandKey), [client, workspaceId, demandKey]);
 
@@ -84,7 +84,19 @@ export function ReleasePage() {
 
       <section className="card">
         <h2 className="card-title">Rollback</h2>
-        {rl.rollbackNeeded ? (
+        {!isMock ? (
+          <div className="rollback-warn">
+            <p className="muted small">后端暂未提供真实回滚执行接口，本页仅展示发布线状态。</p>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled
+              title="后端暂未提供真实回滚执行接口"
+            >
+              {busy ? '处理中…' : '触发回滚'}
+            </button>
+          </div>
+        ) : rl.rollbackNeeded ? (
           <div className="rollback-warn">
             <p className="attention">⚠ Rollback recommended: observation failed.</p>
             <button
@@ -94,7 +106,7 @@ export function ReleasePage() {
               disabled={!admin || busy}
               title={admin ? 'Trigger GitHub Actions rollback workflow' : 'Requires Admin role'}
             >
-              {busy ? 'Working…' : 'Trigger rollback'}
+              {busy ? '处理中…' : '触发回滚'}
             </button>
             {!admin && <p className="muted small">Requires Admin role to trigger rollback. Human gate is mandatory.</p>}
           </div>
@@ -131,12 +143,13 @@ export function ReleasePage() {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={refreshObservation}
-            disabled={!developer || busy}
-            title={developer ? 'Refresh observation evidence' : 'Requires Developer role or above'}
+            onClick={isMock ? refreshObservation : undefined}
+            disabled={!isMock || !developer || busy}
+            title={isMock ? (developer ? 'Refresh observation evidence' : 'Requires Developer role or above') : '后端暂未提供页面触发 observation refresh 接口'}
           >
-            {busy ? 'Working…' : 'Refresh observation'}
+            {busy ? '处理中…' : 'Refresh observation'}
           </button>
+          {!isMock && <p className="muted small">后端暂未提供页面触发 observation refresh 接口，请先使用 CLI。</p>}
         </div>
       </section>
 

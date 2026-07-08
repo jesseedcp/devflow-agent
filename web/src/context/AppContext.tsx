@@ -15,9 +15,9 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({ children, forceIsMock }: { children: ReactNode; forceIsMock?: boolean }) {
   const client = useMemo(() => createApiClient(), []);
-  const isMock = client === mockClient;
+  const isMock = forceIsMock ?? (client === mockClient);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
 

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { mockClient } from '../api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AppProvider } from '../context/AppContext';
@@ -17,6 +18,7 @@ function renderAt(path: string, routes: React.ReactNode) {
 }
 
 describe('page smoke (mock client)', () => {
+  beforeEach(() => mockClient.reset());
   it('WorkspacesPage renders the mock workspace', async () => {
     renderAt(
       '/workspaces',
@@ -80,5 +82,27 @@ describe('page smoke (mock client)', () => {
     expect(screen.getByText('Release line')).toBeInTheDocument();
     expect(screen.getByText('Quality gate')).toBeInTheDocument();
     expect(screen.getByText('Artifacts')).toBeInTheDocument();
+  });
+
+  it('confirms the current manual gate from demand detail', async () => {
+    renderAt(
+      '/workspaces/ws-demo/demands/coupon-eligibility',
+      <Route path="/workspaces/:workspaceId/demands/:demandKey" element={<DemandDetailPage />} />,
+    );
+    const btn = await screen.findByRole('button', { name: /通过下一步/ });
+    fireEvent.click(btn);
+    expect(await screen.findByText(/已确认/)).toBeInTheDocument();
+  });
+
+  it('records acceptance evidence from demand detail', async () => {
+    renderAt(
+      '/workspaces/ws-demo/demands/verification-ready',
+      <Route path="/workspaces/:workspaceId/demands/:demandKey" element={<DemandDetailPage />} />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /添加证据/ }));
+    fireEvent.change(screen.getByLabelText(/验收标准/), { target: { value: 'Inactive users are blocked' } });
+    fireEvent.change(screen.getByLabelText(/证据摘要/), { target: { value: 'POST /coupon/claim returned 403' } });
+    fireEvent.click(screen.getByRole('button', { name: /保存证据/ }));
+    expect(await screen.findByText(/证据已记录/)).toBeInTheDocument();
   });
 });

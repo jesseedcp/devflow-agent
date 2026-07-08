@@ -59,6 +59,17 @@ export class MockApiClient implements ApiClient {
     this.user = { ...this.user, role };
   }
 
+  reset(): void {
+    this.demands = structuredClone(mockDemandDetails);
+    this.demandSummaries = structuredClone(mockDemandSummaries);
+    this.workspaces = structuredClone(mockWorkspaces);
+    this.wikiEntries = structuredClone(mockWikiEntries);
+    this.candidates = structuredClone(mockWikiCandidates);
+    this.releases = structuredClone(mockReleaseSummaries);
+    this.audit = structuredClone(mockAuditEvents);
+    this.user = structuredClone(mockCurrentUser);
+  }
+
   async getCurrentUser(): Promise<CurrentUser> {
     await delay(40);
     return structuredClone(this.user);
